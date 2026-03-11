@@ -1,0 +1,100 @@
+{
+    "id": "PredictStructure",
+    "script": "App-PredictStructure",
+    "label": "Protein Structure Prediction",
+    "description": "Predict protein structures using Boltz-2, Chai-1, AlphaFold 2, or ESMFold. Provides a unified interface with automatic parameter mapping, format conversion, and optional MSA generation.",
+    "default_memory": "64G",
+    "default_cpu": 8,
+    "default_runtime": 14400,
+    "parameters": [
+        {
+            "id": "tool",
+            "type": "enum",
+            "enum": ["boltz", "chai", "alphafold", "esmfold"],
+            "required": 1,
+            "label": "Prediction Tool",
+            "desc": "Structure prediction engine to use. ESMFold is fastest (single-sequence, no MSA). Boltz-2 and Chai-1 are diffusion-based with highest accuracy. AlphaFold 2 uses co-evolutionary features."
+        },
+        {
+            "id": "input_file",
+            "type": "wsfile",
+            "required": 1,
+            "label": "Input File",
+            "desc": "Protein sequence in FASTA format (.fasta, .fa). Boltz also accepts YAML for full feature support (ligands, constraints)."
+        },
+        {
+            "id": "msa_mode",
+            "type": "enum",
+            "enum": ["none", "server", "upload"],
+            "default": "none",
+            "required": 0,
+            "label": "MSA Mode",
+            "desc": "Multiple Sequence Alignment strategy. 'none' for single-sequence (ESMFold default). 'server' to generate MSA via ColabFold MMseqs2. 'upload' to provide pre-computed MSA file."
+        },
+        {
+            "id": "msa_file",
+            "type": "wsfile",
+            "required": 0,
+            "label": "MSA File",
+            "desc": "Pre-computed MSA file (.a3m, .sto). Required when msa_mode is 'upload'. Auto-converted to tool-native format."
+        },
+        {
+            "id": "num_samples",
+            "type": "int",
+            "default": 1,
+            "required": 0,
+            "label": "Number of Samples",
+            "desc": "Number of structure samples to generate (Boltz, Chai only). More samples give diversity at the cost of runtime."
+        },
+        {
+            "id": "num_recycles",
+            "type": "int",
+            "default": 3,
+            "required": 0,
+            "label": "Recycling Steps",
+            "desc": "Number of recycling iterations for refinement. Maps to tool-specific recycling parameters."
+        },
+        {
+            "id": "seed",
+            "type": "int",
+            "default": 42,
+            "required": 0,
+            "label": "Random Seed",
+            "desc": "Random seed for reproducibility (Chai, AlphaFold only)."
+        },
+        {
+            "id": "output_format",
+            "type": "enum",
+            "enum": ["pdb", "mmcif"],
+            "default": "pdb",
+            "required": 0,
+            "label": "Output Format",
+            "desc": "Primary structure output format. Both PDB and mmCIF are always generated; this controls which is primary."
+        },
+        {
+            "id": "output_path",
+            "type": "folder",
+            "required": 1,
+            "label": "Output Folder",
+            "desc": "Workspace folder for prediction results."
+        },
+        {
+            "id": "output_file",
+            "type": "wsfile",
+            "required": 0,
+            "label": "Output File",
+            "desc": "Optional output file path (not used — outputs go to output_path folder)."
+        }
+    ],
+    "preflight": {
+        "cpu": 8,
+        "memory": "64G",
+        "runtime": 14400,
+        "storage": "50G",
+        "policy_data": {
+            "gpu_count": 1,
+            "partition": "gpu2",
+            "constraint": "A100|H100|H200"
+        }
+    }
+}

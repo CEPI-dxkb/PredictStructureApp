@@ -1,0 +1,7 @@
+{
+    "tool": "esmfold",
+    "input_file": "/data/simple_protein.fasta",
+    "output_path": "/data/output",
+    "num_recycles": 4,
+    "output_format": "pdb"
+}

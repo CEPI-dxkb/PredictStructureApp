@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Predict Structure — UI Mockup</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #F0F4F8; color: #334155; }
+  ::selection { background: rgba(0,180,216,0.3); }
+  input:focus, select:focus, textarea:focus { border-color: #00B4D8 !important; outline: none; box-shadow: 0 0 0 3px rgba(0,180,216,0.12); }
+  button { font-family: inherit; cursor: pointer; transition: opacity 0.15s; }
+  button:hover { opacity: 0.88; }
+
+  .page { min-height: 100vh; padding: 32px 24px; }
+  .container { max-width: 900px; margin: 0 auto; }
+  .card { background: #fff; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .gradient-hdr { background: linear-gradient(135deg, #0F2027 0%, #2C5364 100%); padding: 28px 32px; }
+  .badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .b-green { background: #D1FAE5; color: #10B981; } .b-amber { background: #FEF3C7; color: #F59E0B; }
+  .b-red { background: #FEE2E2; color: #EF4444; } .b-blue { background: #DBEAFE; color: #3B82F6; }
+  .b-purple { background: #EDE9FE; color: #8B5CF6; } .b-gray { background: #E2E8F0; color: #64748B; }
+  h2 { font-size: 18px; font-weight: 700; color: #0F172A; margin: 0 0 4px; }
+  .sub { font-size: 13px; color: #94A3B8; margin: 0 0 16px; }
+  .hidden { display: none; }
+
+  /* Tool cards */
+  .tool-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 28px; }
+  .tool-card { padding: 14px 10px; border-radius: 10px; cursor: pointer; text-align: center; transition: all 0.15s; border: 2px solid #E2E8F0; background: #fff; }
+  .tool-card:hover { border-color: #00B4D8; }
+  .tool-card.active { border-color: #00B4D8; background: rgba(0,180,216,0.04); }
+  .tool-card .icon { font-size: 22px; margin-bottom: 4px; }
+  .tool-card .name { font-size: 13px; font-weight: 600; color: #334155; }
+  .tool-card.active .name { color: #00B4D8; }
+  .tool-card .desc { font-size: 10px; color: #94A3B8; margin-top: 2px; line-height: 1.3; }
+
+  /* Tabs / pills */
+  .pills { display: flex; gap: 4px; margin-bottom: 20px; }
+  .pill { padding: 8px 20px; border-radius: 8px; border: none; font-size: 13px; font-weight: 500; background: #F1F5F9; color: #64748B; }
+  .pill.active { background: #00B4D8; color: #fff; }
+
+  /* Toggle switch */
+  .toggle { width: 38px; height: 22px; border-radius: 11px; cursor: pointer; position: relative; transition: background 0.2s; flex-shrink: 0; }
+  .toggle .thumb { width: 18px; height: 18px; border-radius: 9px; background: #fff; position: absolute; top: 2px; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+
+  /* Stats */
+  .stat-label { font-size: 11px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+  .stat-value { font-size: 28px; font-weight: 800; }
+  .stat-sub { font-size: 11px; color: #94A3B8; }
+
+  /* Grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .span-2 { grid-column: 1 / -1; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; color: #94A3B8; text-transform: uppercase; border-bottom: 2px solid #E2E8F0; }
+  td { padding: 10px 12px; border-bottom: 1px solid #F1F5F9; }
+
+  /* File row */
+  .file-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 8px; }
+  .file-row:nth-child(odd) { background: #F1F5F9; }
+
+  /* Model row */
+  .model-row { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 6px; margin-bottom: 6px; }
+  .model-row.top { background: rgba(0,180,216,0.03); border: 1px solid rgba(0,180,216,0.18); }
+  .rank { width: 24px; height: 24px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    .tool-grid { grid-template-columns: repeat(3, 1fr); }
+    .grid-2 { grid-template-columns: 1fr; }
+    .span-2 { grid-column: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- ============================================================ -->
+  <!-- SUBMISSION FORM                                               -->
+  <!-- ============================================================ -->
+  <div id="formView" class="container">
+    <div class="gradient-hdr" style="border-radius: 16px 16px 0 0">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="font-size:28px">🧪</div>
+        <div>
+          <h1 style="margin:0;font-size:22px;font-weight:700;color:#fff">Predict Structure</h1>
+          <p style="margin:2px 0 0;font-size:13px;color:#90E0EF">
+            Unified protein structure prediction — Boltz-2 · Chai-1 · AlphaFold 2 · ESMFold
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="border-radius:0 0 16px 16px;padding:24px 32px">
+
+      <!-- Tool Selection -->
+      <h2>Prediction Tool</h2>
+      <p class="sub">Choose a tool or let the system auto-select based on your input</p>
+      <div class="tool-grid" id="toolGrid"></div>
+
+      <!-- Input Section -->
+      <h2>Input Sequence</h2>
+      <p class="sub">Upload a FASTA file or paste your sequence directly</p>
+      <div style="display:flex;gap:8px;margin-bottom:12px" id="inputTabs"></div>
+      <div id="inputPaste">
+        <textarea id="seqInput" placeholder=">protein_name&#10;MASEQ..."
+          style="width:100%;height:100px;padding:12px;border-radius:8px;font-size:13px;font-family:'SF Mono','Fira Code',monospace;resize:vertical;border:1px solid #E2E8F0;background:#F1F5F9;color:#334155"
+        >>1CRN_Crambin
+TTCCPSIVARSNFNVCRLPGTPEAICATYTGCIIIPGATCPGDYAN</textarea>
+      </div>
+      <div id="inputUpload" class="hidden">
+        <div style="padding:32px;border-radius:8px;border:2px dashed #CBD5E1;text-align:center;color:#94A3B8;font-size:13px;background:#F1F5F9">
+          <div style="font-size:28px;margin-bottom:8px">📁</div>
+          Drop .fasta, .fa, .yaml file here or <span style="color:#00B4D8;cursor:pointer;text-decoration:underline">browse</span>
+        </div>
+      </div>
+      <div id="inputWorkspace" class="hidden">
+        <div style="padding:16px;border-radius:8px;border:1px solid #E2E8F0;background:#F1F5F9;display:flex;align-items:center;gap:10px;font-size:13px;color:#64748B">
+          <span style="font-size:18px">📂</span>
+          <span>/user@bvbrc/home/StructurePrediction/</span>
+          <button style="margin-left:auto;padding:4px 12px;border-radius:6px;border:none;background:#00B4D8;color:#fff;font-size:12px">Select File</button>
+        </div>
+      </div>
+
+      <!-- Parameters -->
+      <div style="margin-top:28px">
+        <h2 style="margin-bottom:16px">Parameters</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:#64748B;margin-bottom:4px">Number of Samples</label>
+            <input id="numSamples" type="number" min="1" max="25" value="5"
+              style="width:100%;padding:8px 12px;border-radius:8px;font-size:14px;border:1px solid #E2E8F0" />
+            <div id="samplesHint" style="font-size:10px;color:#94A3B8;margin-top:2px">More samples = better coverage, slower</div>
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:#64748B;margin-bottom:4px">Recycling Steps</label>
+            <input type="number" min="1" max="20" value="3"
+              style="width:100%;padding:8px 12px;border-radius:8px;font-size:14px;border:1px solid #E2E8F0" />
+            <div style="font-size:10px;color:#94A3B8;margin-top:2px">Default: 3 (ESMFold: 4)</div>
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:#64748B;margin-bottom:4px">Output Format</label>
+            <select style="width:100%;padding:8px 12px;border-radius:8px;font-size:14px;border:1px solid #E2E8F0;background:#fff">
+              <option>PDB + mmCIF</option>
+              <option>PDB only</option>
+              <option>mmCIF only</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- MSA Section (hidden for ESMFold) -->
+        <div id="msaSection" style="margin-top:20px">
+          <h2 style="margin-bottom:4px">Multiple Sequence Alignment</h2>
+          <p class="sub">Provide precomputed MSA or generate one server-side. Supported formats: A3M, Stockholm, Parquet</p>
+
+          <!-- MSA mode selector -->
+          <div style="display:flex;gap:8px;margin-bottom:12px" id="msaModeTabs"></div>
+
+          <!-- MSA: None (default) -->
+          <div id="msaModeNone">
+            <div style="padding:14px 16px;border-radius:8px;background:#F1F5F9;border:1px solid #E2E8F0;display:flex;align-items:center;gap:10px">
+              <div style="font-size:20px">🚫</div>
+              <div>
+                <div style="font-size:13px;font-weight:600;color:#334155">No MSA</div>
+                <div style="font-size:11px;color:#94A3B8">Run prediction without multiple sequence alignment. Best for ESMFold; Boltz and Chai can still produce good results for well-studied proteins.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- MSA: Server -->
+          <div id="msaModeServer" class="hidden">
+            <div style="padding:14px 16px;border-radius:8px;background:#F1F5F9;border:1px solid #E2E8F0">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                <div style="font-size:20px">🌐</div>
+                <div>
+                  <div style="font-size:13px;font-weight:600;color:#334155">MSA Server</div>
+                  <div style="font-size:11px;color:#94A3B8">Compute MSA server-side using ColabFold MMseqs2 (Boltz, Chai) or jackhmmer (AlphaFold)</div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">
+                <div>
+                  <label style="font-size:11px;font-weight:600;color:#64748B">Database</label>
+                  <select style="width:100%;padding:6px 10px;border-radius:6px;font-size:13px;border:1px solid #E2E8F0;margin-top:4px;background:#fff">
+                    <option>Auto (tool default)</option>
+                    <option>UniRef30 + ColabDB</option>
+                    <option>UniRef90 + BFD</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:600;color:#64748B">Max sequences</label>
+                  <input type="number" placeholder="Default" style="width:100%;padding:6px 10px;border-radius:6px;font-size:13px;border:1px solid #E2E8F0;margin-top:4px" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- MSA: Upload -->
+          <div id="msaModeUpload" class="hidden">
+            <div style="padding:14px 16px;border-radius:8px;background:#F1F5F9;border:1px solid #E2E8F0">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <div style="font-size:20px">📂</div>
+                <div>
+                  <div style="font-size:13px;font-weight:600;color:#334155">Upload MSA</div>
+                  <div style="font-size:11px;color:#94A3B8">Provide a precomputed alignment file (.a3m, .sto, .pqt). Chai requires Parquet; adapter converts A3M automatically.</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;margin-bottom:10px" id="msaUploadTabs"></div>
+              <div id="msaUploadFile">
+                <div style="padding:24px;border-radius:8px;border:2px dashed #CBD5E1;text-align:center;color:#94A3B8;font-size:13px;background:#fff">
+                  <div style="font-size:24px;margin-bottom:6px">📁</div>
+                  Drop .a3m, .sto, or .pqt file here or <span style="color:#00B4D8;cursor:pointer;text-decoration:underline">browse</span>
+                </div>
+              </div>
+              <div id="msaUploadWorkspace" class="hidden">
+                <div style="padding:12px 14px;border-radius:8px;border:1px solid #E2E8F0;background:#fff;display:flex;align-items:center;gap:10px;font-size:13px;color:#64748B">
+                  <span style="font-size:18px">📂</span>
+                  <span>/user@bvbrc/home/MSA/</span>
+                  <button style="margin-left:auto;padding:4px 12px;border-radius:6px;border:none;background:#00B4D8;color:#fff;font-size:12px">Select File</button>
+                </div>
+              </div>
+              <div style="margin-top:10px;padding:8px 12px;border-radius:6px;background:#DBEAFE;font-size:11px;color:#3B82F6;display:flex;align-items:center;gap:6px">
+                <span style="font-weight:700">ℹ</span> A3M files will be auto-converted to Parquet for Chai. Boltz injects MSA into YAML input.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Advanced -->
+      <div style="margin-top:20px">
+        <button onclick="toggleAdvanced()" style="background:none;border:none;font-size:13px;color:#00B4D8;font-weight:500;padding:0;display:flex;align-items:center;gap:4px">
+          <span id="advArrow" style="display:inline-block;transition:transform 0.2s">▶</span>
+          Advanced / Tool-Specific Options
+        </button>
+        <div id="advPanel" class="hidden" style="margin-top:12px;padding:16px;border-radius:8px;background:#F1F5F9;border:1px solid #E2E8F0">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#64748B">Sampling Steps (Boltz/Chai)</label>
+              <input type="number" value="200" style="width:100%;padding:6px 10px;border-radius:6px;font-size:13px;border:1px solid #E2E8F0;margin-top:4px" />
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#64748B">Random Seed</label>
+              <input type="number" placeholder="Optional" style="width:100%;padding:6px 10px;border-radius:6px;font-size:13px;border:1px solid #E2E8F0;margin-top:4px" />
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#64748B">Device</label>
+              <select style="width:100%;padding:6px 10px;border-radius:6px;font-size:13px;border:1px solid #E2E8F0;margin-top:4px;background:#fff">
+                <option>Auto-detect GPU</option>
+                <option>cuda:0</option>
+                <option>cuda:1</option>
+                <option>CPU only</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#64748B">Pass-through flags <span class="badge b-gray" id="passLabel">--tool-*</span></label>
+              <input id="passInput" type="text" placeholder="e.g. --boltz-use-potentials" style="width:100%;padding:6px 10px;border-radius:6px;font-size:13px;border:1px solid #E2E8F0;margin-top:4px;font-family:monospace" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resource estimate -->
+      <div id="resourceEst" style="margin-top:24px;padding:12px 16px;border-radius:8px;background:linear-gradient(135deg,rgba(44,83,100,0.03),rgba(0,180,216,0.03));border:1px solid rgba(0,180,216,0.18);display:flex;justify-content:space-between;align-items:center;font-size:13px">
+        <div style="color:#64748B">
+          <strong style="color:#334155">Estimated Resources: </strong>
+          <span id="resourceText">Depends on auto-selected tool</span>
+        </div>
+        <span class="badge b-blue">gpu2 partition</span>
+      </div>
+
+      <!-- Output folder -->
+      <div style="margin-top:20px">
+        <label style="display:block;font-size:12px;font-weight:600;color:#64748B;margin-bottom:4px">Output Folder</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" value="/user@bvbrc/home/StructurePrediction/crambin_2026-03-05" style="flex:1;padding:8px 12px;border-radius:8px;font-size:13px;border:1px solid #E2E8F0;font-family:monospace" />
+          <button style="padding:8px 14px;border-radius:8px;border:none;background:#F1F5F9;color:#64748B;font-size:13px">Browse</button>
+        </div>
+      </div>
+
+      <!-- Buttons -->
+      <div style="margin-top:28px;display:flex;gap:12px;justify-content:flex-end">
+        <button style="padding:10px 24px;border-radius:8px;border:1px solid #E2E8F0;background:#fff;color:#64748B;font-size:14px">Reset</button>
+        <button onclick="showResults()" style="padding:10px 32px;border-radius:8px;border:none;background:linear-gradient(135deg,#2C5364,#00B4D8);color:#fff;font-size:14px;font-weight:600;box-shadow:0 4px 12px rgba(0,180,216,0.25)">Submit Job</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- RESULTS DASHBOARD                                             -->
+  <!-- ============================================================ -->
+  <div id="resultsView" class="container hidden">
+    <!-- Header -->
+    <div class="gradient-hdr" style="border-radius:16px;margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <button onclick="showForm()" style="background:rgba(255,255,255,0.15);border:none;border-radius:6px;color:#fff;padding:4px 10px;font-size:12px">← Back</button>
+            <h1 style="margin:0;font-size:20px;font-weight:700;color:#fff">Job PSP-2026-00847</h1>
+            <span class="badge b-green">Completed</span>
+          </div>
+          <p style="margin:0;font-size:13px;color:#90E0EF">crambin_1CRN.fasta · 46 residues · Boltz-2 · 5 samples</p>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:#90E0EF">Runtime</div>
+          <div style="font-size:20px;font-weight:700;color:#fff">1h 23m</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="pills" id="resultTabs"></div>
+
+    <!-- Overview -->
+    <div id="tab-overview">
+      <div class="grid-2">
+        <div class="card" style="padding:24px">
+          <h2 style="margin-bottom:16px">Quality Scores</h2>
+          <div style="display:flex;justify-content:space-around;text-align:center">
+            <div>
+              <div class="stat-label">Mean pLDDT</div>
+              <div class="stat-value" style="color:#10B981">92.4</div>
+              <div class="stat-sub">Very High</div>
+            </div>
+            <div style="width:1px;background:#E2E8F0"></div>
+            <div>
+              <div class="stat-label">pTM Score</div>
+              <div class="stat-value" style="color:#10B981">0.89</div>
+              <div class="stat-sub">High confidence</div>
+            </div>
+            <div style="width:1px;background:#E2E8F0"></div>
+            <div>
+              <div class="stat-label">Samples</div>
+              <div class="stat-value" style="color:#334155">5</div>
+              <div class="stat-sub">generated</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="padding:24px">
+          <h2 style="margin-bottom:16px">Model Ranking</h2>
+          <div id="modelRanking"></div>
+        </div>
+
+        <div class="card span-2" style="padding:24px">
+          <h2>Per-Residue pLDDT (Best Model)</h2>
+          <p class="sub">Colored by confidence: green ≥90, cyan ≥70, amber ≥50, red &lt;50</p>
+          <canvas id="plddtChart" height="100"></canvas>
+          <div style="display:flex;gap:16px;justify-content:center;margin-top:10px">
+            <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:#64748B"><div style="width:10px;height:10px;border-radius:2px;background:#10B981"></div>Very High (≥90)</div>
+            <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:#64748B"><div style="width:10px;height:10px;border-radius:2px;background:#00B4D8"></div>High (70-90)</div>
+            <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:#64748B"><div style="width:10px;height:10px;border-radius:2px;background:#F59E0B"></div>Low (50-70)</div>
+            <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:#64748B"><div style="width:10px;height:10px;border-radius:2px;background:#EF4444"></div>Very Low (&lt;50)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confidence -->
+    <div id="tab-confidence" class="hidden">
+      <div class="grid-2">
+        <div class="card span-2" style="padding:24px">
+          <h2>Confidence Distribution</h2>
+          <p class="sub">Histogram of per-residue pLDDT values</p>
+          <canvas id="histChart" height="80"></canvas>
+        </div>
+        <div class="card" style="padding:24px">
+          <h2>Model pLDDT Comparison</h2>
+          <p class="sub" style="margin-bottom:16px">Scores across generated models</p>
+          <canvas id="modelChart" height="140"></canvas>
+        </div>
+        <div class="card" style="padding:24px">
+          <h2 style="margin-bottom:16px">Summary Statistics</h2>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" id="summaryStats"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tool Comparison -->
+    <div id="tab-comparison" class="hidden">
+      <div class="grid-2">
+        <div class="card" style="padding:24px">
+          <h2>Tool Capabilities Radar</h2>
+          <p class="sub">Relative strengths across key dimensions</p>
+          <canvas id="radarChart" height="160"></canvas>
+        </div>
+        <div class="card" style="padding:24px">
+          <h2>Quality vs Runtime</h2>
+          <p class="sub">pLDDT score relative to computation time</p>
+          <canvas id="qvtChart" height="160"></canvas>
+        </div>
+        <div class="card span-2" style="padding:24px">
+          <h2>Tool Comparison Table</h2>
+          <p class="sub">Side-by-side results for this input (crambin, 46 residues)</p>
+          <table>
+            <thead><tr><th>Tool</th><th>pLDDT</th><th>pTM</th><th>Runtime</th><th>MSA Required</th><th>GPU Required</th><th>Best For</th></tr></thead>
+            <tbody>
+              <tr><td style="font-weight:600">Boltz-2</td><td>92.4</td><td>0.89</td><td>1h 23m</td><td>Optional</td><td>Yes</td><td>Ligands, DNA/RNA, complexes</td></tr>
+              <tr><td style="font-weight:600">Chai-1</td><td>90.1</td><td>0.86</td><td>1h 07m</td><td>Optional</td><td>Yes</td><td>Fast multimers</td></tr>
+              <tr><td style="font-weight:600">AlphaFold 2</td><td>94.2</td><td>0.91</td><td>4h 00m</td><td>Yes</td><td>Yes</td><td>Highest accuracy, gold standard</td></tr>
+              <tr><td style="font-weight:600">ESMFold</td><td>85.3</td><td>0.74</td><td>12m</td><td>No</td><td>Optional</td><td>Quick screening, large batches</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Files -->
+    <div id="tab-files" class="hidden">
+      <div class="card" style="padding:24px">
+        <h2>Output Files</h2>
+        <p class="sub">/user@bvbrc/home/StructurePrediction/crambin_2026-03-05/</p>
+        <div id="fileList"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────
+var state = {
+  tool: "auto",
+  inputMethod: "paste",
+  msaMode: "none",
+  msaUploadMethod: "file",
+  advOpen: false,
+  activeTab: "overview",
+  chartsRendered: false
+};
+
+var TOOLS = [
+  {id:"auto",name:"Auto-Select",desc:"Automatically choose the best tool based on input",icon:"✦"},
+  {id:"boltz",name:"Boltz-2",desc:"Diffusion-based, supports ligands & DNA/RNA",icon:"⚛"},
+  {id:"chai",name:"Chai-1",desc:"Hybrid architecture, strong multimer support",icon:"🧬"},
+  {id:"alphafold",name:"AlphaFold 2",desc:"Co-evolution based, gold standard",icon:"🔬"},
+  {id:"esmfold",name:"ESMFold",desc:"Fast single-sequence, no MSA needed",icon:"⚡"}
+];
+
+var MODELS = [
+  {rank:1,plddt:92.4,ptm:0.89,file:"model_1.pdb"},
+  {rank:2,plddt:91.1,ptm:0.87,file:"model_2.pdb"},
+  {rank:3,plddt:88.7,ptm:0.84,file:"model_3.pdb"},
+  {rank:4,plddt:86.2,ptm:0.81,file:"model_4.pdb"},
+  {rank:5,plddt:83.9,ptm:0.78,file:"model_5.pdb"}
+];
+
+// Generate per-residue data
+var perResidue = [];
+var resNames = "TTCCPSIVARSNFNVCRLPGTPEAICATYTGCIIIPGATCPGDYAN";
+for (var i = 0; i < 46; i++) {
+  perResidue.push({
+    residue: i + 1,
+    plddt: Math.round((70 + Math.random() * 28 + (i > 10 && i < 35 ? 5 : 0)) * 10) / 10,
+    name: resNames[i]
+  });
+}
+
+function plddtColor(v) { return v >= 90 ? "#10B981" : v >= 70 ? "#00B4D8" : v >= 50 ? "#F59E0B" : "#EF4444"; }
+
+var FILES = [
+  ["📄","model_1.pdb","Structure","245 KB"],
+  ["📄","model_1.cif","Structure","312 KB"],
+  ["📄","model_2.pdb","Structure","245 KB"],
+  ["📄","model_2.cif","Structure","311 KB"],
+  ["📄","model_3.pdb","Structure","244 KB"],
+  ["📊","confidence_scores.json","JSON","18 KB"],
+  ["📊","per_residue_plddt.json","JSON","4 KB"],
+  ["📋","metadata.json","JSON","2 KB"],
+  ["📋","run_log.txt","Log","34 KB"],
+  ["📦","all_results.tar.gz","Archive","1.2 MB"]
+];
+
+// ─── Render form elements ────────────────────────────────────────
+function renderToolGrid() {
+  var grid = document.getElementById("toolGrid");
+  grid.innerHTML = "";
+  TOOLS.forEach(function(t) {
+    var div = document.createElement("div");
+    div.className = "tool-card" + (state.tool === t.id ? " active" : "");
+    div.innerHTML = '<div class="icon">' + t.icon + '</div><div class="name">' + t.name + '</div><div class="desc">' + t.desc + '</div>';
+    div.onclick = function() { selectTool(t.id); };
+    grid.appendChild(div);
+  });
+}
+
+function selectTool(id) {
+  state.tool = id;
+  renderToolGrid();
+  // Update hints
+  var hints = { auto: "Depends on auto-selected tool", boltz: "8 CPU · 64 GB · A100/H100/H200 GPU · ~2h", chai: "8 CPU · 64 GB · A100/H100/H200 GPU · ~1.5h", alphafold: "8 CPU · 64 GB · A100/H100/H200 GPU · ~3h", esmfold: "8 CPU · 32 GB · GPU optional · ~15 min" };
+  document.getElementById("resourceText").textContent = hints[id];
+  document.getElementById("samplesHint").textContent = id === "esmfold" ? "N/A for ESMFold (deterministic)" : "More samples = better coverage, slower";
+  document.getElementById("passLabel").textContent = "--" + (id === "auto" ? "tool" : id) + "-*";
+  document.getElementById("passInput").placeholder = "e.g. --" + (id === "auto" ? "boltz" : id) + "-use-potentials";
+  // Hide MSA section for ESMFold (single-sequence, no MSA)
+  document.getElementById("msaSection").className = id === "esmfold" ? "hidden" : "";
+}
+
+function renderInputTabs() {
+  var container = document.getElementById("inputTabs");
+  container.innerHTML = "";
+  [["paste","Paste Sequence"],["upload","Upload File"],["workspace","From Workspace"]].forEach(function(pair) {
+    var btn = document.createElement("button");
+    btn.className = "pill" + (state.inputMethod === pair[0] ? " active" : "");
+    btn.textContent = pair[1];
+    btn.onclick = function() {
+      state.inputMethod = pair[0];
+      renderInputTabs();
+      document.getElementById("inputPaste").className = pair[0] === "paste" ? "" : "hidden";
+      document.getElementById("inputUpload").className = pair[0] === "upload" ? "" : "hidden";
+      document.getElementById("inputWorkspace").className = pair[0] === "workspace" ? "" : "hidden";
+    };
+    container.appendChild(btn);
+  });
+}
+
+// ─── MSA mode handling ───────────────────────────────────────────
+function renderMsaModeTabs() {
+  var container = document.getElementById("msaModeTabs");
+  container.innerHTML = "";
+  [["none","No MSA"],["server","MSA Server"],["upload","Upload MSA"]].forEach(function(pair) {
+    var btn = document.createElement("button");
+    btn.className = "pill" + (state.msaMode === pair[0] ? " active" : "");
+    btn.textContent = pair[1];
+    btn.onclick = function() {
+      state.msaMode = pair[0];
+      renderMsaModeTabs();
+      document.getElementById("msaModeNone").className = pair[0] === "none" ? "" : "hidden";
+      document.getElementById("msaModeServer").className = pair[0] === "server" ? "" : "hidden";
+      document.getElementById("msaModeUpload").className = pair[0] === "upload" ? "" : "hidden";
+    };
+    container.appendChild(btn);
+  });
+}
+
+function renderMsaUploadTabs() {
+  var container = document.getElementById("msaUploadTabs");
+  container.innerHTML = "";
+  [["file","Upload File"],["workspace","From Workspace"]].forEach(function(pair) {
+    var btn = document.createElement("button");
+    btn.className = "pill" + (state.msaUploadMethod === pair[0] ? " active" : "");
+    btn.style.cssText = "padding:5px 14px;font-size:12px";
+    btn.textContent = pair[1];
+    btn.onclick = function() {
+      state.msaUploadMethod = pair[0];
+      renderMsaUploadTabs();
+      document.getElementById("msaUploadFile").className = pair[0] === "file" ? "" : "hidden";
+      document.getElementById("msaUploadWorkspace").className = pair[0] === "workspace" ? "" : "hidden";
+    };
+    container.appendChild(btn);
+  });
+}
+
+function toggleAdvanced() {
+  state.advOpen = !state.advOpen;
+  document.getElementById("advPanel").className = state.advOpen ? "" : "hidden";
+  document.getElementById("advArrow").style.transform = state.advOpen ? "rotate(90deg)" : "rotate(0)";
+}
+
+// ─── Results ─────────────────────────────────────────────────────
+function renderResultTabs() {
+  var container = document.getElementById("resultTabs");
+  container.innerHTML = "";
+  [["overview","Overview"],["confidence","Confidence"],["comparison","Tool Comparison"],["files","Output Files"]].forEach(function(pair) {
+    var btn = document.createElement("button");
+    btn.className = "pill" + (state.activeTab === pair[0] ? " active" : "");
+    btn.textContent = pair[1];
+    btn.onclick = function() { switchTab(pair[0]); };
+    container.appendChild(btn);
+  });
+}
+
+function switchTab(id) {
+  state.activeTab = id;
+  ["overview","confidence","comparison","files"].forEach(function(t) {
+    document.getElementById("tab-" + t).className = t === id ? "" : "hidden";
+  });
+  renderResultTabs();
+  // Lazy-render charts for newly visible tabs
+  if (!state.chartsRendered) return;
+  renderChartsForTab(id);
+}
+
+function renderModelRanking() {
+  var container = document.getElementById("modelRanking");
+  container.innerHTML = "";
+  MODELS.forEach(function(m) {
+    var badgeClass = m.plddt >= 90 ? "b-green" : m.plddt >= 80 ? "b-blue" : "b-amber";
+    var div = document.createElement("div");
+    div.className = "model-row" + (m.rank === 1 ? " top" : "");
+    div.innerHTML =
+      '<div class="rank" style="background:' + (m.rank === 1 ? "#00B4D8" : "#E2E8F0") + ';color:' + (m.rank === 1 ? "#fff" : "#64748B") + '">' + m.rank + '</div>' +
+      '<div style="flex:1;font-size:13px;font-family:monospace;color:#334155">' + m.file + '</div>' +
+      '<span class="badge ' + badgeClass + '">pLDDT ' + m.plddt + '</span>' +
+      '<span style="font-size:12px;color:#94A3B8;width:60px;text-align:right">pTM ' + m.ptm.toFixed(2) + '</span>';
+    container.appendChild(div);
+  });
+}
+
+function renderSummaryStats() {
+  var container = document.getElementById("summaryStats");
+  var gte90 = perResidue.filter(function(x){return x.plddt>=90}).length;
+  var gte70 = perResidue.filter(function(x){return x.plddt>=70}).length;
+  var minP = Math.min.apply(null, perResidue.map(function(x){return x.plddt}));
+  var maxP = Math.max.apply(null, perResidue.map(function(x){return x.plddt}));
+  container.innerHTML = "";
+  [
+    ["Residues ≥90", gte90, "of 46", "#10B981"],
+    ["Residues ≥70", gte70, "of 46", "#00B4D8"],
+    ["Min pLDDT", minP.toFixed(1), "lowest residue", "#F59E0B"],
+    ["Max pLDDT", maxP.toFixed(1), "highest residue", "#10B981"]
+  ].forEach(function(item) {
+    var div = document.createElement("div");
+    div.style.cssText = "padding:12px;border-radius:8px;background:#F1F5F9;text-align:center";
+    div.innerHTML = '<div class="stat-label">' + item[0] + '</div><div class="stat-value" style="color:' + item[3] + '">' + item[1] + '</div><div class="stat-sub">' + item[2] + '</div>';
+    container.appendChild(div);
+  });
+}
+
+function renderFileList() {
+  var container = document.getElementById("fileList");
+  container.innerHTML = "";
+  FILES.forEach(function(f, i) {
+    var badgeClass = f[2] === "Structure" ? "b-green" : f[2] === "JSON" ? "b-purple" : "b-gray";
+    var div = document.createElement("div");
+    div.className = "file-row";
+    div.innerHTML =
+      '<span style="font-size:18px">' + f[0] + '</span>' +
+      '<span style="flex:1;font-size:13px;font-family:monospace;color:#334155;font-weight:500">' + f[1] + '</span>' +
+      '<span class="badge ' + badgeClass + '">' + f[2] + '</span>' +
+      '<span style="font-size:12px;color:#94A3B8;width:60px;text-align:right">' + f[3] + '</span>' +
+      '<button style="padding:4px 12px;border-radius:6px;border:1px solid #E2E8F0;background:#fff;color:#00B4D8;font-size:11px;font-weight:600">Download</button>';
+    container.appendChild(div);
+  });
+}
+
+// ─── Charts (Chart.js) ──────────────────────────────────────────
+var charts = {};
+
+function renderChartsForTab(tab) {
+  if (tab === "overview" && !charts.plddt) {
+    charts.plddt = new Chart(document.getElementById("plddtChart"), {
+      type: "bar",
+      data: {
+        labels: perResidue.map(function(d){return d.residue}),
+        datasets: [{
+          data: perResidue.map(function(d){return d.plddt}),
+          backgroundColor: perResidue.map(function(d){return plddtColor(d.plddt)}),
+          borderRadius: 2, barPercentage: 0.9
+        }]
+      },
+      options: {
+        responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { title: function(ctx){return "Residue " + perResidue[ctx[0].dataIndex].residue + " (" + perResidue[ctx[0].dataIndex].name + ")";} } } },
+        scales: { y: { min: 0, max: 100, title: { display: true, text: "pLDDT" } }, x: { title: { display: true, text: "Residue" }, ticks: { maxTicksLimit: 12 } } }
+      }
+    });
+  }
+
+  if (tab === "confidence") {
+    if (!charts.hist) {
+      var bins = [
+        perResidue.filter(function(x){return x.plddt<50}).length,
+        perResidue.filter(function(x){return x.plddt>=50&&x.plddt<70}).length,
+        perResidue.filter(function(x){return x.plddt>=70&&x.plddt<90}).length,
+        perResidue.filter(function(x){return x.plddt>=90}).length
+      ];
+      charts.hist = new Chart(document.getElementById("histChart"), {
+        type: "bar",
+        data: {
+          labels: ["0-50","50-70","70-90","90-100"],
+          datasets: [{ data: bins, backgroundColor: ["#EF4444","#F59E0B","#00B4D8","#10B981"], borderRadius: 6, barPercentage: 0.6 }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { title: { display: true, text: "Residues" } } } }
+      });
+    }
+    if (!charts.modelLine) {
+      charts.modelLine = new Chart(document.getElementById("modelChart"), {
+        type: "line",
+        data: {
+          labels: MODELS.map(function(m){return "Model "+m.rank}),
+          datasets: [
+            { label: "pLDDT", data: MODELS.map(function(m){return m.plddt}), borderColor: "#00B4D8", backgroundColor: "#00B4D8", pointRadius: 5, tension: 0.3 },
+            { label: "pTM (×100)", data: MODELS.map(function(m){return m.ptm*100}), borderColor: "#8B5CF6", backgroundColor: "#8B5CF6", pointRadius: 5, tension: 0.3 }
+          ]
+        },
+        options: { responsive: true, scales: { y: { min: 75, max: 100 } }, plugins: { legend: { position: "bottom" } } }
+      });
+    }
+  }
+
+  if (tab === "comparison") {
+    if (!charts.radar) {
+      charts.radar = new Chart(document.getElementById("radarChart"), {
+        type: "radar",
+        data: {
+          labels: ["pLDDT","pTM","Speed","Multimer","Ligand"],
+          datasets: [
+            { label: "Boltz-2", data: [92,89,60,90,95], borderColor: "#00B4D8", backgroundColor: "rgba(0,180,216,0.1)", borderWidth: 2 },
+            { label: "Chai-1", data: [90,86,70,85,40], borderColor: "#8B5CF6", backgroundColor: "rgba(139,92,246,0.06)", borderWidth: 2 },
+            { label: "AlphaFold 2", data: [94,91,30,95,30], borderColor: "#10B981", backgroundColor: "rgba(16,185,129,0.06)", borderWidth: 2 },
+            { label: "ESMFold", data: [85,74,95,20,10], borderColor: "#F59E0B", backgroundColor: "rgba(245,158,11,0.06)", borderWidth: 2 }
+          ]
+        },
+        options: { responsive: true, scales: { r: { min: 0, max: 100, ticks: { stepSize: 25 } } }, plugins: { legend: { position: "bottom" } } }
+      });
+    }
+    if (!charts.qvt) {
+      charts.qvt = new Chart(document.getElementById("qvtChart"), {
+        type: "bar",
+        data: {
+          labels: ["Boltz-2","Chai-1","AlphaFold 2","ESMFold"],
+          datasets: [
+            { label: "pLDDT", data: [92.4,90.1,94.2,85.3], backgroundColor: "#00B4D8", borderRadius: 4, yAxisID: "y" },
+            { label: "Runtime (min)", data: [83,67,240,12], backgroundColor: "#CBD5E1", borderRadius: 4, yAxisID: "y1" }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: { y: { min: 70, max: 100, position: "left", title: { display: true, text: "pLDDT" } }, y1: { position: "right", title: { display: true, text: "Runtime (min)" }, grid: { drawOnChartArea: false } } },
+          plugins: { legend: { position: "bottom" } }
+        }
+      });
+    }
+  }
+}
+
+// ─── Navigation ──────────────────────────────────────────────────
+function showResults() {
+  document.getElementById("formView").className = "container hidden";
+  document.getElementById("resultsView").className = "container";
+  renderResultTabs();
+  renderModelRanking();
+  renderSummaryStats();
+  renderFileList();
+  state.chartsRendered = true;
+  renderChartsForTab("overview");
+}
+
+function showForm() {
+  document.getElementById("resultsView").className = "container hidden";
+  document.getElementById("formView").className = "container";
+}
+
+// ─── Init ────────────────────────────────────────────────────────
+renderToolGrid();
+renderInputTabs();
+renderMsaModeTabs();
+renderMsaUploadTabs();
+</script>
+</body>
+</html>
