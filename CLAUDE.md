@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Environment
+
+Always use the `predict-structure` conda environment for this project:
+
+```bash
+conda activate predict-structure
+```
+
+When running Python, pytest, or pip commands, prefix with `conda run -n predict-structure` if the environment is not already active.
+
 ## Project Overview
 
 PredictStructureApp is a unified BV-BRC (Bacterial and Viral Bioinformatics Resource Center) module that provides a single interface for protein structure prediction using four tools: Boltz-2, Chai-1, AlphaFold 2, and ESMFold. It wraps per-tool containers behind a unified AppService interface and Python CLI with automatic parameter mapping and format conversion.

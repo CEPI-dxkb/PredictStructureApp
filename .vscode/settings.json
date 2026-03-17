@@ -1,0 +1,7 @@
+{
+    "python.defaultInterpreterPath": "/Users/me/miniconda3/envs/predict-structure/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "terminal.integrated.env.osx": {
+        "CONDA_DEFAULT_ENV": "predict-structure"
+    }
+}
