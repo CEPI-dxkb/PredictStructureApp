@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 
 import click
+from click_option_group import optgroup
 
 from predict_structure import __version__
 from predict_structure.adapters import get_adapter
@@ -32,22 +33,24 @@ from predict_structure.normalizers import write_metadata_json
 def shared_options(func):
     """Decorator that applies options common to all prediction tools."""
     @click.argument("input_file", type=click.Path(exists=True))
-    @click.option("-o", "--output-dir", type=click.Path(), required=True, help="Output directory")
-    @click.option("--num-samples", "-n", type=int, default=1, help="Number of structure samples")
-    @click.option("--num-recycles", type=int, default=3, help="Recycling iterations")
-    @click.option("--seed", type=int, default=None, help="Random seed")
-    @click.option("--device", type=click.Choice(["gpu", "cpu"]), default="gpu", help="Compute device")
-    @click.option("--msa", type=click.Path(), default=None, help="MSA file (.a3m, .sto, .pqt)")
-    @click.option("--output-format", type=click.Choice(["pdb", "mmcif"]), default="pdb")
-    @click.option(
+    @optgroup.group("Prediction options")
+    @optgroup.option("-o", "--output-dir", type=click.Path(), required=True, help="Output directory")
+    @optgroup.option("--num-samples", "-n", type=int, default=1, help="Number of structure samples")
+    @optgroup.option("--num-recycles", type=int, default=3, help="Recycling iterations")
+    @optgroup.option("--seed", type=int, default=None, help="Random seed")
+    @optgroup.option("--device", type=click.Choice(["gpu", "cpu"]), default="gpu", help="Compute device")
+    @optgroup.option("--msa", type=click.Path(), default=None, help="MSA file (.a3m, .sto, .pqt)")
+    @optgroup.option("--output-format", type=click.Choice(["pdb", "mmcif"]), default="pdb")
+    @optgroup.group("Backend options")
+    @optgroup.option(
         "--backend",
         type=click.Choice(["docker", "subprocess", "cwl"]),
         default="subprocess",
         help="Execution backend",
     )
-    @click.option("--image", default=None, help="Override Docker image (docker backend only)")
-    @click.option("--cwl-runner", default=None, help="CWL runner command (default: cwltool)")
-    @click.option("--cwl-tool", default=None, help="Path to CWL tool definition")
+    @optgroup.option("--image", default=None, help="Override Docker image (docker backend only)")
+    @optgroup.option("--cwl-runner", default=None, help="CWL runner command (default: cwltool)")
+    @optgroup.option("--cwl-tool", default=None, help="Path to CWL tool definition")
     @click.option("--debug", is_flag=True, default=False, help="Print the command instead of executing it")
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -154,9 +157,10 @@ def main():
 
 @main.command()
 @shared_options
-@click.option("--sampling-steps", type=int, default=200, help="Number of diffusion sampling steps")
-@click.option("--use-msa-server", is_flag=True, default=False, help="Use remote MSA server")
-@click.option("--use-potentials", is_flag=True, default=False, help="Enable potential terms")
+@optgroup.group("Boltz-2 options")
+@optgroup.option("--sampling-steps", type=int, default=200, help="Number of diffusion sampling steps")
+@optgroup.option("--use-msa-server", is_flag=True, default=False, help="Use remote MSA server")
+@optgroup.option("--use-potentials", is_flag=True, default=False, help="Enable potential terms")
 def boltz(input_file, sampling_steps, use_msa_server, use_potentials, **shared):
     """Predict structure with Boltz-2 (diffusion-based, proteins/DNA/RNA/ligands)."""
     extra = {
@@ -173,8 +177,9 @@ def boltz(input_file, sampling_steps, use_msa_server, use_potentials, **shared):
 
 @main.command()
 @shared_options
-@click.option("--sampling-steps", type=int, default=200, help="Number of diffusion sampling steps")
-@click.option("--use-msa-server", is_flag=True, default=False, help="Use remote MSA server")
+@optgroup.group("Chai-1 options")
+@optgroup.option("--sampling-steps", type=int, default=200, help="Number of diffusion sampling steps")
+@optgroup.option("--use-msa-server", is_flag=True, default=False, help="Use remote MSA server")
 def chai(input_file, sampling_steps, use_msa_server, **shared):
     """Predict structure with Chai-1 (diffusion-based protein prediction)."""
     extra = {
@@ -190,10 +195,11 @@ def chai(input_file, sampling_steps, use_msa_server, **shared):
 
 @main.command()
 @shared_options
-@click.option("--af2-data-dir", type=click.Path(), required=True, help="AlphaFold database directory (~2TB)")
-@click.option("--af2-model-preset", default="monomer", help="Model preset (monomer, monomer_casp14, multimer)")
-@click.option("--af2-db-preset", default="reduced_dbs", help="DB preset (reduced_dbs, full_dbs)")
-@click.option("--af2-max-template-date", default="2022-01-01", help="Max template date (YYYY-MM-DD)")
+@optgroup.group("AlphaFold 2 options")
+@optgroup.option("--af2-data-dir", type=click.Path(), required=True, help="AlphaFold database directory (~2TB)")
+@optgroup.option("--af2-model-preset", default="monomer", help="Model preset (monomer, monomer_casp14, multimer)")
+@optgroup.option("--af2-db-preset", default="reduced_dbs", help="DB preset (reduced_dbs, full_dbs)")
+@optgroup.option("--af2-max-template-date", default="2022-01-01", help="Max template date (YYYY-MM-DD)")
 def alphafold(input_file, af2_data_dir, af2_model_preset, af2_db_preset, af2_max_template_date, **shared):
     """Predict structure with AlphaFold 2 (MSA-based, high accuracy)."""
     extra = {
@@ -211,9 +217,10 @@ def alphafold(input_file, af2_data_dir, af2_model_preset, af2_db_preset, af2_max
 
 @main.command()
 @shared_options
-@click.option("--fp16", is_flag=True, default=False, help="Use half-precision (FP16) inference")
-@click.option("--chunk-size", type=int, default=None, help="Chunk size for long sequences")
-@click.option("--max-tokens-per-batch", type=int, default=None, help="Max tokens per batch")
+@optgroup.group("ESMFold options")
+@optgroup.option("--fp16", is_flag=True, default=False, help="Use half-precision (FP16) inference")
+@optgroup.option("--chunk-size", type=int, default=None, help="Chunk size for long sequences")
+@optgroup.option("--max-tokens-per-batch", type=int, default=None, help="Max tokens per batch")
 def esmfold(input_file, fp16, chunk_size, max_tokens_per_batch, **shared):
     """Predict structure with ESMFold (single-sequence, no MSA needed, CPU-capable)."""
     extra = {
