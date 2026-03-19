@@ -1,0 +1,40 @@
+Bootstrap: localimage
+From: /disks/tmp/all-2026-0224b.sif
+
+%labels
+    Author Andreas Wilke
+    Description Unified protein structure prediction CLI (Boltz-2, Chai-1, AlphaFold2, ESMFold)
+    Version 0.1.0
+
+%files
+    pyproject.toml /app/predict-structure/pyproject.toml
+    predict_structure /app/predict-structure/predict_structure
+
+%post
+    # Install predict-structure CLI with all optional deps into miniforge base env
+    /opt/miniforge/bin/pip install --no-cache-dir "/app/predict-structure[boltz,chai,cwl]"
+
+    # Symlink into /usr/local/bin for easy access
+    ln -sf /opt/miniforge/bin/predict-structure /usr/local/bin/predict-structure
+
+    # Create standard directories
+    mkdir -p /input /output /databases /cache
+    chmod 777 /cache
+
+%environment
+    export PATH=/opt/miniforge/bin:$PATH
+    export BOLTZ_CACHE=/cache
+    export CHAI_DOWNLOADS_DIR=/cache
+    export HF_HOME=/cache/huggingface
+    export TORCH_HOME=/cache/torch
+
+%runscript
+    exec predict-structure "$@"
+
+%help
+    Unified protein structure prediction container.
+
+    Usage:
+      apptainer run predict-structure.sif boltz input.fasta -o output/
+      apptainer run predict-structure.sif esmfold input.fasta -o output/
+      apptainer exec predict-structure.sif predict-structure --help
