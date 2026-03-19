@@ -1,30 +1,36 @@
 # Dockerfile for predict-structure — all-in-one with all prediction tools
 #
+# Mirrors the BV-BRC Apptainer build from:
+#   https://github.com/BV-BRC/runtime_build/tree/master/gpu-builds/cuda-12.2-cudnn-8.9.6
+#
 # Single GPU container with predict-structure CLI and all four tools
-# installed in separate conda environments. Uses the subprocess backend
-# with tool executables at /opt/conda-<tool>/bin/*.
+# installed in separate conda environments:
+#   /opt/conda-boltz      (Python 3.11)
+#   /opt/conda-chai       (Python 3.10)
+#   /opt/conda-alphafold  (Python 3.11)
+#   /opt/conda-esmfold    (Python 3.11)
+#   /opt/conda-predict    (Python 3.12, predict-structure CLI)
 #
-# For HPC, convert to Apptainer: singularity build predict-structure-all.sif \
-#   docker://dxkb/predict-structure-all:latest-gpu
+# Models/databases are NOT baked in — bind-mount /local_databases at runtime.
 #
-# Build:
-#   docker build --platform linux/amd64 \
-#     -t dxkb/predict-structure-all:latest-gpu \
+# Build (on amd64 host):
+#   docker build -t dxkb/predict-structure-all:latest-gpu \
 #     -f container/Dockerfile.predict-structure-all .
 #
+# Convert to Apptainer for HPC:
+#   singularity build predict-structure-all.sif \
+#     docker://dxkb/predict-structure-all:latest-gpu
+#
 # Run:
-#   docker run --gpus all -v $(pwd)/data:/input -v $(pwd)/output:/output \
+#   docker run --gpus all \
+#     -v /local_databases:/local_databases \
+#     -v $(pwd)/data:/input -v $(pwd)/output:/output \
 #     dxkb/predict-structure-all:latest-gpu \
 #     auto /input/protein.fasta -o /output
-#
-# Run specific tool:
-#   docker run --gpus all -v $(pwd)/data:/input -v $(pwd)/output:/output \
-#     dxkb/predict-structure-all:latest-gpu \
-#     boltz /input/protein.fasta -o /output --use-msa-server
 
-ARG CUDA_VERSION=12.1.0
+ARG CUDA_VERSION=12.2.0
 
-FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu22.04
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
 
 LABEL maintainer="BV-BRC Team"
 LABEL description="Unified protein structure prediction — all tools in one container"
@@ -33,64 +39,119 @@ LABEL org.opencontainers.image.source="https://github.com/CEPI-dxkb/PredictStruc
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 ENV PYTHONUNBUFFERED=1
+ENV CONDA_PLUGINS_AUTO_ACCEPT_TOS=yes
+ENV PYTHONNOUSERSITE=1
 
 # ─── System dependencies ─────────────────────────────────────────────
+# Matches BV-BRC base-build.def
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         wget \
-        git \
-        gcc \
-        g++ \
-        make \
-        libyaml-dev \
-        libffi-dev \
+        curl \
+        gnupg2 \
         ca-certificates \
+        build-essential \
+        software-properties-common \
+        libgl1-mesa-glx \
+        libglib2.0-0 \
+        cmake \
+        git \
+        hmmer \
+        kalign \
+        tzdata \
+        less \
+        locales \
+    && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
 
-# ─── Miniconda ────────────────────────────────────────────────────────
+# ─── cuDNN 8.9.6 ─────────────────────────────────────────────────────
 
-ENV CONDA_DIR=/opt/conda
-RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
-    bash /tmp/miniconda.sh -b -p $CONDA_DIR && \
-    rm /tmp/miniconda.sh
+RUN wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.0-1_all.deb && \
+    dpkg -i cuda-keyring_1.0-1_all.deb && \
+    apt-get update && \
+    apt-get -y install libcudnn8=8.9.6.* libcudnn8-dev=8.9.6.* && \
+    cd /usr/lib/x86_64-linux-gnu/ && \
+    for lib in libcudnn libcudnn_adv_infer libcudnn_adv_train libcudnn_cnn_infer \
+               libcudnn_cnn_train libcudnn_ops_infer libcudnn_ops_train; do \
+        if [ -f "${lib}.so.8.9.6" ]; then \
+            ln -sf "${lib}.so.8.9.6" "${lib}.so.8"; \
+            ln -sf "${lib}.so.8.9.6" "${lib}.so"; \
+        fi; \
+    done && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* cuda-keyring_1.0-1_all.deb
+
+# ─── Miniforge (matches BV-BRC base-build.def) ───────────────────────
+
+ENV CONDA_DIR=/opt/miniforge
+RUN wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O /tmp/miniforge.sh && \
+    bash /tmp/miniforge.sh -b -p $CONDA_DIR && \
+    rm /tmp/miniforge.sh && \
+    $CONDA_DIR/bin/conda init bash && \
+    $CONDA_DIR/bin/conda config --system --set remote_read_timeout_secs 600 && \
+    $CONDA_DIR/bin/conda config --system --set remote_connect_timeout_secs 60
 ENV PATH=$CONDA_DIR/bin:$PATH
 
-# ─── Per-tool conda environments ─────────────────────────────────────
-#
-# Each tool gets its own environment to avoid dependency conflicts.
-# Executables are at /opt/conda-<tool>/bin/<executable>.
+# ─── Boltz-2 (matches reqts-boltz.def) ───────────────────────────────
 
-# --- Boltz-2 ---
-RUN conda create -y -p /opt/conda-boltz python=3.11 && \
-    /opt/conda-boltz/bin/pip install --no-cache-dir boltz[cuda] && \
-    conda clean -afy
+RUN conda create -p /opt/conda-boltz --yes --quiet python=3.11 && \
+    /opt/conda-boltz/bin/pip install --no-cache-dir \
+        'torch>=2.2' --index-url https://download.pytorch.org/whl/cu121 && \
+    /opt/conda-boltz/bin/pip install --no-cache-dir 'boltz[cuda]' && \
+    conda clean --all --force-pkgs-dirs --yes
 
-# --- Chai-1 ---
-RUN conda create -y -p /opt/conda-chai python=3.11 && \
-    /opt/conda-chai/bin/pip install --no-cache-dir chai_lab && \
-    conda clean -afy
+# ─── Chai-1 (matches reqts-chai.def) ─────────────────────────────────
 
-# --- ESMFold (HuggingFace) ---
-RUN conda create -y -p /opt/conda-esmfold python=3.11 && \
+RUN conda create -p /opt/conda-chai --yes --quiet python=3.10 && \
+    /opt/conda-chai/bin/pip install --no-cache-dir \
+        'torch>=2.3.1' --index-url https://download.pytorch.org/whl/cu121 && \
+    /opt/conda-chai/bin/pip install --no-cache-dir chai-lab && \
+    conda clean --all --force-pkgs-dirs --yes
+
+# ─── ESMFold (HuggingFace) ───────────────────────────────────────────
+
+RUN conda create -p /opt/conda-esmfold --yes --quiet python=3.11 && \
     /opt/conda-esmfold/bin/pip install --no-cache-dir \
-        torch transformers accelerate biopython && \
-    conda clean -afy
+        'torch>=2.2' --index-url https://download.pytorch.org/whl/cu121
+RUN /opt/conda-esmfold/bin/pip install --no-cache-dir \
+        transformers accelerate biopython && \
+    conda clean --all --force-pkgs-dirs --yes
 
-# --- AlphaFold 2 ---
-# AlphaFold uses a fixed install path; database dir is mounted at runtime.
-RUN conda create -y -p /opt/conda-alphafold python=3.11 && \
-    git clone --depth 1 https://github.com/google-deepmind/alphafold.git /app/alphafold && \
-    cd /app/alphafold && \
-    /opt/conda-alphafold/bin/pip install --no-cache-dir -r requirements.txt && \
-    /opt/conda-alphafold/bin/pip install --no-cache-dir . && \
-    conda clean -afy
+# ─── AlphaFold 2 (matches reqts-alphafold.def) ───────────────────────
+
+# HHsuite for template search
+RUN git clone --branch v3.3.0 --single-branch https://github.com/soedinglab/hh-suite.git /tmp/hh-suite && \
+    mkdir /tmp/hh-suite/build && \
+    cd /tmp/hh-suite/build && \
+    cmake -DCMAKE_INSTALL_PREFIX=/opt/hhsuite .. && \
+    make -j$(nproc) && \
+    make install && \
+    ln -s /opt/hhsuite/bin/* /usr/bin && \
+    rm -rf /tmp/hh-suite
+
+RUN conda create -p /opt/conda-alphafold --yes --quiet python=3.11 && \
+    conda install -p /opt/conda-alphafold --channel nvidia --yes cuda=12.2.2 && \
+    conda install -p /opt/conda-alphafold --channel conda-forge --yes openmm=8.0.0 pdbfixer && \
+    rm -f /opt/conda-alphafold/lib/plugins/libOpenMM*CUDA* \
+          /opt/conda-alphafold/lib/plugins/libOpenMM*OpenCL* && \
+    conda clean --all --force-pkgs-dirs --yes
+
+RUN git clone --depth 1 https://github.com/wilke/alphafold.git /app/alphafold && \
+    wget -q -P /app/alphafold/alphafold/common/ \
+        https://git.scicore.unibas.ch/schwede/openstructure/-/raw/7102c63615b64735c4941278d92b554ec94415f8/modules/mol/alg/src/stereo_chemical_props.txt && \
+    /opt/conda-alphafold/bin/pip install --no-cache-dir \
+        -r /app/alphafold/requirements.txt && \
+    /opt/conda-alphafold/bin/pip install --no-cache-dir \
+        jax==0.4.26 \
+        'jaxlib==0.4.26+cuda12.cudnn89' \
+        -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html && \
+    conda clean --all --force-pkgs-dirs --yes && \
+    /opt/conda-alphafold/bin/pip cache purge
 
 # ─── predict-structure CLI ────────────────────────────────────────────
-#
-# Installed into a dedicated env. This is what the user calls.
 
-RUN conda create -y -p /opt/conda-predict python=3.12 && \
-    conda clean -afy
+RUN conda create -p /opt/conda-predict --yes --quiet python=3.12 && \
+    conda clean --all --force-pkgs-dirs --yes
 
 WORKDIR /app/predict-structure
 COPY pyproject.toml README.md ./
@@ -98,7 +159,7 @@ COPY predict_structure/ predict_structure/
 
 RUN /opt/conda-predict/bin/pip install --no-cache-dir -e ".[all]"
 
-# Symlink predict-structure into /usr/local/bin for easy access
+# Symlink into /usr/local/bin for easy access
 RUN ln -sf /opt/conda-predict/bin/predict-structure /usr/local/bin/predict-structure
 
 # Copy app specs, CWL, and test data
@@ -106,16 +167,27 @@ COPY app_specs/ /app/predict-structure/app_specs/
 COPY cwl/ /app/predict-structure/cwl/
 COPY test_data/ /app/predict-structure/test_data/
 
-# ─── Directories ──────────────────────────────────────────────────────
+# ─── Directories and environment ──────────────────────────────────────
 
-RUN mkdir -p /input /output /databases /cache && \
+RUN mkdir -p /input /output /local_databases /cache && \
     chmod 777 /cache
 
-# Cache dirs for tools that download models at runtime
-ENV BOLTZ_CACHE=/cache
-ENV CHAI_DOWNLOADS_DIR=/cache
-ENV HF_HOME=/cache/huggingface
-ENV TORCH_HOME=/cache/torch
+# Model/database cache — bind-mount /local_databases at runtime
+ENV BOLTZ_CACHE=/local_databases/boltz
+ENV CHAI_DOWNLOADS_DIR=/local_databases/chai
+ENV HF_HOME=/local_databases/huggingface
+ENV TORCH_HOME=/local_databases/torch
+ENV DISABLE_PANDERA_IMPORT_WARNING=True
+ENV CUDA_HOME=/usr/local/cuda-12.2
+ENV CUDNN_PATH=/usr/lib/x86_64-linux-gnu
+ENV CUDNN_VERSION=8.9.6
+ENV XLA_FLAGS="--xla_gpu_cuda_data_dir=/usr/local/cuda-12.2 --xla_gpu_force_compilation_parallelism=1"
+ENV XLA_PYTHON_CLIENT_PREALLOCATE=false
+ENV XLA_PYTHON_CLIENT_MEM_FRACTION=0.90
+ENV TF_FORCE_GPU_ALLOW_GROWTH=true
+ENV CUDA_MODULE_LOADING=EAGER
+ENV PYTHONPATH=/app/alphafold:$PYTHONPATH
+ENV PATH=/opt/conda-alphafold/bin:/opt/hhsuite/bin:$PATH
 
 # ─── Entrypoint ───────────────────────────────────────────────────────
 
