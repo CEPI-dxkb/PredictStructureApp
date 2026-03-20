@@ -151,6 +151,10 @@ def get_data_dir(tool_name: str) -> Path:
     tool_cfg = get_tools().get(tool_name, {})
     rel = tool_cfg.get("data_dir", tool_name)
 
+    # Normalize to string (guards against null/non-string in YAML)
+    if not isinstance(rel, str):
+        rel = str(rel) if rel is not None else tool_name
+
     # Absolute data_dir → use as-is
     if rel.startswith("/"):
         return Path(rel)

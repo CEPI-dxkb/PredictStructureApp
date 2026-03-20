@@ -46,8 +46,13 @@ from predict_structure.normalizers import write_metadata_json
 
 from predict_structure.config import get_command, get_data_dir, get_data_root, get_tools
 
-# Default AlphaFold database directory — resolved from config/env
-AF2_DEFAULT_DATA_DIR = get_data_dir("alphafold")
+# Default AlphaFold database directory — resolved from config/env.
+# Guard against config FileNotFoundError at import time so Click can
+# still start and report configuration issues gracefully.
+try:
+    AF2_DEFAULT_DATA_DIR = get_data_dir("alphafold")
+except (FileNotFoundError, KeyError):
+    AF2_DEFAULT_DATA_DIR = Path("/databases")
 
 
 def _is_tool_available(tool: str) -> bool:
