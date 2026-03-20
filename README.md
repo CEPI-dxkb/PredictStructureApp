@@ -189,7 +189,7 @@ These options are available on all tool subcommands:
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `-o`, `--output-dir` | path | (required) | Output directory |
-| `-n`, `--num-samples` | int | 1 | Number of structure samples |
+| `-n`, `--num-samples` | int | 1 | Number of structure samples (diffusion samples for Boltz/Chai) |
 | `--num-recycles` | int | 3 | Recycling iterations |
 | `--seed` | int | none | Random seed |
 | `--msa` | path | none | MSA file (.a3m, .sto, .pqt) |
@@ -244,7 +244,7 @@ predict-structure chai --protein input.fasta -o output/ \
 | `--use-templates-server` | flag | off | Use PDB template server |
 | `--constraint-path` | path | none | Constraint JSON file |
 | `--template-hits-path` | path | none | Pre-computed template hits file |
-| `--num-trunk-samples` | int | 1 | Trunk samples per prediction |
+| `--num-trunk-samples` | int | 1 | Trunk forward passes (independent of `--num-samples` diffusion samples) |
 | `--recycle-msa-subsample` | int | 0 | MSA subsample per recycle (0 = all) |
 | `--no-low-memory` | flag | off | Disable low-memory mode |
 
