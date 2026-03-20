@@ -102,9 +102,9 @@ class TestNormalizeChaiOutput:
         raw = tmp_path / "raw"
         raw.mkdir()
 
-        # Create mock CIF (from PDB)
+        # Create mock CIF (from PDB with Chai-style B-factors: 0-100 scale)
         pdb_content = (
-            "ATOM      1  CA  ALA A   1       1.000   2.000   3.000  1.00  0.75           C\n"
+            "ATOM      1  CA  ALA A   1       1.000   2.000   3.000  1.00 75.00           C\n"
             "END\n"
         )
         pdb_tmp = raw / "temp.pdb"
@@ -113,18 +113,20 @@ class TestNormalizeChaiOutput:
         pdb_to_mmcif(pdb_tmp, raw / "pred.model_idx_0.cif")
         pdb_tmp.unlink()
 
-        # Scores NPZ
+        # Scores NPZ (Chai format: aggregate_score, ptm, iptm — no plddt)
         np.savez(
             str(raw / "scores.model_idx_0.npz"),
-            plddt=np.array([0.75, 0.80, 0.85]),
-            ptm=np.float64(0.88),
+            aggregate_score=np.array([0.85]),
+            ptm=np.array([0.88]),
+            iptm=np.array([0.90]),
         )
 
         normalize_chai_output(raw, tmp_output)
 
         assert (tmp_output / "model_1.pdb").exists()
         data = json.loads((tmp_output / "confidence.json").read_text())
-        assert data["per_residue_plddt"][0] == 75.0  # scaled 0-100
+        assert data["per_residue_plddt"][0] == 75.0  # from PDB B-factors
+        assert data["ptm"] == 0.88
 
 
 class TestNormalizeESMFoldOutput:

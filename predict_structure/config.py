@@ -100,6 +100,65 @@ def get_sif_path(tool_name: str) -> Path:
 
 
 # -----------------------------------------------------------------
+# Data directory helpers
+# -----------------------------------------------------------------
+
+# Native env vars that tools use directly for their data/cache paths.
+_NATIVE_ENV_VARS: dict[str, str] = {
+    "boltz": "BOLTZ_CACHE",
+    "chai": "CHAI_DOWNLOADS_DIR",
+}
+
+
+def get_data_root() -> Path:
+    """Return the base data directory.
+
+    Resolution order:
+      1. ``PREDICT_STRUCTURE_DATA`` env var
+      2. ``data_root`` in tools.yml
+      3. ``/local_databases`` (fallback)
+    """
+    env = os.environ.get("PREDICT_STRUCTURE_DATA")
+    if env:
+        return Path(env)
+    cfg_root = _load_config().get("data_root")
+    if cfg_root:
+        return Path(cfg_root)
+    return Path("/local_databases")
+
+
+def get_data_dir(tool_name: str) -> Path:
+    """Return the data directory for a specific tool.
+
+    Resolution order (highest wins):
+      1. Native env var (``BOLTZ_CACHE``, ``CHAI_DOWNLOADS_DIR``, etc.)
+      2. ``PREDICT_STRUCTURE_DATA`` / per-tool ``data_dir``
+      3. ``data_root`` / per-tool ``data_dir`` from tools.yml
+      4. ``data_root`` / ``tool_name``
+
+    Returns:
+        Absolute path to the tool's data directory.
+    """
+    # 1. Native env var override
+    native_var = _NATIVE_ENV_VARS.get(tool_name)
+    if native_var:
+        native_val = os.environ.get(native_var)
+        if native_val:
+            return Path(native_val)
+
+    # 2-3. data_root + per-tool data_dir
+    root = get_data_root()
+    tool_cfg = get_tools().get(tool_name, {})
+    rel = tool_cfg.get("data_dir", tool_name)
+
+    # Absolute data_dir → use as-is
+    if rel.startswith("/"):
+        return Path(rel)
+
+    return root / rel
+
+
+# -----------------------------------------------------------------
 # Local execution helpers
 # -----------------------------------------------------------------
 

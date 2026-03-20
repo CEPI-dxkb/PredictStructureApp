@@ -30,6 +30,19 @@
 #   - docker:      docker run <image> <command> [args...]
 #   - cwl:         cwltool <cwl> job.yml  (image baked into the CWL definition)
 
+# ─── Data directories ───────────────────────────────────────────────
+#
+# data_root is the base directory for all tool databases and model
+# weights.  Per-tool data_dir entries are relative to data_root
+# unless they start with /.
+#
+# Override order (highest wins):
+#   1. Native env var (BOLTZ_CACHE, CHAI_DOWNLOADS_DIR, etc.)
+#   2. PREDICT_STRUCTURE_DATA env var  →  replaces data_root
+#   3. tools.yml data_root / per-tool data_dir (below)
+#
+data_root: /local_databases
+
 # container:
 #   sif: file:///hpc/images/predict-structure-all.sif
 
@@ -38,6 +51,7 @@ tools:
     image: docker://dxkb/boltz-bvbrc:latest-gpu
     cwl: boltzApp/cwl/boltz.cwl
     conda_env: boltz
+    data_dir: boltz
     command:
       - /opt/conda-boltz/bin/boltz
       - predict
@@ -46,6 +60,7 @@ tools:
     image: docker://dxkb/chai-bvbrc:latest-gpu
     cwl: ChaiApp/cwl/chailab.cwl
     conda_env: chai
+    data_dir: chai
     command:
       - /opt/conda-chai/bin/chai-lab
       - fold
@@ -54,6 +69,7 @@ tools:
     image: docker://wilke/alphafold
     cwl: AlphaFoldApp/alphafold.cwl
     conda_env: alphafold
+    data_dir: alphafold/databases
     command:
       - /opt/conda-alphafold/bin/python
       - /app/alphafold/run_alphafold.py
@@ -62,5 +78,6 @@ tools:
     image: docker://dxkb/esmfold-bvbrc:latest-gpu
     cwl: ESMFoldApp/cwl/esmfold.cwl
     conda_env: esmfold
+    data_dir: esmfold
     command:
       - /opt/conda-esmfold/bin/esm-fold-hf

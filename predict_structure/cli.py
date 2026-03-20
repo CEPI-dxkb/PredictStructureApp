@@ -16,6 +16,7 @@ Examples:
 from __future__ import annotations
 
 import functools
+import logging
 import shutil
 import sys
 import time
@@ -24,6 +25,8 @@ from pathlib import Path
 import click
 import yaml
 from click_option_group import optgroup
+
+logger = logging.getLogger(__name__)
 
 from predict_structure import __version__
 from predict_structure.adapters import get_adapter
@@ -41,10 +44,10 @@ from predict_structure.normalizers import write_metadata_json
 # Tool auto-discovery
 # ---------------------------------------------------------------------------
 
-from predict_structure.config import get_command, get_tools
+from predict_structure.config import get_command, get_data_dir, get_data_root, get_tools
 
-# Default AlphaFold database directory (checked during discovery)
-AF2_DEFAULT_DATA_DIR = Path("/databases")
+# Default AlphaFold database directory — resolved from config/env
+AF2_DEFAULT_DATA_DIR = get_data_dir("alphafold")
 
 
 def _is_tool_available(tool: str) -> bool:
@@ -137,14 +140,8 @@ def discover_tool(input_file: Path, device: str = "gpu") -> str:
     # Accuracy-priority order
     for tool in ("boltz", "chai", "alphafold", "esmfold"):
         if tool == "alphafold":
-            # AlphaFold also requires its database directory
-            if _is_tool_available(tool) or AF2_DEFAULT_DATA_DIR.is_dir():
-                # Need both executable AND data
-                has_exe = any(
-                    shutil.which(e) for e in _TOOL_EXECUTABLES.get(tool, [])
-                ) or any(Path(p).exists() for p in _TOOL_PATHS.get(tool, []))
-                if has_exe and AF2_DEFAULT_DATA_DIR.is_dir():
-                    return tool
+            if _is_tool_available(tool) and AF2_DEFAULT_DATA_DIR.is_dir():
+                return tool
         elif _is_tool_available(tool):
             return tool
 
@@ -341,6 +338,10 @@ def run_prediction(tool_name: str, extra_kwargs: dict, *, entity_list: EntityLis
         entity_list: Entities to predict.
         **shared: Shared CLI options (output_dir, backend, etc.).
     """
+    logger.info("Tool: %s", tool_name)
+    logger.info("Entities: %s", [(e.entity_type.value, e.name) for e in entity_list])
+    logger.info("Backend: %s | Device: %s", shared.get("backend"), shared.get("device"))
+
     output_path = Path(shared["output_dir"])
     output_path.mkdir(parents=True, exist_ok=True)
     raw_dir = output_path / "raw_output"
@@ -348,6 +349,7 @@ def run_prediction(tool_name: str, extra_kwargs: dict, *, entity_list: EntityLis
 
     # 1. Resolve adapter and backend
     adapter = get_adapter(tool_name)
+    logger.info("Supported entities: %s", sorted(e.value for e in adapter.supported_entities))
     backend = shared["backend"]
     backend_kwargs = {}
     if backend == "docker" and shared.get("image"):
@@ -361,10 +363,12 @@ def run_prediction(tool_name: str, extra_kwargs: dict, *, entity_list: EntityLis
 
     # 2. Validate entity types against adapter capabilities
     adapter.validate_entities(entity_list)
+    logger.info("Entity validation passed")
 
     # 3. Prepare input (entity list → tool-native format, MSA conversion)
     msa_path = Path(shared["msa"]) if shared.get("msa") else None
     prepared = adapter.prepare_input(entity_list, output_path, msa_path=msa_path)
+    logger.info("Prepared input: %s", prepared)
 
     # 4. Build tool-specific command
     cmd = adapter.build_command(
@@ -396,6 +400,8 @@ def run_prediction(tool_name: str, extra_kwargs: dict, *, entity_list: EntityLis
     if backend == "cwl":
         run_kwargs["output_dir"] = str(output_path)
 
+    logger.info("Command: %s", " ".join(cmd))
+
     # 6. Execute prediction (or print command in debug mode)
     if shared.get("debug"):
         debug_lines = execution_backend.format_command(cmd, **run_kwargs)
@@ -407,8 +413,17 @@ def run_prediction(tool_name: str, extra_kwargs: dict, *, entity_list: EntityLis
     elapsed = time.time() - start
 
     if rc != 0:
-        click.echo(f"Prediction failed with exit code {rc}", err=True)
-        sys.exit(rc)
+        # Check if the tool produced output despite the error (e.g. AF2
+        # relaxation failure after successful prediction).
+        has_output = any(raw_dir.glob("**/*.pdb")) or any(raw_dir.glob("**/*.cif"))
+        if has_output:
+            logger.warning(
+                "Tool exited with code %d but produced output — "
+                "attempting normalization", rc
+            )
+        else:
+            click.echo(f"Prediction failed with exit code {rc}", err=True)
+            sys.exit(rc)
 
     # 7. Normalize output
     adapter.normalize_output(raw_dir, output_path)
@@ -510,8 +525,10 @@ def _run_job_file(job_path: Path, base_output_dir: Path | None) -> None:
               help="YAML job spec for batch predictions")
 @click.option("-o", "--output-dir", "job_output_dir", type=click.Path(), default=None,
               help="Output directory (used with --job)")
+@click.option("-v", "--verbose", is_flag=True, default=False,
+              help="Enable verbose logging (DEBUG level)")
 @click.pass_context
-def main(ctx, job, job_output_dir):
+def main(ctx, job, job_output_dir, verbose):
     """Predict protein structure using Boltz-2, Chai-1, AlphaFold 2, or ESMFold.
 
     Each subcommand dispatches to the appropriate prediction tool with
@@ -520,6 +537,12 @@ def main(ctx, job, job_output_dir):
 
     Use --job for batch predictions from a YAML spec file.
     """
+    level = logging.DEBUG if verbose else logging.WARNING
+    logging.basicConfig(
+        level=level,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+
     if job is not None:
         if ctx.invoked_subcommand is not None:
             raise click.UsageError("--job is exclusive with subcommands")

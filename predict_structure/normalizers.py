@@ -110,16 +110,27 @@ def _copy_raw(raw_dir: Path, output_dir: Path) -> None:
 def normalize_boltz_output(raw_dir: Path, output_dir: Path) -> Path:
     """Normalize Boltz-2 output to standardized layout.
 
-    Raw structure:
-        raw_dir/predictions/{name}/{name}_model_0.cif
-        raw_dir/predictions/{name}/confidence_{name}_model_0.json
+    Raw structure (Boltz-2 nests under boltz_results_{input_stem}/):
+        raw_dir/boltz_results_{stem}/predictions/{name}/{name}_model_0.cif
+        raw_dir/boltz_results_{stem}/predictions/{name}/confidence_{name}_model_0.json
+
+    Also handles the flat layout for backward compatibility:
+        raw_dir/predictions/{name}/...
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Find the predictions subdirectory
+    # Find the predictions subdirectory — check flat first, then boltz_results_*
     pred_dir = raw_dir / "predictions"
     if not pred_dir.exists():
-        raise FileNotFoundError(f"No predictions/ directory in {raw_dir}")
+        # Boltz-2 nests output under boltz_results_{input_stem}/
+        results_dirs = sorted(raw_dir.glob("boltz_results_*/predictions"))
+        if results_dirs:
+            pred_dir = results_dirs[0]
+        else:
+            raise FileNotFoundError(
+                f"No predictions/ directory in {raw_dir} "
+                f"(also checked boltz_results_*/predictions)"
+            )
 
     # Get first (usually only) prediction subdirectory
     subdirs = [d for d in pred_dir.iterdir() if d.is_dir()]
@@ -141,22 +152,45 @@ def normalize_boltz_output(raw_dir: Path, output_dir: Path) -> Path:
     # Convert CIF → PDB
     mmcif_to_pdb(cif_dst, output_dir / "model_1.pdb")
 
-    # Extract confidence
+    # Extract confidence from JSON + per-residue pLDDT from NPZ
     conf_files = list(pred_subdir.glob(f"confidence_{name}_model_0.json"))
     if not conf_files:
         conf_files = list(pred_subdir.glob("confidence_*.json"))
 
-    if conf_files:
-        conf_data = json.loads(conf_files[0].read_text())
-        plddt_array = conf_data.get("plddt", [])
+    plddt_array: list[float] = []
+    plddt_mean = 0.0
+    ptm = None
+
+    # Per-residue pLDDT from NPZ (Boltz-2 writes plddt_{name}_model_0.npz)
+    plddt_npz = list(pred_subdir.glob(f"plddt_{name}_model_0.npz"))
+    if not plddt_npz:
+        plddt_npz = list(pred_subdir.glob("plddt_*.npz"))
+    if plddt_npz:
+        plddt_data = np.load(str(plddt_npz[0]))
+        plddt_array = plddt_data["plddt"].flatten().tolist()
         # Scale 0-1 → 0-100 if needed
         if plddt_array and max(plddt_array) <= 1.0:
             plddt_array = [v * 100 for v in plddt_array]
         plddt_mean = sum(plddt_array) / len(plddt_array) if plddt_array else 0.0
+
+    if conf_files:
+        conf_data = json.loads(conf_files[0].read_text())
         ptm = conf_data.get("ptm")
+        # Use complex_plddt as mean if per-residue not available
+        if not plddt_array:
+            cplddt = conf_data.get("complex_plddt", conf_data.get("plddt"))
+            if isinstance(cplddt, list):
+                plddt_array = cplddt
+                if plddt_array and max(plddt_array) <= 1.0:
+                    plddt_array = [v * 100 for v in plddt_array]
+                plddt_mean = sum(plddt_array) / len(plddt_array) if plddt_array else 0.0
+            elif isinstance(cplddt, (int, float)):
+                plddt_mean = cplddt * 100 if cplddt <= 1.0 else cplddt
+
+    if plddt_array or ptm is not None:
         write_confidence_json(output_dir, plddt_mean, ptm, plddt_array)
     else:
-        logger.warning("No confidence JSON found in %s", pred_subdir)
+        logger.warning("No confidence data found in %s", pred_subdir)
 
     _copy_raw(raw_dir, output_dir)
     return output_dir
@@ -180,56 +214,80 @@ def normalize_chai_output(raw_dir: Path, output_dir: Path) -> Path:
     shutil.copy2(str(cif_src), str(cif_dst))
 
     # Convert CIF → PDB
-    mmcif_to_pdb(cif_dst, output_dir / "model_1.pdb")
+    pdb_dst = output_dir / "model_1.pdb"
+    mmcif_to_pdb(cif_dst, pdb_dst)
 
-    # Extract confidence from NPZ
+    # Extract confidence from NPZ + PDB B-factors
+    ptm = None
     score_files = sorted(raw_dir.glob("scores.model_idx_*.npz"))
     if score_files:
         data = np.load(str(score_files[0]))
-        plddt_array = data["plddt"].flatten().tolist()
-        # Scale 0-1 → 0-100 if needed
-        if plddt_array and max(plddt_array) <= 1.0:
-            plddt_array = [v * 100 for v in plddt_array]
-        plddt_mean = sum(plddt_array) / len(plddt_array) if plddt_array else 0.0
-        ptm = float(data["ptm"]) if "ptm" in data else None
-        write_confidence_json(output_dir, plddt_mean, ptm, plddt_array)
-    else:
-        logger.warning("No scores NPZ found in %s", raw_dir)
+        ptm = float(data["ptm"].item()) if "ptm" in data else None
+
+    # Per-residue pLDDT from PDB B-factors (Chai stores 0-100 scale)
+    per_residue = _extract_ca_bfactors(pdb_dst)
+    # Chai B-factors are already 0-100
+    plddt_mean = sum(per_residue) / len(per_residue) if per_residue else 0.0
+
+    write_confidence_json(output_dir, plddt_mean, ptm, per_residue)
 
     _copy_raw(raw_dir, output_dir)
     return output_dir
 
 
+def _find_af2_best_pdb(search_dir: Path) -> Path | None:
+    """Find the best AlphaFold PDB: ranked_0.pdb > relaxed_model_1 > unrelaxed_model_1."""
+    # Prefer ranked (post-relaxation)
+    ranked = search_dir / "ranked_0.pdb"
+    if ranked.exists():
+        return ranked
+    # Fall back to relaxed model 1
+    relaxed = sorted(search_dir.glob("relaxed_model_*_pred_0.pdb"))
+    if relaxed:
+        return relaxed[0]
+    # Fall back to unrelaxed model 1
+    unrelaxed = sorted(search_dir.glob("unrelaxed_model_*_pred_0.pdb"))
+    if unrelaxed:
+        return unrelaxed[0]
+    return None
+
+
 def normalize_alphafold_output(raw_dir: Path, output_dir: Path) -> Path:
     """Normalize AlphaFold2 output to standardized layout.
 
-    Raw structure:
+    Raw structure (tries ranked > relaxed > unrelaxed):
         raw_dir/{target}/ranked_0.pdb
+        raw_dir/{target}/relaxed_model_1_pred_0.pdb
+        raw_dir/{target}/unrelaxed_model_1_pred_0.pdb
         raw_dir/{target}/ranking_debug.json
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # AF2 nests under a target subdirectory
-    ranked_pdb = None
+    best_pdb = None
     ranking_json = None
 
     # Check for direct files first, then subdirectories
-    if (raw_dir / "ranked_0.pdb").exists():
-        ranked_pdb = raw_dir / "ranked_0.pdb"
+    best_pdb = _find_af2_best_pdb(raw_dir)
+    if best_pdb:
         ranking_json = raw_dir / "ranking_debug.json"
     else:
         for subdir in raw_dir.iterdir():
-            if subdir.is_dir() and (subdir / "ranked_0.pdb").exists():
-                ranked_pdb = subdir / "ranked_0.pdb"
-                ranking_json = subdir / "ranking_debug.json"
-                break
+            if subdir.is_dir():
+                best_pdb = _find_af2_best_pdb(subdir)
+                if best_pdb:
+                    ranking_json = subdir / "ranking_debug.json"
+                    break
 
-    if ranked_pdb is None:
-        raise FileNotFoundError(f"No ranked_0.pdb found in {raw_dir}")
+    if best_pdb is None:
+        raise FileNotFoundError(f"No AlphaFold PDB output found in {raw_dir}")
+
+    if best_pdb.name.startswith("unrelaxed"):
+        logger.warning("Using unrelaxed model (relaxation failed): %s", best_pdb.name)
 
     # Copy PDB → model_1.pdb
     pdb_dst = output_dir / "model_1.pdb"
-    shutil.copy2(str(ranked_pdb), str(pdb_dst))
+    shutil.copy2(str(best_pdb), str(pdb_dst))
 
     # Convert PDB → CIF
     pdb_to_mmcif(pdb_dst, output_dir / "model_1.cif")
