@@ -73,7 +73,7 @@ RUN conda create -y -p /opt/conda-chai python=3.11 && \
 # --- ESMFold (HuggingFace) ---
 RUN conda create -y -p /opt/conda-esmfold python=3.11 && \
     /opt/conda-esmfold/bin/pip install --no-cache-dir \
-        torch transformers accelerate biopython && \
+        'torch>=2.6' transformers accelerate biopython && \
     conda clean -afy
 
 # --- AlphaFold 2 ---

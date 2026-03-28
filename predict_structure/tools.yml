@@ -43,13 +43,13 @@
 #
 data_root: /local_databases
 
-# container:
-#   sif: file:///hpc/images/predict-structure-all.sif
+container:
+  sif: file:///scout/containers/all-2026-0224b.sif
 
 tools:
   boltz:
     image: docker://dxkb/boltz-bvbrc:latest-gpu
-    cwl: boltzApp/cwl/boltz.cwl
+    cwl: cwl/tools/boltz.cwl
     conda_env: boltz
     data_dir: boltz
     command:
@@ -58,7 +58,7 @@ tools:
 
   chai:
     image: docker://dxkb/chai-bvbrc:latest-gpu
-    cwl: ChaiApp/cwl/chailab.cwl
+    cwl: cwl/tools/chai.cwl
     conda_env: chai
     data_dir: chai
     command:
@@ -67,7 +67,7 @@ tools:
 
   alphafold:
     image: docker://wilke/alphafold
-    cwl: AlphaFoldApp/alphafold.cwl
+    cwl: cwl/tools/alphafold.cwl
     conda_env: alphafold
     data_dir: alphafold/databases
     command:
@@ -76,7 +76,7 @@ tools:
 
   esmfold:
     image: docker://dxkb/esmfold-bvbrc:latest-gpu
-    cwl: ESMFoldApp/cwl/esmfold.cwl
+    cwl: cwl/tools/esmfold.cwl
     conda_env: esmfold
     data_dir: esmfold
     command:

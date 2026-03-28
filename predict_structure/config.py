@@ -25,8 +25,11 @@ import yaml
 # Default config ships with the package.
 _DEFAULT_CONFIG = Path(__file__).resolve().parent / "tools.yml"
 
-# Workspace root: two levels up from predict_structure/config.py
-# (predict_structure/ → PredictStructureApp/ → dxkb/)
+# Project root: one level up from predict_structure/config.py
+# (predict_structure/ → PredictStructureApp/)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+# Workspace root: two levels up (PredictStructureApp/ → dxkb/)
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -200,8 +203,11 @@ def get_shared_sif() -> Path | None:
 # -----------------------------------------------------------------
 
 def get_cwl_path(tool_name: str) -> Path:
-    """Return the absolute path to the tool's CWL definition."""
+    """Return the absolute path to the tool's CWL definition.
+
+    Resolves relative to PROJECT_ROOT (PredictStructureApp/).
+    """
     rel = get_tool_config(tool_name).get("cwl")
     if not rel:
         raise KeyError(f"No CWL path configured for tool '{tool_name}'")
-    return WORKSPACE_ROOT / rel
+    return PROJECT_ROOT / rel

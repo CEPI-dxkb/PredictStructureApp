@@ -268,12 +268,13 @@ def backend_options(func):
     @optgroup.group("Execution options")
     @optgroup.option(
         "--backend",
-        type=click.Choice(["docker", "subprocess", "cwl"]),
+        type=click.Choice(["docker", "subprocess", "cwl", "apptainer"]),
         default="subprocess",
         help="Execution backend",
     )
     @optgroup.option("--device", type=click.Choice(["gpu", "cpu"]), default="gpu", help="Compute device")
     @optgroup.option("--image", default=None, help="Override Docker image (docker backend only)")
+    @optgroup.option("--sif", default=None, help="Apptainer SIF image path (apptainer/cwl backend)")
     @optgroup.option("--cwl-runner", default=None, help="CWL runner command (default: cwltool)")
     @optgroup.option("--cwl-tool", default=None, help="Path to CWL tool definition")
     @functools.wraps(func)
@@ -334,13 +335,22 @@ def _docker_volumes_and_rewrite(
     return volumes, rewritten
 
 
-def run_prediction(tool_name: str, extra_kwargs: dict, *, entity_list: EntityList, **shared):
+def run_prediction(
+    tool_name: str,
+    extra_kwargs: dict,
+    *,
+    entity_list: EntityList,
+    entity_inputs: dict | None = None,
+    **shared,
+):
     """Core prediction logic shared by all tool subcommands.
 
     Args:
         tool_name: Adapter key (boltz, chai, alphafold, esmfold).
         extra_kwargs: Tool-specific keyword arguments for build_command.
         entity_list: Entities to predict.
+        entity_inputs: Raw CLI entity options for CWL backend
+            (e.g. ``{"protein": ("/path/to/file.fasta",), ...}``).
         **shared: Shared CLI options (output_dir, backend, etc.).
     """
     logger.info("Tool: %s", tool_name)
@@ -359,16 +369,82 @@ def run_prediction(tool_name: str, extra_kwargs: dict, *, entity_list: EntityLis
     backend_kwargs = {}
     if backend == "docker" and shared.get("image"):
         backend_kwargs["default_image"] = shared["image"]
+    if backend == "apptainer" and shared.get("sif"):
+        backend_kwargs["sif_path"] = shared["sif"]
     if backend == "cwl":
         if shared.get("cwl_runner"):
             backend_kwargs["runner"] = shared["cwl_runner"]
         if shared.get("cwl_tool"):
             backend_kwargs["cwl_tool"] = shared["cwl_tool"]
+        # Auto-enable Singularity when a SIF is configured
+        from predict_structure.config import get_shared_sif
+        if shared.get("sif") or get_shared_sif():
+            backend_kwargs["use_singularity"] = True
     execution_backend = get_backend(backend, **backend_kwargs)
 
     # 2. Validate entity types against adapter capabilities
     adapter.validate_entities(entity_list)
     logger.info("Entity validation passed")
+
+    # -----------------------------------------------------------------
+    # CWL unified path: bypass adapter.build_command() and build the
+    # CWL job directly from entity inputs and CLI options.
+    # Only activated when --cwl-tool explicitly specifies the unified
+    # predict-structure.cwl tool.  Default --backend cwl uses per-tool
+    # CWL definitions via the standard adapter path below.
+    # -----------------------------------------------------------------
+    if backend == "cwl" and entity_inputs is not None and shared.get("cwl_tool"):
+        job = execution_backend.build_unified_job(
+            tool_name,
+            entity_inputs,
+            output_dir=str(raw_dir),
+            num_samples=shared["num_samples"],
+            num_recycles=shared["num_recycles"],
+            seed=shared.get("seed"),
+            device=shared["device"],
+            msa=shared.get("msa"),
+            output_format=shared.get("output_format", "pdb"),
+            **extra_kwargs,
+        )
+
+        if shared.get("debug"):
+            debug_lines = execution_backend.format_unified_command(
+                job, tool_name=tool_name, output_dir=str(output_path),
+            )
+            click.echo("\n".join(str(l) for l in debug_lines))
+            return
+
+        start = time.time()
+        rc = execution_backend.run_unified(
+            job, tool_name=tool_name, output_dir=str(output_path),
+        )
+        elapsed = time.time() - start
+
+        if rc != 0:
+            has_output = any(raw_dir.glob("**/*.pdb")) or any(raw_dir.glob("**/*.cif"))
+            if has_output:
+                logger.warning(
+                    "Tool exited with code %d but produced output — "
+                    "attempting normalization", rc
+                )
+            else:
+                click.echo(f"Prediction failed with exit code {rc}", err=True)
+                sys.exit(rc)
+
+        adapter.normalize_output(raw_dir, output_path)
+        params_dict = {
+            "num_samples": shared["num_samples"],
+            "num_recycles": shared["num_recycles"],
+            "seed": shared.get("seed"),
+            "device": shared["device"],
+        }
+        write_metadata_json(output_path, tool_name, params_dict, elapsed, __version__)
+        click.echo(f"Prediction complete: {output_path}")
+        return
+
+    # -----------------------------------------------------------------
+    # Standard path: subprocess / docker / apptainer / legacy CWL
+    # -----------------------------------------------------------------
 
     # 3. Prepare input (entity list → tool-native format, MSA conversion)
     msa_path = Path(shared["msa"]) if shared.get("msa") else None
@@ -389,7 +465,7 @@ def run_prediction(tool_name: str, extra_kwargs: dict, *, entity_list: EntityLis
     # 5. For docker backend: build volume mounts and rewrite host paths
     run_kwargs: dict = {
         "tool_name": adapter.tool_name,
-        "gpu": adapter.requires_gpu and shared["device"] != "cpu",
+        "gpu": shared["device"] != "cpu",
     }
 
     if backend == "docker":
@@ -402,8 +478,20 @@ def run_prediction(tool_name: str, extra_kwargs: dict, *, entity_list: EntityLis
         )
         run_kwargs["volumes"] = volumes
 
+    if backend == "apptainer":
+        from predict_structure.config import get_data_dir, get_data_root
+        binds = {}
+        # Bind data root so tools can access/write model weights and caches
+        data_root = get_data_root()
+        if data_root.exists():
+            binds[str(data_root)] = str(data_root)
+        run_kwargs["binds"] = binds
+
+    cwl_output_subdir = raw_dir
     if backend == "cwl":
-        run_kwargs["output_dir"] = str(output_path)
+        run_kwargs["output_dir"] = str(raw_dir)
+        # CWL outputs go into raw_dir/<output_dir_name>/
+        cwl_output_subdir = raw_dir / "output"
 
     logger.info("Command: %s", " ".join(cmd))
 
@@ -431,7 +519,9 @@ def run_prediction(tool_name: str, extra_kwargs: dict, *, entity_list: EntityLis
             sys.exit(rc)
 
     # 7. Normalize output
-    adapter.normalize_output(raw_dir, output_path)
+    # CWL places tool output inside raw_dir/output/ (the CWL output_dir name)
+    normalize_dir = cwl_output_subdir if backend == "cwl" else raw_dir
+    adapter.normalize_output(normalize_dir, output_path)
 
     params_dict = {
         "num_samples": shared["num_samples"],
@@ -511,13 +601,24 @@ def _run_job_file(job_path: Path, base_output_dir: Path | None) -> None:
             "backend": options.get("backend", "subprocess"),
             "device": options.get("device", "gpu"),
             "image": options.get("image"),
+            "sif": options.get("sif"),
             "cwl_runner": options.get("cwl_runner"),
             "cwl_tool": options.get("cwl_tool"),
             "debug": options.get("debug", False),
         }
 
+        entity_inputs = {
+            "protein": job.get("protein", []),
+            "dna": job.get("dna", []),
+            "rna": job.get("rna", []),
+            "ligand": job.get("ligands", []),
+            "smiles": job.get("smiles", []),
+            "glycan": job.get("glycans", []),
+        }
+
         extra = {k: v for k, v in options.items() if k not in shared}
-        run_prediction(tool_name, extra, entity_list=entities, **shared)
+        run_prediction(tool_name, extra, entity_list=entities,
+                       entity_inputs=entity_inputs, **shared)
 
 
 # ---------------------------------------------------------------------------
@@ -579,7 +680,12 @@ def boltz(protein, dna, rna, ligand, smiles, glycan,
         "msa_server_url": msa_server_url,
         "boltz_use_potentials": use_potentials,
     }
-    run_prediction("boltz", extra, entity_list=entity_list, **shared)
+    entity_inputs = {
+        "protein": protein, "dna": dna, "rna": rna,
+        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+    }
+    run_prediction("boltz", extra, entity_list=entity_list,
+                   entity_inputs=entity_inputs, **shared)
 
 
 # ---------------------------------------------------------------------------
@@ -619,7 +725,12 @@ def chai(protein, dna, rna, ligand, smiles, glycan,
         "recycle_msa_subsample": recycle_msa_subsample,
         "low_memory": False if no_low_memory else True,
     }
-    run_prediction("chai", extra, entity_list=entity_list, **shared)
+    entity_inputs = {
+        "protein": protein, "dna": dna, "rna": rna,
+        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+    }
+    run_prediction("chai", extra, entity_list=entity_list,
+                   entity_inputs=entity_inputs, **shared)
 
 
 # ---------------------------------------------------------------------------
@@ -644,7 +755,12 @@ def alphafold(protein, dna, rna, ligand, smiles, glycan,
         "af2_db_preset": af2_db_preset,
         "af2_max_template_date": af2_max_template_date,
     }
-    run_prediction("alphafold", extra, entity_list=entity_list, **shared)
+    entity_inputs = {
+        "protein": protein, "dna": dna, "rna": rna,
+        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+    }
+    run_prediction("alphafold", extra, entity_list=entity_list,
+                   entity_inputs=entity_inputs, **shared)
 
 
 # ---------------------------------------------------------------------------
@@ -667,7 +783,12 @@ def esmfold(protein, dna, rna, ligand, smiles, glycan,
         "esm_chunk_size": chunk_size,
         "esm_max_tokens": max_tokens_per_batch,
     }
-    run_prediction("esmfold", extra, entity_list=entity_list, **shared)
+    entity_inputs = {
+        "protein": protein, "dna": dna, "rna": rna,
+        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+    }
+    run_prediction("esmfold", extra, entity_list=entity_list,
+                   entity_inputs=entity_inputs, **shared)
 
 
 # ---------------------------------------------------------------------------
@@ -709,7 +830,12 @@ def auto(protein, dna, rna, ligand, smiles, glycan, **shared):
     click.echo(f"Auto-selected: {tool_name}")
 
     extra = dict(_AUTO_DEFAULTS.get(tool_name, {}))
-    run_prediction(tool_name, extra, entity_list=entity_list, **shared)
+    entity_inputs = {
+        "protein": protein, "dna": dna, "rna": rna,
+        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+    }
+    run_prediction(tool_name, extra, entity_list=entity_list,
+                   entity_inputs=entity_inputs, **shared)
 
 
 if __name__ == "__main__":

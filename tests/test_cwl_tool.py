@@ -1,7 +1,7 @@
-"""Tests for the unified CWL tool definition.
+"""Tests for per-tool and unified CWL tool definitions.
 
-Validates the CWL structure by parsing the YAML directly and by
-running cwltool --validate. No Docker or GPU required.
+Validates CWL structure by parsing YAML directly and by running
+cwltool --validate. No Docker or GPU required.
 """
 
 from __future__ import annotations
@@ -12,103 +12,142 @@ from pathlib import Path
 import pytest
 import yaml
 
-CWL_TOOL = Path(__file__).resolve().parents[1] / "cwl" / "tools" / "predict-structure.cwl"
+CWL_DIR = Path(__file__).resolve().parents[1] / "cwl" / "tools"
 JOBS_DIR = Path(__file__).resolve().parents[1] / "cwl" / "jobs"
 
+# Per-tool CWL definitions
+PER_TOOL_CWLS = {
+    "boltz": CWL_DIR / "boltz.cwl",
+    "chai": CWL_DIR / "chai.cwl",
+    "alphafold": CWL_DIR / "alphafold.cwl",
+    "esmfold": CWL_DIR / "esmfold.cwl",
+}
 
-@pytest.fixture
-def cwl_doc():
-    """Load the CWL tool definition as a dict."""
-    return yaml.safe_load(CWL_TOOL.read_text())
-
-
-class TestCWLStructure:
-    """Validate CWL tool definition structure by parsing YAML."""
-
-    def test_cwl_version(self, cwl_doc):
-        assert cwl_doc["cwlVersion"] == "v1.2"
-
-    def test_class_is_command_line_tool(self, cwl_doc):
-        assert cwl_doc["class"] == "CommandLineTool"
-
-    def test_base_command(self, cwl_doc):
-        assert cwl_doc["baseCommand"] == ["predict-structure"]
-
-    def test_has_backend_subprocess_argument(self, cwl_doc):
-        args = cwl_doc["arguments"]
-        values = [a["valueFrom"] for a in args]
-        assert "--backend" in values
-        assert "subprocess" in values
-
-    def test_tool_input_is_enum(self, cwl_doc):
-        tool_input = cwl_doc["inputs"]["tool"]
-        type_def = tool_input["type"]
-        assert type_def["type"] == "enum"
-        assert set(type_def["symbols"]) == {"boltz", "chai", "alphafold", "esmfold"}
-
-    def test_input_file_is_required(self, cwl_doc):
-        input_file = cwl_doc["inputs"]["input_file"]
-        assert input_file["type"] == "File"
-
-    def test_has_all_expected_inputs(self, cwl_doc):
-        expected = {
-            "tool", "input_file", "output_dir", "num_samples", "num_recycles",
-            "seed", "device", "msa", "output_format", "sampling_steps",
-            "use_msa_server", "af2_data_dir", "af2_model_preset", "af2_db_preset",
-        }
-        actual = set(cwl_doc["inputs"].keys())
-        assert expected.issubset(actual), f"Missing inputs: {expected - actual}"
-
-    def test_predictions_output_is_directory(self, cwl_doc):
-        assert cwl_doc["outputs"]["predictions"]["type"] == "Directory"
-
-    def test_has_metadata_output(self, cwl_doc):
-        assert "metadata" in cwl_doc["outputs"]
-
-    def test_has_confidence_output(self, cwl_doc):
-        assert "confidence" in cwl_doc["outputs"]
-
-    def test_docker_requirement_uses_javascript(self, cwl_doc):
-        reqs = cwl_doc["requirements"]
-        assert "InlineJavascriptRequirement" in reqs
-        docker_pull = reqs["DockerRequirement"]["dockerPull"]
-        assert "inputs.tool" in docker_pull
-
-    def test_cuda_hint(self, cwl_doc):
-        hints = cwl_doc["hints"]
-        cuda = hints["cwltool:CUDARequirement"]
-        assert cuda["cudaDeviceCountMin"] == 1
+# Expected input file key per tool (matching _INPUT_FILE_KEY in cwl.py)
+INPUT_KEY = {
+    "boltz": "input_file",
+    "chai": "input_fasta",
+    "alphafold": "fasta_paths",
+    "esmfold": "sequences",
+}
 
 
-class TestCWLValidation:
-    """Run cwltool --validate on the tool definition."""
+class TestPerToolCWLStructure:
+    """Validate per-tool CWL definitions."""
 
-    def test_cwltool_validates(self):
+    @pytest.fixture(params=sorted(PER_TOOL_CWLS.keys()))
+    def tool_and_doc(self, request):
+        tool = request.param
+        doc = yaml.safe_load(PER_TOOL_CWLS[tool].read_text())
+        return tool, doc
+
+    def test_cwl_version(self, tool_and_doc):
+        _, doc = tool_and_doc
+        assert doc["cwlVersion"] == "v1.2"
+
+    def test_class_is_command_line_tool(self, tool_and_doc):
+        _, doc = tool_and_doc
+        assert doc["class"] == "CommandLineTool"
+
+    def test_has_base_command(self, tool_and_doc):
+        _, doc = tool_and_doc
+        assert "baseCommand" in doc
+        assert isinstance(doc["baseCommand"], list)
+        assert len(doc["baseCommand"]) >= 1
+
+    def test_has_docker_requirement(self, tool_and_doc):
+        _, doc = tool_and_doc
+        hints = doc.get("hints", {})
+        assert "DockerRequirement" in hints
+        assert "dockerPull" in hints["DockerRequirement"]
+
+    def test_all_use_same_image(self, tool_and_doc):
+        _, doc = tool_and_doc
+        image = doc["hints"]["DockerRequirement"]["dockerPull"]
+        assert image.endswith(".sif")
+
+    def test_has_input_file(self, tool_and_doc):
+        tool, doc = tool_and_doc
+        key = INPUT_KEY[tool]
+        assert key in doc["inputs"], f"{tool} missing input '{key}'"
+        assert doc["inputs"][key]["type"] == "File"
+
+    def test_has_output_dir(self, tool_and_doc):
+        tool, doc = tool_and_doc
+        # chai uses output_directory, others use output_dir
+        has_output = "output_dir" in doc["inputs"] or "output_directory" in doc["inputs"]
+        assert has_output, f"{tool} missing output directory input"
+
+    def test_has_predictions_output(self, tool_and_doc):
+        _, doc = tool_and_doc
+        assert "predictions" in doc["outputs"]
+        assert doc["outputs"]["predictions"]["type"] == "Directory"
+
+
+class TestPerToolCWLValidation:
+    """Run cwltool --validate on each per-tool CWL definition."""
+
+    @pytest.fixture(params=sorted(PER_TOOL_CWLS.items()), ids=lambda x: x[0])
+    def cwl_path(self, request):
+        return request.param[1]
+
+    def test_cwltool_validates(self, cwl_path):
         result = subprocess.run(
-            ["cwltool", "--validate", str(CWL_TOOL)],
+            ["cwltool", "--validate", str(cwl_path)],
             capture_output=True,
             text=True,
         )
-        assert result.returncode == 0, f"cwltool validation failed:\n{result.stderr}"
-        # cwltool may output to stdout or stderr depending on version
+        assert result.returncode == 0, (
+            f"cwltool validation failed for {cwl_path.name}:\n{result.stderr}"
+        )
         combined = result.stdout + result.stderr
         assert "is valid CWL" in combined
 
 
+class TestUnifiedCWLStructure:
+    """Validate the unified predict-structure.cwl (kept alongside per-tool)."""
+
+    @pytest.fixture
+    def cwl_doc(self):
+        unified = CWL_DIR / "predict-structure.cwl"
+        if not unified.exists():
+            pytest.skip("Unified CWL not present")
+        return yaml.safe_load(unified.read_text())
+
+    def test_has_entity_inputs(self, cwl_doc):
+        for entity in ("protein", "dna", "rna", "ligand", "smiles", "glycan"):
+            assert entity in cwl_doc["inputs"]
+
+    def test_tool_enum_includes_auto(self, cwl_doc):
+        symbols = set(cwl_doc["inputs"]["tool"]["type"]["symbols"])
+        assert "auto" in symbols
+
+    def test_cwltool_validates(self):
+        unified = CWL_DIR / "predict-structure.cwl"
+        if not unified.exists():
+            pytest.skip("Unified CWL not present")
+        result = subprocess.run(
+            ["cwltool", "--validate", str(unified)],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"Validation failed:\n{result.stderr}"
+
+
 class TestJobYAMLs:
-    """Validate that all job YAML files are well-formed."""
+    """Validate that job YAML files match per-tool CWL definitions."""
 
     @pytest.fixture(params=sorted(JOBS_DIR.glob("*.yml")), ids=lambda p: p.stem)
     def job_doc(self, request):
         return yaml.safe_load(request.param.read_text())
 
-    def test_has_tool(self, job_doc):
-        assert "tool" in job_doc
-        assert job_doc["tool"] in {"boltz", "chai", "alphafold", "esmfold"}
-
     def test_has_input_file(self, job_doc):
-        assert "input_file" in job_doc
-        assert job_doc["input_file"]["class"] == "File"
+        """Each job has an input file matching its tool's input key."""
+        has_input = any(
+            key in job_doc for key in INPUT_KEY.values()
+        )
+        assert has_input, f"Job missing input file key (expected one of {list(INPUT_KEY.values())})"
 
     def test_has_output_dir(self, job_doc):
-        assert "output_dir" in job_doc
+        has_output = "output_dir" in job_doc or "output_directory" in job_doc
+        assert has_output

@@ -1,8 +1,6 @@
-tool: esmfold
-input_file:
+sequences:
   class: File
   path: ../../test_data/simple_protein.fasta
 output_dir: output
 num_recycles: 4
-device: cpu
-fp16: false
+cpu_only: true

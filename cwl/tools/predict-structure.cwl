@@ -4,15 +4,15 @@ class: CommandLineTool
 label: "Unified Protein Structure Prediction"
 doc: |
   Dispatches to Boltz-2, Chai-1, AlphaFold 2, or ESMFold via the
-  predict-structure CLI.  Runs inside per-tool Docker containers.
+  predict-structure CLI inside a single all-in-one container.
 
   Tool selection is a CWL enum input that maps to a CLI subcommand.
-  The correct Docker image is resolved automatically based on the
-  chosen tool, maintaining the delegation pattern (one container per
-  prediction tool).
+  Entity inputs (protein, DNA, RNA, ligand, SMILES) use repeatable
+  flags, matching the CLI's explicit entity model.
 
-  Tool-specific inputs use valueFrom expressions so they are only
-  emitted on the command line when the selected tool accepts them.
+  When run with cwltool --singularity, the DockerRequirement image
+  is automatically converted to a SIF.  Pre-built SIF files can be
+  used via CWL_SINGULARITY_CACHE or --singularity-cache.
 
   Defaults
   --------
@@ -28,32 +28,29 @@ doc: |
 requirements:
   InlineJavascriptRequirement: {}
   DockerRequirement:
-    dockerPull: |
-      ${
-        var images = {
-          "boltz":     "dxkb/boltz-bvbrc:latest-gpu",
-          "chai":      "dxkb/chai-bvbrc:latest-gpu",
-          "alphafold": "wilke/alphafold",
-          "esmfold":   "dxkb/esmfold-bvbrc:latest-gpu"
-        };
-        return images[inputs.tool];
-      }
+    dockerPull: dxkb/predict-structure-all:latest-gpu
   ResourceRequirement:
     coresMin: 8
-    ramMin: |
-      ${
-        var mem = {
-          "boltz":     65536,
-          "chai":      65536,
-          "alphafold": 65536,
-          "esmfold":   32768
-        };
-        return mem[inputs.tool];
-      }
+    ramMin: 65536
     ramMax: 98304
   InitialWorkDirRequirement:
-    listing:
-      - $(inputs.input_file)
+    listing: |
+      ${
+        var files = [];
+        if (inputs.protein) {
+          inputs.protein.forEach(function(f) { files.push(f); });
+        }
+        if (inputs.dna) {
+          inputs.dna.forEach(function(f) { files.push(f); });
+        }
+        if (inputs.rna) {
+          inputs.rna.forEach(function(f) { files.push(f); });
+        }
+        if (inputs.msa) {
+          files.push(inputs.msa);
+        }
+        return files;
+      }
   NetworkAccess:
     networkAccess: true
 
@@ -82,16 +79,66 @@ inputs:
   tool:
     type:
       type: enum
-      symbols: [boltz, chai, alphafold, esmfold]
+      symbols: [boltz, chai, alphafold, esmfold, auto]
     inputBinding:
       position: 1
     doc: "Prediction tool to use (maps to CLI subcommand)"
 
-  input_file:
-    type: File
-    inputBinding:
-      position: 2
-    doc: "Input FASTA file (or Boltz YAML) containing protein sequences"
+  # --- Entity inputs (repeatable flags) -----------------------------
+
+  protein:
+    type:
+      - "null"
+      - type: array
+        items: File
+        inputBinding:
+          prefix: --protein
+    doc: "Protein FASTA file(s) — repeatable for multi-chain"
+
+  dna:
+    type:
+      - "null"
+      - type: array
+        items: File
+        inputBinding:
+          prefix: --dna
+    doc: "DNA FASTA file(s) — repeatable"
+
+  rna:
+    type:
+      - "null"
+      - type: array
+        items: File
+        inputBinding:
+          prefix: --rna
+    doc: "RNA FASTA file(s) — repeatable"
+
+  ligand:
+    type:
+      - "null"
+      - type: array
+        items: string
+        inputBinding:
+          prefix: --ligand
+    doc: "Ligand CCD code(s) — repeatable"
+
+  smiles:
+    type:
+      - "null"
+      - type: array
+        items: string
+        inputBinding:
+          prefix: --smiles
+    doc: "SMILES string(s) — repeatable"
+
+  glycan:
+    type:
+      - "null"
+      - type: array
+        items: string
+        inputBinding:
+          prefix: --glycan
+    doc: "Glycan specification(s) — repeatable"
 
   # --- Global options -----------------------------------------------
 
