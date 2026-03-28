@@ -20,7 +20,7 @@ requirements:
 
 hints:
   DockerRequirement:
-    dockerPull: folding_260327.3.sif
+    dockerPull: folding_prod.sif
   gowe:Execution:
     worker_group: esmfold
   gowe:ResourceData:

@@ -28,7 +28,7 @@ doc: |
 requirements:
   InlineJavascriptRequirement: {}
   DockerRequirement:
-    dockerPull: dxkb/predict-structure-all:latest-gpu
+    dockerPull: folding_prod.sif
   ResourceRequirement:
     coresMin: 8
     ramMin: 65536
