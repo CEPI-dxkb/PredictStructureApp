@@ -298,11 +298,25 @@ class TestAutoSelectTool:
     """Test the _auto_select_tool function."""
 
     @patch("predict_structure.cli._is_tool_available", side_effect=lambda t: t == "boltz")
-    def test_selects_boltz_first(self, mock_avail):
+    def test_selects_boltz_with_msa(self, mock_avail):
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "ACDE")
+        result = _auto_select_tool(el, device="gpu", has_msa=True)
+        assert result == "boltz"
+
+    @patch("predict_structure.cli._is_tool_available", side_effect=lambda t: t == "boltz")
+    def test_selects_boltz_with_msa_server(self, mock_avail):
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "ACDE")
+        result = _auto_select_tool(el, device="gpu", use_msa_server=True)
+        assert result == "boltz"
+
+    @patch("predict_structure.cli._is_tool_available", side_effect=lambda t: t in ("boltz", "esmfold"))
+    def test_skips_boltz_without_msa(self, mock_avail):
         el = EntityList()
         el.add(EntityType.PROTEIN, "ACDE")
         result = _auto_select_tool(el, device="gpu")
-        assert result == "boltz"
+        assert result == "esmfold"
 
     @patch("predict_structure.cli._is_tool_available", side_effect=lambda t: t == "esmfold")
     def test_cpu_prefers_esmfold(self, mock_avail):
@@ -316,7 +330,7 @@ class TestAutoSelectTool:
         el = EntityList()
         el.add(EntityType.PROTEIN, "ACDE")
         el.add(EntityType.LIGAND, "ATP")
-        result = _auto_select_tool(el, device="gpu")
+        result = _auto_select_tool(el, device="gpu", use_msa_server=True)
         assert result == "boltz"
 
     @patch("predict_structure.cli._is_tool_available", return_value=False)

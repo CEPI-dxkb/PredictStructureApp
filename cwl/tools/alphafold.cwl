@@ -21,6 +21,7 @@ requirements:
 hints:
   DockerRequirement:
     dockerPull: folding_prod.sif
+    dockerImageId: /scout/containers/folding_prod.sif
   cwltool:CUDARequirement:
     cudaVersionMin: "11.8"
     cudaDeviceCountMin: 1

@@ -53,7 +53,7 @@ class TestAcceptanceTier1:
         job_files = sorted(JOBS_DIR.glob("*.yml"))
         assert len(job_files) >= 4, f"Expected at least 4 job files, got {len(job_files)}"
 
-        input_keys = {"input_file", "input_fasta", "fasta_paths", "sequences"}
+        input_keys = {"input_file", "input_fasta", "fasta_paths", "sequences", "protein"}
         for job_file in job_files:
             doc = yaml.safe_load(job_file.read_text())
             has_input = any(k in doc for k in input_keys)

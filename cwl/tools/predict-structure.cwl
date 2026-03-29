@@ -29,6 +29,7 @@ requirements:
   InlineJavascriptRequirement: {}
   DockerRequirement:
     dockerPull: folding_prod.sif
+    dockerImageId: /scout/containers/folding_prod.sif
   ResourceRequirement:
     coresMin: 8
     ramMin: 65536
@@ -81,7 +82,7 @@ inputs:
       type: enum
       symbols: [boltz, chai, alphafold, esmfold, auto]
     inputBinding:
-      position: 1
+      position: -100
     doc: "Prediction tool to use (maps to CLI subcommand)"
 
   # --- Entity inputs (repeatable flags) -----------------------------
@@ -93,6 +94,7 @@ inputs:
         items: File
         inputBinding:
           prefix: --protein
+          position: 2
     doc: "Protein FASTA file(s) — repeatable for multi-chain"
 
   dna:
@@ -102,6 +104,7 @@ inputs:
         items: File
         inputBinding:
           prefix: --dna
+          position: 2
     doc: "DNA FASTA file(s) — repeatable"
 
   rna:
@@ -111,6 +114,7 @@ inputs:
         items: File
         inputBinding:
           prefix: --rna
+          position: 2
     doc: "RNA FASTA file(s) — repeatable"
 
   ligand:
@@ -120,6 +124,7 @@ inputs:
         items: string
         inputBinding:
           prefix: --ligand
+          position: 2
     doc: "Ligand CCD code(s) — repeatable"
 
   smiles:
@@ -129,6 +134,7 @@ inputs:
         items: string
         inputBinding:
           prefix: --smiles
+          position: 2
     doc: "SMILES string(s) — repeatable"
 
   glycan:
@@ -138,6 +144,7 @@ inputs:
         items: string
         inputBinding:
           prefix: --glycan
+          position: 2
     doc: "Glycan specification(s) — repeatable"
 
   # --- Global options -----------------------------------------------
@@ -155,6 +162,7 @@ inputs:
     default: 1
     inputBinding:
       prefix: --num-samples
+      position: 2
     doc: "Number of structure samples to generate (Boltz, Chai) [default: 1]"
 
   num_recycles:
@@ -162,18 +170,21 @@ inputs:
     default: 3
     inputBinding:
       prefix: --num-recycles
+      position: 2
     doc: "Number of recycling iterations [default: 3]"
 
   seed:
     type: int?
     inputBinding:
       prefix: --seed
+      position: 2
     doc: "Random seed for reproducibility [default: none]"
 
   msa:
     type: File?
     inputBinding:
       prefix: --msa
+      position: 2
     doc: "Pre-computed MSA file (.a3m, .sto, .pqt)"
 
   output_format:
@@ -184,6 +195,7 @@ inputs:
     default: pdb
     inputBinding:
       prefix: --output-format
+      position: 2
     doc: "Output structure format [default: pdb]"
 
   # --- Execution options --------------------------------------------
@@ -196,6 +208,7 @@ inputs:
     default: gpu
     inputBinding:
       prefix: --device
+      position: 2
     doc: "Compute device [default: gpu]"
 
   # --- Boltz-2 / Chai-1 options ------------------------------------
@@ -205,6 +218,7 @@ inputs:
     default: 200
     inputBinding:
       prefix: --sampling-steps
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "boltz" || inputs.tool === "chai") {
@@ -219,6 +233,7 @@ inputs:
     default: false
     inputBinding:
       prefix: --use-msa-server
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "boltz" || inputs.tool === "chai") {
@@ -232,6 +247,7 @@ inputs:
     type: string?
     inputBinding:
       prefix: --msa-server-url
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "boltz" || inputs.tool === "chai") {
@@ -248,6 +264,7 @@ inputs:
     default: false
     inputBinding:
       prefix: --use-potentials
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "boltz") {
@@ -263,6 +280,7 @@ inputs:
     type: Directory?
     inputBinding:
       prefix: --af2-data-dir
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "alphafold") {
@@ -277,6 +295,7 @@ inputs:
     default: "monomer"
     inputBinding:
       prefix: --af2-model-preset
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "alphafold") {
@@ -291,6 +310,7 @@ inputs:
     default: "reduced_dbs"
     inputBinding:
       prefix: --af2-db-preset
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "alphafold") {
@@ -305,6 +325,7 @@ inputs:
     default: "2022-01-01"
     inputBinding:
       prefix: --af2-max-template-date
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "alphafold") {
@@ -321,6 +342,7 @@ inputs:
     default: false
     inputBinding:
       prefix: --fp16
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "esmfold") {
@@ -334,6 +356,7 @@ inputs:
     type: int?
     inputBinding:
       prefix: --chunk-size
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "esmfold") {
@@ -347,6 +370,7 @@ inputs:
     type: int?
     inputBinding:
       prefix: --max-tokens-per-batch
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "esmfold") {

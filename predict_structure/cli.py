@@ -76,12 +76,20 @@ def _is_tool_available(tool: str) -> bool:
     return shutil.which(exe) is not None
 
 
-def _auto_select_tool(entity_list: EntityList, device: str = "gpu") -> str:
+def _auto_select_tool(
+    entity_list: EntityList,
+    device: str = "gpu",
+    *,
+    has_msa: bool = False,
+    use_msa_server: bool = False,
+) -> str:
     """Auto-select the best available prediction tool based on entity types.
 
     Selection rules:
       - Non-protein entities exclude AlphaFold and ESMFold.
       - ``device=cpu`` prefers ESMFold (others are impractical on CPU).
+      - Boltz and Chai require an MSA source (``--msa`` file or
+        ``--use-msa-server``).  Without one they are skipped.
       - Otherwise pick first available in accuracy-priority order:
         Boltz > Chai > AlphaFold > ESMFold.
 
@@ -89,6 +97,7 @@ def _auto_select_tool(entity_list: EntityList, device: str = "gpu") -> str:
         click.UsageError: If no suitable tool is found.
     """
     has_non_protein = entity_list.entity_types - {EntityType.PROTEIN}
+    msa_available = has_msa or use_msa_server
 
     # CPU → strongly prefer ESMFold (if protein-only)
     if device == "cpu" and not has_non_protein:
@@ -99,6 +108,10 @@ def _auto_select_tool(entity_list: EntityList, device: str = "gpu") -> str:
     for tool in ("boltz", "chai", "alphafold", "esmfold"):
         # Skip tools that don't support the entity types
         if tool in ("alphafold", "esmfold") and has_non_protein:
+            continue
+
+        # Boltz/Chai need an MSA source to produce good results
+        if tool in ("boltz", "chai") and not msa_available:
             continue
 
         if tool == "alphafold":
@@ -829,23 +842,37 @@ _AUTO_DEFAULTS: dict[str, dict] = {
 
 @main.command()
 @shared_options
+@click.option("--use-msa-server", is_flag=True, default=False,
+              help="Use remote MSA server (enables Boltz/Chai selection)")
 @backend_options
-def auto(protein, dna, rna, ligand, smiles, glycan, **shared):
+def auto(protein, dna, rna, ligand, smiles, glycan, use_msa_server, **shared):
     """Auto-discover the best available tool and predict structure.
 
     Checks which prediction tools are installed and selects the best
     one based on entity types, device, and availability.
 
+    Boltz and Chai are only selected when an MSA source is available
+    (--msa file or --use-msa-server).  Without one, they are skipped
+    in favor of AlphaFold or ESMFold.
+
     \b
-    Priority order (GPU):  Boltz > Chai > AlphaFold > ESMFold
-    Priority order (CPU):  ESMFold > Boltz > Chai > AlphaFold
-    Non-protein entities:  AlphaFold and ESMFold excluded
+    Priority order (GPU, MSA available):  Boltz > Chai > AlphaFold > ESMFold
+    Priority order (GPU, no MSA):         AlphaFold > ESMFold
+    Priority order (CPU):                 ESMFold > others
+    Non-protein entities:                 AlphaFold and ESMFold excluded
     """
     entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan)
-    tool_name = _auto_select_tool(entity_list, device=shared.get("device", "gpu"))
+    tool_name = _auto_select_tool(
+        entity_list,
+        device=shared.get("device", "gpu"),
+        has_msa=shared.get("msa") is not None,
+        use_msa_server=use_msa_server,
+    )
     click.echo(f"Auto-selected: {tool_name}")
 
     extra = dict(_AUTO_DEFAULTS.get(tool_name, {}))
+    if use_msa_server and tool_name in ("boltz", "chai"):
+        extra["use_msa_server"] = True
     entity_inputs = {
         "protein": protein, "dna": dna, "rna": rna,
         "ligand": ligand, "smiles": smiles, "glycan": glycan,

@@ -143,10 +143,9 @@ class TestJobYAMLs:
 
     def test_has_input_file(self, job_doc):
         """Each job has an input file matching its tool's input key."""
-        has_input = any(
-            key in job_doc for key in INPUT_KEY.values()
-        )
-        assert has_input, f"Job missing input file key (expected one of {list(INPUT_KEY.values())})"
+        accepted_keys = set(INPUT_KEY.values()) | {"protein"}
+        has_input = any(key in job_doc for key in accepted_keys)
+        assert has_input, f"Job missing input file key (expected one of {sorted(accepted_keys)})"
 
     def test_has_output_dir(self, job_doc):
         has_output = "output_dir" in job_doc or "output_directory" in job_doc

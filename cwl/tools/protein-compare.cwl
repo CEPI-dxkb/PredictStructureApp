@@ -15,11 +15,12 @@ requirements:
 hints:
   DockerRequirement:
     dockerPull: folding_compare_260328.1.sif
+    dockerImageId: /scout/containers/folding_compare_260328.1.sif
   ResourceRequirement:
     coresMin: 1
     ramMin: 4096
 
-baseCommand: [python, -m, protein_compare, characterize]
+baseCommand: [characterize]
 
 inputs:
   structure:
