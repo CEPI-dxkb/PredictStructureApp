@@ -114,9 +114,8 @@ class AlphaFoldAdapter(BaseAdapter):
                 str(data_dir / "uniprot" / "uniprot.fasta"),
             ])
 
-        # GPU relax
-        if device != "cpu":
-            cmd.append("--use_gpu_relax=true")
+        # GPU relax disabled by default (OpenMM compatibility issues on H100/H200)
+        cmd.append("--nouse_gpu_relax")
 
         # Random seed
         if seed is not None:

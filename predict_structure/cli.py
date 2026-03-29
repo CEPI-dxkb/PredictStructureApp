@@ -431,7 +431,15 @@ def run_prediction(
                 click.echo(f"Prediction failed with exit code {rc}", err=True)
                 sys.exit(rc)
 
-        adapter.normalize_output(raw_dir, output_path)
+        try:
+            adapter.normalize_output(raw_dir, output_path)
+        except FileNotFoundError as exc:
+            click.echo(
+                f"Prediction produced no output to normalize: {exc}\n"
+                f"Check raw output in {raw_dir}",
+                err=True,
+            )
+            sys.exit(1)
         params_dict = {
             "num_samples": shared["num_samples"],
             "num_recycles": shared["num_recycles"],
@@ -521,7 +529,15 @@ def run_prediction(
     # 7. Normalize output
     # CWL places tool output inside raw_dir/output/ (the CWL output_dir name)
     normalize_dir = cwl_output_subdir if backend == "cwl" else raw_dir
-    adapter.normalize_output(normalize_dir, output_path)
+    try:
+        adapter.normalize_output(normalize_dir, output_path)
+    except FileNotFoundError as exc:
+        click.echo(
+            f"Prediction produced no output to normalize: {exc}\n"
+            f"Check raw output in {raw_dir}",
+            err=True,
+        )
+        sys.exit(1)
 
     params_dict = {
         "num_samples": shared["num_samples"],
