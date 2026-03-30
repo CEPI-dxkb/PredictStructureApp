@@ -231,15 +231,14 @@ mkdir -p /scout/tmp/test-select/mock-both && \
 ### Commands
 
 ```bash
-# For each mock dir:
+# For each mock dir (X = pdb, cif, empty, both):
 conda run -n predict-structure cwltool --no-container \
   --outdir /scout/tmp/test-select/out-X \
   cwl/tools/select-structure.cwl job-X.yml
 
-# GoWe:
 /scout/Experiments/GoWe/bin/cwl-runner --no-container \
-  --outdir /scout/tmp/test-select/gowe-pdb \
-  cwl/tools/select-structure.cwl job-pdb.yml
+  --outdir /scout/tmp/test-select/gowe-X \
+  cwl/tools/select-structure.cwl job-X.yml
 ```
 
 ### Results
@@ -247,11 +246,11 @@ conda run -n predict-structure cwltool --no-container \
 | Scenario | cwltool | GoWe | Expected |
 |----------|:-------:|:----:|:--------:|
 | Dir with `.pdb` | PASS — selects `model_1.pdb` | PASS — selects `model_1.pdb` | PDB selected |
-| Dir with only `.cif` | PASS — falls back to `model_1.cif` | — | CIF fallback |
-| Empty dir | PASS — throws error: "No .pdb or .cif file found" | — | Error thrown |
-| Dir with both `.pdb` and `.cif` | PASS — prefers `model_1.pdb` | — | PDB preferred |
+| Dir with only `.cif` | PASS — falls back to `model_1.cif` | PASS — falls back to `model_1.cif` | CIF fallback |
+| Empty dir | PASS — throws error: "No .pdb or .cif file found" | PASS — throws error: "No .pdb or .cif file found" | Error thrown |
+| Dir with both `.pdb` and `.cif` | PASS — prefers `model_1.pdb` | PASS — prefers `model_1.pdb` | PDB preferred |
 
-All scenarios behave correctly. GoWe correctly handles ExpressionTools.
+All scenarios behave correctly with both runners. GoWe correctly handles ExpressionTools.
 
 **Note:** The normalizer always produces both `.pdb` and `.cif`, so the CIF-only fallback
 path would only trigger if normalization failed partially.
