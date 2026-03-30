@@ -1,7 +1,7 @@
 cwlVersion: v1.2
 class: Workflow
 
-label: "Predict + Report Workflow"
+label: "Protein Structure Prediction Workflow"
 doc: |
   Three-step workflow: predict structure with predict-structure,
   extract the first PDB file, and generate a characterization

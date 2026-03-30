@@ -292,7 +292,7 @@ cwl-runner --image-dir /scout/containers --outdir /scout/tmp/test-D1-esmfold-rep
 - crambin_report.html: 498,087 bytes (valid HTML, `<!DOCTYPE html>`)
 **Result:** PASS
 
-### D2: predict-report.cwl (tool=esmfold)
+### D2: protein-structure-prediction.cwl (tool=esmfold)
 
 **Runner:** GoWe cwl-runner
 **Command:**
@@ -300,7 +300,7 @@ cwl-runner --image-dir /scout/containers --outdir /scout/tmp/test-D1-esmfold-rep
 SINGULARITYENV_CUDA_VISIBLE_DEVICES=6 \
 SINGULARITY_BIND="/scout:/scout,/local_databases:/local_databases" \
 cwl-runner --image-dir /scout/containers --outdir /scout/tmp/test-D2-predict-esmfold-report \
-  cwl/workflows/predict-report.cwl cwl/jobs/crambin-predict-esmfold-report.yml
+  cwl/workflows/protein-structure-prediction.cwl cwl/jobs/crambin-predict-esmfold-report.yml
 ```
 **Exit code:** 0
 **Key outputs:**
@@ -308,7 +308,7 @@ cwl-runner --image-dir /scout/containers --outdir /scout/tmp/test-D2-predict-esm
 - crambin_report.html: 498,087 bytes (identical checksum to D1)
 **Result:** PASS
 
-### D3: predict-report.cwl (tool=auto)
+### D3: protein-structure-prediction.cwl (tool=auto)
 
 **Runner:** GoWe cwl-runner
 **Command:**
@@ -316,7 +316,7 @@ cwl-runner --image-dir /scout/containers --outdir /scout/tmp/test-D2-predict-esm
 SINGULARITYENV_CUDA_VISIBLE_DEVICES=7 \
 SINGULARITY_BIND="/scout:/scout,/local_databases:/local_databases" \
 cwl-runner --image-dir /scout/containers --outdir /scout/tmp/test-D3-predict-auto-report \
-  cwl/workflows/predict-report.cwl cwl/jobs/crambin-predict-auto-report.yml
+  cwl/workflows/protein-structure-prediction.cwl cwl/jobs/crambin-predict-auto-report.yml
 ```
 **Exit code:** 0
 **Wall time:** ~48 min
@@ -400,8 +400,8 @@ cwl-runner --image-dir /scout/containers --outdir /scout/tmp/test-D7-alphafold-r
 | Workflow | Command | Notes |
 |----------|---------|-------|
 | esmfold-report.cwl | predict-structure + protein-compare | Known bug: tool subcommand missing (cosmetic) |
-| predict-report.cwl (esmfold) | predict-structure esmfold + protein-compare | PASS — tool from job file |
-| predict-report.cwl (auto) | predict-structure auto + protein-compare | PASS |
+| protein-structure-prediction.cwl (esmfold) | predict-structure esmfold + protein-compare | PASS — tool from job file |
+| protein-structure-prediction.cwl (auto) | predict-structure auto + protein-compare | PASS |
 | boltz-report.cwl | predict-structure + protein-compare | Known bug: tool subcommand missing (cosmetic) |
 | boltz-report-msa.cwl | predict-structure --use-msa-server + protein-compare | `--use-msa-server` present ✓ |
 | chai-report.cwl | predict-structure + protein-compare | Known bug: tool subcommand missing (cosmetic) |
@@ -468,8 +468,8 @@ This may indicate model loading issues or parameter tuning needed.
 | `test-auto-multientity-msa.yml` | predict-structure.cwl | Auto: protein+ligand, MSA |
 | `test-auto-multientity-nomsa.yml` | predict-structure.cwl | Auto: protein+ligand, no MSA |
 | `test-auto-protein-dna-msa.yml` | predict-structure.cwl | Auto: protein+DNA, MSA |
-| `crambin-predict-esmfold-report.yml` | predict-report.cwl | Workflow: tool=esmfold |
-| `crambin-predict-auto-report.yml` | predict-report.cwl | Workflow: tool=auto |
+| `crambin-predict-esmfold-report.yml` | protein-structure-prediction.cwl | Workflow: tool=esmfold |
+| `crambin-predict-auto-report.yml` | protein-structure-prediction.cwl | Workflow: tool=auto |
 | `crambin-boltz-msa-report.yml` | boltz-report-msa.cwl | Workflow: Boltz+MSA server |
 
 ---
@@ -509,8 +509,8 @@ This may indicate model loading issues or parameter tuning needed.
 | ID | Workflow | Tool | Result | Runtime | pLDDT |
 |----|----------|------|--------|---------|-------|
 | D1 | esmfold-report | ESMFold | ✅ | 137s | 43.59 |
-| D2 | predict-report | ESMFold | ✅ | 135s | 43.59 |
-| D3 | predict-report | Auto→AF2 | ✅ | 48 min | 93.13 |
+| D2 | protein-structure-prediction | ESMFold | ✅ | 135s | 43.59 |
+| D3 | protein-structure-prediction | Auto→AF2 | ✅ | 48 min | 93.13 |
 | D4 | boltz-report | Boltz | ❌ | — | — (MSA required) |
 | D5 | boltz-report-msa | Boltz | ✅ | 61s | 94.78 |
 | D6 | chai-report | Chai | ✅ | 69s | 48.43 |

@@ -1,4 +1,4 @@
-# predict-report workflow with tool=auto (for D3)
+# protein-structure-prediction workflow with tool=auto (for D3)
 tool: auto
 protein:
   - class: File

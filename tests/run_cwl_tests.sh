@@ -450,11 +450,11 @@ run_phase_1() {
         "predict-structure"
 
     run_print_command D8b \
-        "${CWL_WORKFLOWS}/predict-report.cwl" "${CWL_JOBS}/crambin-predict-esmfold-report.yml" \
+        "${CWL_WORKFLOWS}/protein-structure-prediction.cwl" "${CWL_JOBS}/crambin-predict-esmfold-report.yml" \
         "predict-structure esmfold"
 
     run_print_command D8c \
-        "${CWL_WORKFLOWS}/predict-report.cwl" "${CWL_JOBS}/crambin-predict-auto-report.yml" \
+        "${CWL_WORKFLOWS}/protein-structure-prediction.cwl" "${CWL_JOBS}/crambin-predict-auto-report.yml" \
         "predict-structure auto"
 
     run_print_command D8d \
@@ -536,20 +536,20 @@ run_phase_2() {
         5
     validate_outputs D1 metadata confidence pdb report
 
-    # ── D2: predict-report (esmfold) ──────────────────────────────────────
-    log "D2: predict-report (esmfold)"
+    # ── D2: protein-structure-prediction (esmfold) ──────────────────────────────────────
+    log "D2: protein-structure-prediction (esmfold)"
     run_execution D2 \
-        "${CWL_WORKFLOWS}/predict-report.cwl" "${CWL_JOBS}/crambin-predict-esmfold-report.yml" \
+        "${CWL_WORKFLOWS}/protein-structure-prediction.cwl" "${CWL_JOBS}/crambin-predict-esmfold-report.yml" \
         6
     validate_outputs D2 metadata confidence pdb report
 
-    # ── D3: predict-report (auto, long) ───────────────────────────────────
+    # ── D3: protein-structure-prediction (auto, long) ───────────────────────────────────
     if $SKIP_SLOW; then
         record_result D3 SKIP "skipped (--skip-slow)"
     else
-        log "D3: predict-report (auto)"
+        log "D3: protein-structure-prediction (auto)"
         run_execution_bg D3 \
-            "${CWL_WORKFLOWS}/predict-report.cwl" "${CWL_JOBS}/crambin-predict-auto-report.yml" \
+            "${CWL_WORKFLOWS}/protein-structure-prediction.cwl" "${CWL_JOBS}/crambin-predict-auto-report.yml" \
             7
     fi
 

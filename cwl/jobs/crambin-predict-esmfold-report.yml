@@ -1,4 +1,4 @@
-# predict-report workflow with tool=esmfold (for D2)
+# protein-structure-prediction workflow with tool=esmfold (for D2)
 tool: esmfold
 protein:
   - class: File
