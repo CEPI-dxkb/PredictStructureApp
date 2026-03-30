@@ -121,5 +121,4 @@ ENV TORCH_HOME=/cache/torch
 
 WORKDIR /data
 
-ENTRYPOINT ["predict-structure"]
-CMD ["--help"]
+CMD ["predict-structure", "--help"]

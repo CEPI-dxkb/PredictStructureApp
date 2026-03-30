@@ -1,0 +1,11 @@
+# Boltz with tool-specific params
+tool: boltz
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+output_dir: output
+num_samples: 3
+device: gpu
+use_msa_server: true
+sampling_steps: 100
+use_potentials: true

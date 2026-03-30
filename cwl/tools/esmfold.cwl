@@ -14,6 +14,8 @@ requirements:
   EnvVarRequirement:
     envDef:
       HF_HOME: $(inputs.model_cache_dir)
+  NetworkAccess:
+    networkAccess: true
   ResourceRequirement:
     coresMin: 8
     ramMin: 32768

@@ -1,0 +1,10 @@
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+output_dir: output
+num_samples: 1
+num_recycles: 3
+device: gpu
+output_format: pdb
+report_name: crambin_report
+report_format: html

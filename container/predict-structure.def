@@ -29,7 +29,7 @@ From: /disks/tmp/all-2026-0224b.sif
     export TORCH_HOME=/cache/torch
 
 %runscript
-    exec predict-structure "$@"
+    exec "$@"
 
 %help
     Unified protein structure prediction container.

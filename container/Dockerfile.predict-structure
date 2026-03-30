@@ -51,5 +51,4 @@ RUN mkdir -p /input /output /databases
 
 WORKDIR /data
 
-ENTRYPOINT ["predict-structure"]
-CMD ["--help"]
+CMD ["predict-structure", "--help"]

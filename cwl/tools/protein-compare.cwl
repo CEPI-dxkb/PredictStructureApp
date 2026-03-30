@@ -8,19 +8,20 @@ doc: |
   from predict-structure (model_1.pdb, confidence.json).
 
 requirements:
+  InlineJavascriptRequirement: {}
   InitialWorkDirRequirement:
     listing:
       - $(inputs.structure)
 
 hints:
   DockerRequirement:
-    dockerPull: folding_compare_260328.1.sif
-    dockerImageId: /scout/containers/folding_compare_260328.1.sif
+    dockerPull: folding_compare_260329.sif
+    dockerImageId: /scout/containers/folding_compare_260329.sif
   ResourceRequirement:
     coresMin: 1
     ramMin: 4096
 
-baseCommand: [characterize]
+baseCommand: [python, -m, protein_compare, characterize]
 
 inputs:
   structure:
