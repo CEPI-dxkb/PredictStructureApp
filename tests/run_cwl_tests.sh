@@ -672,6 +672,122 @@ print_summary() {
 }
 
 # =============================================================================
+# Report generation
+# =============================================================================
+generate_report() {
+    local report="${OUTDIR_BASE}/report.md"
+    log "Generating report: $report"
+
+    cat > "$report" <<HEADER
+# CWL Test Report
+
+**Date:** $(date '+%Y-%m-%d %H:%M')
+**Output:** \`${OUTDIR_BASE}\`
+
+---
+
+## Environment
+
+| Item | Value |
+|------|-------|
+HEADER
+
+    # Environment from results files
+    [[ -f "${RESULTS_DIR}/F4.version.txt" ]] && \
+        echo "| GoWe | $(cat "${RESULTS_DIR}/F4.version.txt") |" >> "$report"
+    [[ -f "${RESULTS_DIR}/F3.gpus.txt" ]] && \
+        echo "| GPUs | $(head -1 "${RESULTS_DIR}/F3.gpus.txt" | cut -d, -f2) × $(wc -l < "${RESULTS_DIR}/F3.gpus.txt") |" >> "$report"
+    [[ -f "${RESULTS_DIR}/F2.checksums.txt" ]] && {
+        while read -r sum path; do
+            echo "| $(basename "$path") | \`${sum}\` |" >> "$report"
+        done < "${RESULTS_DIR}/F2.checksums.txt"
+    }
+    echo "" >> "$report"
+
+    # Results table
+    cat >> "$report" <<'TABLE_HEADER'
+## Results
+
+| Test | Status | Details |
+|------|--------|---------|
+TABLE_HEADER
+
+    tail -n +2 "${RESULTS_DIR}/results.tsv" | while IFS=$'\t' read -r tid status msg; do
+        local icon
+        case "$status" in
+            PASS)  icon="PASS" ;;
+            FAIL)  icon="**FAIL**" ;;
+            XFAIL) icon="XFAIL" ;;
+            SKIP)  icon="SKIP" ;;
+            *)     icon="$status" ;;
+        esac
+        echo "| $tid | $icon | $msg |" >> "$report"
+    done
+
+    echo "" >> "$report"
+
+    # Timing table
+    cat >> "$report" <<'TIMING_HEADER'
+## Timing
+
+| Test | Exit | Elapsed |
+|------|------|---------|
+TIMING_HEADER
+
+    tail -n +2 "${RESULTS_DIR}/timing.tsv" | while IFS=$'\t' read -r tid rc elapsed; do
+        [[ -z "$elapsed" || "$elapsed" == "0" ]] && continue
+        local mins=$((elapsed / 60))
+        local secs=$((elapsed % 60))
+        local fmt
+        if [[ $mins -gt 0 ]]; then
+            fmt="${mins}m${secs}s"
+        else
+            fmt="${elapsed}s"
+        fi
+        echo "| $tid | $rc | $fmt |" >> "$report"
+    done
+
+    echo "" >> "$report"
+
+    # Validation details
+    local has_validations=false
+    for vfile in "${RESULTS_DIR}"/*.validation.txt; do
+        [[ -f "$vfile" ]] || continue
+        has_validations=true
+        break
+    done
+
+    if $has_validations; then
+        cat >> "$report" <<'VAL_HEADER'
+## Output Validation
+
+VAL_HEADER
+        for vfile in "${RESULTS_DIR}"/*.validation.txt; do
+            [[ -f "$vfile" ]] || continue
+            local tid
+            tid=$(basename "$vfile" .validation.txt)
+            echo "**${tid}:**" >> "$report"
+            echo '```' >> "$report"
+            cat "$vfile" >> "$report"
+            echo '```' >> "$report"
+            echo "" >> "$report"
+        done
+    fi
+
+    # Summary
+    cat >> "$report" <<SUMMARY
+
+---
+
+## Summary
+
+**Total: ${TOTAL} | Pass: ${PASS} | Fail: ${FAIL} | XFail: ${XFAIL} | Skip: ${SKIP}**
+SUMMARY
+
+    log "Report written to: $report"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 main() {
@@ -698,6 +814,7 @@ main() {
     esac
 
     print_summary
+    generate_report
 }
 
 cd "$REPO_DIR"
