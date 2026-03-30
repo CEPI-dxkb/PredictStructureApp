@@ -1,6 +1,6 @@
 input_fasta:
   class: File
-  path: ../../test_data/simple_protein.fasta
+  path: ../../test_data/crambin-chai.fasta
 output_directory: output
 num_diffn_samples: 1
 num_trunk_recycles: 3

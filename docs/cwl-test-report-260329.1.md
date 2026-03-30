@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-29
 **Branch:** `cwl/tools`
-**Scope:** predict-structure.cwl, predict-report.cwl, select-structure.cwl, per-tool workflows
+**Scope:** predict-structure.cwl, protein-structure-prediction.cwl, select-structure.cwl, per-tool workflows
 **Runners:** cwltool 3.1.20260315, GoWe cwl-runner (latest)
 **Container:** folding_prod.sif (all-in-one, Apptainer)
 **Hardware:** 8x NVIDIA H200 NVL (143 GB each)
@@ -150,7 +150,7 @@ All 10 job files: **"No errors detected in the inputs."**
 
 ```bash
 /scout/Experiments/GoWe/bin/cwl-runner validate cwl/tools/predict-structure.cwl
-/scout/Experiments/GoWe/bin/cwl-runner validate cwl/workflows/predict-report.cwl
+/scout/Experiments/GoWe/bin/cwl-runner validate cwl/workflows/protein-structure-prediction.cwl
 /scout/Experiments/GoWe/bin/cwl-runner validate cwl/tools/select-structure.cwl
 ```
 
@@ -163,7 +163,7 @@ Note: GoWe `validate` only accepts the CWL file (no job file argument).
 ## 3. Workflow Input Wiring Gap Analysis
 
 **Question:** What happens when tool-specific params are in the job file but not
-wired through the predict-report.cwl workflow?
+wired through the protein-structure-prediction.cwl workflow?
 
 ### Test setup
 
@@ -186,11 +186,11 @@ use_potentials: true
 ```bash
 # cwltool
 conda run -n predict-structure cwltool --validate \
-  cwl/workflows/predict-report.cwl job.yml
+  cwl/workflows/protein-structure-prediction.cwl job.yml
 
 # GoWe
 /scout/Experiments/GoWe/bin/cwl-runner print-command \
-  cwl/workflows/predict-report.cwl job.yml
+  cwl/workflows/protein-structure-prediction.cwl job.yml
 ```
 
 ### Results
@@ -206,7 +206,7 @@ conda run -n predict-structure cwltool --validate \
   runtime — no error, no warning.
 - **GoWe** passes unrecognized workflow inputs through to inner tool inputs by name match.
   This is a behavioral difference from cwltool. Arguably useful, but non-standard.
-- **Conclusion:** predict-report.cwl does not need tool-specific param passthrough. The
+- **Conclusion:** protein-structure-prediction.cwl does not need tool-specific param passthrough. The
   per-tool workflows (esmfold-report.cwl, boltz-report.cwl, etc.) and direct use of
   predict-structure.cwl serve that purpose.
 
@@ -231,15 +231,14 @@ mkdir -p /scout/tmp/test-select/mock-both && \
 ### Commands
 
 ```bash
-# For each mock dir:
+# For each mock dir (X = pdb, cif, empty, both):
 conda run -n predict-structure cwltool --no-container \
   --outdir /scout/tmp/test-select/out-X \
   cwl/tools/select-structure.cwl job-X.yml
 
-# GoWe:
 /scout/Experiments/GoWe/bin/cwl-runner --no-container \
-  --outdir /scout/tmp/test-select/gowe-pdb \
-  cwl/tools/select-structure.cwl job-pdb.yml
+  --outdir /scout/tmp/test-select/gowe-X \
+  cwl/tools/select-structure.cwl job-X.yml
 ```
 
 ### Results
@@ -247,11 +246,11 @@ conda run -n predict-structure cwltool --no-container \
 | Scenario | cwltool | GoWe | Expected |
 |----------|:-------:|:----:|:--------:|
 | Dir with `.pdb` | PASS — selects `model_1.pdb` | PASS — selects `model_1.pdb` | PDB selected |
-| Dir with only `.cif` | PASS — falls back to `model_1.cif` | — | CIF fallback |
-| Empty dir | PASS — throws error: "No .pdb or .cif file found" | — | Error thrown |
-| Dir with both `.pdb` and `.cif` | PASS — prefers `model_1.pdb` | — | PDB preferred |
+| Dir with only `.cif` | PASS — falls back to `model_1.cif` | PASS — falls back to `model_1.cif` | CIF fallback |
+| Empty dir | PASS — throws error: "No .pdb or .cif file found" | PASS — throws error: "No .pdb or .cif file found" | Error thrown |
+| Dir with both `.pdb` and `.cif` | PASS — prefers `model_1.pdb` | PASS — prefers `model_1.pdb` | PDB preferred |
 
-All scenarios behave correctly. GoWe correctly handles ExpressionTools.
+All scenarios behave correctly with both runners. GoWe correctly handles ExpressionTools.
 
 **Note:** The normalizer always produces both `.pdb` and `.cif`, so the CIF-only fallback
 path would only trigger if normalization failed partially.
@@ -341,7 +340,7 @@ is caught, but the error message would be confusing.
   cwl/workflows/boltz-report.cwl cwl/jobs/crambin-boltz-report.yml
 
 /scout/Experiments/GoWe/bin/cwl-runner print-command \
-  cwl/workflows/predict-report.cwl job-with-tool-esmfold.yml
+  cwl/workflows/protein-structure-prediction.cwl job-with-tool-esmfold.yml
 ```
 
 ### Results
@@ -352,7 +351,7 @@ is caught, but the error message would be confusing.
 predict-structure --device gpu --num-recycles 4 ...   # <-- missing subcommand!
 ```
 
-**predict-report.cwl** (tool from job input):
+**protein-structure-prediction.cwl** (tool from job input):
 ```
 predict-structure esmfold --device gpu --num-recycles 4 ...   # <-- correct
 ```
@@ -390,12 +389,12 @@ SINGULARITY_BIND="/scout:/scout,/local_databases:/local_databases" \
   --outdir /scout/tmp/test-exec-gowe-pertool-esmfold \
   cwl/tools/esmfold.cwl cwl/jobs/crambin-esmfold.yml
 
-# predict-report.cwl workflow — cwltool (GPU 2)
+# protein-structure-prediction.cwl workflow — cwltool (GPU 2)
 SINGULARITYENV_CUDA_VISIBLE_DEVICES=2 \
 SINGULARITY_BIND="/scout:/scout,/local_databases:/local_databases" \
 conda run -n predict-structure cwltool --singularity \
   --outdir /scout/tmp/test-exec-cwltool-workflow \
-  cwl/workflows/predict-report.cwl job-esmfold.yml
+  cwl/workflows/protein-structure-prediction.cwl job-esmfold.yml
 
 # esmfold-report.cwl workflow — GoWe (GPU 3)
 SINGULARITYENV_CUDA_VISIBLE_DEVICES=3 \
@@ -498,7 +497,7 @@ conda run -n predict-structure pytest tests/ --ignore=tests/test_integration.py 
    CWL validation and only fail at CLI runtime. Not critical but reduces
    fail-fast behavior.
 
-3. **predict-report.cwl does not need tool-specific param passthrough.** The
+3. **protein-structure-prediction.cwl does not need tool-specific param passthrough.** The
    per-tool workflows (esmfold-report.cwl, boltz-report.cwl, etc.) already
    serve this purpose, and direct use of predict-structure.cwl exposes all
    parameters.
@@ -507,7 +506,7 @@ conda run -n predict-structure pytest tests/ --ignore=tests/test_integration.py 
 
 No changes to the CWL files are needed at this time. The architecture is sound:
 - `predict-structure.cwl` — full parameter exposure with valueFrom guards
-- `predict-report.cwl` — generic workflow with shared params + tool enum
+- `protein-structure-prediction.cwl` — generic workflow with shared params + tool enum
 - Per-tool workflows — hardcoded tool, shared params only
 - `select-structure.cwl` — robust PDB/CIF selection
 

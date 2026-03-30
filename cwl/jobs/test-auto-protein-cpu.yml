@@ -1,0 +1,7 @@
+# Auto mode — protein-only, CPU (should select ESMFold)
+tool: auto
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+output_dir: output
+device: cpu
