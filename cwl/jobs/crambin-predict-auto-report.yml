@@ -1,0 +1,10 @@
+# predict-report workflow with tool=auto (for D3)
+tool: auto
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+output_dir: output
+device: gpu
+output_format: pdb
+report_name: crambin_report
+report_format: html
