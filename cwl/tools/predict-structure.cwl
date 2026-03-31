@@ -50,6 +50,12 @@ requirements:
         if (inputs.msa) {
           files.push(inputs.msa);
         }
+        if (inputs.constraint_path) {
+          files.push(inputs.constraint_path);
+        }
+        if (inputs.template_hits_path) {
+          files.push(inputs.template_hits_path);
+        }
         return files;
       }
   NetworkAccess:
