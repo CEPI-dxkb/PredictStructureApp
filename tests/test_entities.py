@@ -129,6 +129,62 @@ class TestParseFastaEntities:
         entities = parse_fasta_entities(dna_fasta)
         assert entities[0].entity_type == EntityType.DNA
 
+    def test_max_sequences_exceeded(self, tmp_path):
+        fasta = tmp_path / "many.fasta"
+        seqs = "".join(f">seq_{i}\nMKTIIAL\n" for i in range(30))
+        fasta.write_text(seqs)
+        with pytest.raises(ValueError, match="30.*sequences.*limit.*26"):
+            parse_fasta_entities(fasta)
+
+    def test_max_sequences_at_limit(self, tmp_path):
+        fasta = tmp_path / "ok.fasta"
+        seqs = "".join(f">seq_{i}\nMKTIIAL\n" for i in range(26))
+        fasta.write_text(seqs)
+        entities = parse_fasta_entities(fasta)
+        assert len(entities) == 26
+
+    def test_max_sequences_none_bypasses(self, tmp_path):
+        fasta = tmp_path / "many.fasta"
+        seqs = "".join(f">seq_{i}\nMKTIIAL\n" for i in range(100))
+        fasta.write_text(seqs)
+        entities = parse_fasta_entities(fasta, max_sequences=None)
+        assert len(entities) == 100
+
+    def test_type_mismatch_warning(self, tmp_path, caplog):
+        """DNA sequences submitted as protein should log a warning."""
+        import logging
+        fasta = tmp_path / "dna_as_protein.fasta"
+        fasta.write_text(">read1\nACGTACGTACGTACGTACGT\n")
+        with caplog.at_level(logging.WARNING):
+            entities = parse_fasta_entities(fasta, explicit_type=EntityType.PROTEIN)
+        assert entities[0].entity_type == EntityType.PROTEIN  # type forced
+        assert "appears to be dna but was declared as protein" in caplog.text.lower()
+
+
+class TestEntityListValidation:
+    def test_total_residues(self):
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "MKTIIAL")     # 7
+        el.add(EntityType.LIGAND, "ATP")            # skipped
+        el.add(EntityType.DNA, "ACGTACGTACGT")      # 12
+        assert el.total_residues == 19
+
+    def test_validate_size_ok(self):
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "MKTIIAL")
+        el.validate_size(max_residues=100)  # should not raise
+
+    def test_validate_size_exceeded(self):
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "M" * 500)
+        with pytest.raises(ValueError, match="500.*exceeds.*100"):
+            el.validate_size(max_residues=100)
+
+    def test_validate_size_none_bypasses(self):
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "M" * 100_000)
+        el.validate_size(max_residues=None)  # should not raise
+
 
 class TestIsBoltzYaml:
     def test_valid_boltz_yaml(self, tmp_path):

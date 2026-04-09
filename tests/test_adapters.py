@@ -363,6 +363,36 @@ class TestOpenFoldAdapter:
         assert OpenFoldAdapter.requires_gpu is True
 
 
+class TestAdapterSequenceValidation:
+    def test_valid_protein(self, protein_entity_list):
+        from predict_structure.adapters.boltz import BoltzAdapter
+
+        adapter = BoltzAdapter()
+        adapter.validate_sequences(protein_entity_list)  # should not warn
+
+    def test_dna_as_protein_warns(self, caplog):
+        import logging
+        from predict_structure.adapters.boltz import BoltzAdapter
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "ACGTACGTACGTACGT")
+        adapter = BoltzAdapter()
+        with caplog.at_level(logging.WARNING):
+            adapter.validate_sequences(el)
+        assert "looks like dna" in caplog.text.lower()
+
+    def test_ligand_skips_validation(self, caplog):
+        import logging
+        from predict_structure.adapters.boltz import BoltzAdapter
+
+        el = EntityList()
+        el.add(EntityType.LIGAND, "ATP")
+        adapter = BoltzAdapter()
+        with caplog.at_level(logging.WARNING):
+            adapter.validate_sequences(el)
+        assert caplog.text == ""  # no warnings for ligands
+
+
 class TestAdapterRegistry:
     def test_get_adapter_all_tools(self):
         from predict_structure.adapters import get_adapter

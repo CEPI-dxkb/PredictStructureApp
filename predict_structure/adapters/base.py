@@ -2,11 +2,25 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
 from predict_structure.entities import EntityList, EntityType
+
+logger = logging.getLogger(__name__)
+
+# Characters expected for each sequence-based entity type
+_VALID_CHARS: dict[EntityType, set[str]] = {
+    EntityType.PROTEIN: set("ACDEFGHIKLMNPQRSTVWXYUBZJO*"),
+    EntityType.DNA: set("ACGTNRYSWKMBDHV"),
+    EntityType.RNA: set("ACGUNRYSWKMBDHV"),
+}
+
+# Characters that distinguish protein from nucleic acid
+_DNA_ONLY = set("ACGTN")
+_PROTEIN_ONLY = set("DEFHIKLMPQRSVWY")  # never appear in DNA
 
 
 class BaseAdapter(ABC):
@@ -47,6 +61,40 @@ class BaseAdapter(ABC):
                 f"{self.tool_name} does not support entity type(s): {names}. "
                 f"Supported: {supported}"
             )
+
+    def validate_sequences(self, entity_list: EntityList) -> None:
+        """Warn if sequence characters are inconsistent with declared entity type.
+
+        Checks protein, DNA, and RNA entities against expected character sets.
+        Also detects DNA sequences misclassified as protein (all ACGTN, no
+        protein-only characters, length > 10).
+        Logs warnings but does not raise — callers may use ``--force`` to proceed.
+        """
+        for entity in entity_list:
+            expected_chars = _VALID_CHARS.get(entity.entity_type)
+            if expected_chars is None:
+                continue  # ligand, SMILES, glycan — no character validation
+            upper = set(entity.value.upper())
+            invalid = upper - expected_chars
+            if invalid:
+                logger.warning(
+                    "Sequence '%s' contains characters %s unexpected for %s",
+                    entity.name or entity.chain_id,
+                    "".join(sorted(invalid)),
+                    entity.entity_type.value,
+                )
+            # Detect DNA masquerading as protein: all DNA chars, no protein-only, long
+            if (
+                entity.entity_type == EntityType.PROTEIN
+                and upper <= _DNA_ONLY
+                and not (upper & _PROTEIN_ONLY)
+                and len(entity.value) > 10
+            ):
+                logger.warning(
+                    "Sequence '%s' looks like DNA (all ACGTN, %d nt) but declared as protein",
+                    entity.name or entity.chain_id,
+                    len(entity.value),
+                )
 
     @abstractmethod
     def prepare_input(

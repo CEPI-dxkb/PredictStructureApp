@@ -6,6 +6,7 @@ type detection, and FASTA parsing with entity classification.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from enum import Enum
@@ -13,6 +14,15 @@ from pathlib import Path
 from typing import Iterator
 
 from Bio import SeqIO
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Input size limits — override with --force
+# ---------------------------------------------------------------------------
+
+MAX_SEQUENCES = 26          # A-Z chain IDs
+MAX_TOTAL_RESIDUES = 10_000
 
 
 class EntityType(Enum):
@@ -119,6 +129,29 @@ class EntityList:
         """Return entities that are inline values (ligand, SMILES, glycan)."""
         return [e for e in self.entities if e.entity_type in _INLINE_TYPES]
 
+    @property
+    def total_residues(self) -> int:
+        """Total residue/nucleotide count across all sequence entities."""
+        return sum(len(e.value) for e in self.fasta_entities())
+
+    def validate_size(
+        self,
+        max_residues: int | None = MAX_TOTAL_RESIDUES,
+    ) -> None:
+        """Raise if total residues exceed the limit.
+
+        Args:
+            max_residues: Maximum total residues (None to skip check).
+
+        Raises:
+            ValueError: If total residues exceed the limit.
+        """
+        if max_residues is not None and self.total_residues > max_residues:
+            raise ValueError(
+                f"Total residues ({self.total_residues:,}) exceeds limit "
+                f"({max_residues:,}). Use --force to override."
+            )
+
     def __len__(self) -> int:
         return len(self.entities)
 
@@ -132,6 +165,8 @@ class EntityList:
 def parse_fasta_entities(
     fasta_path: Path,
     explicit_type: EntityType | None = None,
+    *,
+    max_sequences: int | None = MAX_SEQUENCES,
 ) -> list[Entity]:
     """Parse a FASTA file and return one Entity per sequence.
 
@@ -141,18 +176,37 @@ def parse_fasta_entities(
     Args:
         fasta_path: Path to FASTA file.
         explicit_type: Force all sequences to this type (PROTEIN, DNA, or RNA).
+        max_sequences: Maximum number of sequences allowed (None to skip check).
 
     Returns:
         List of Entity objects (without chain IDs — caller assigns via EntityList.add).
+
+    Raises:
+        ValueError: If no sequences found or sequence count exceeds max_sequences.
     """
     records = list(SeqIO.parse(str(fasta_path), "fasta"))
     if not records:
         raise ValueError(f"No sequences found in {fasta_path}")
 
+    if max_sequences is not None and len(records) > max_sequences:
+        raise ValueError(
+            f"Input FASTA has {len(records):,} sequences (limit: {max_sequences}). "
+            f"Use --force to override."
+        )
+
     entities = []
     for record in records:
         seq = str(record.seq)
-        etype = explicit_type if explicit_type is not None else detect_sequence_type(seq)
+        detected = detect_sequence_type(seq)
+        etype = explicit_type if explicit_type is not None else detected
+
+        # Warn on type mismatch when explicit type overrides detection
+        if explicit_type is not None and detected != explicit_type:
+            logger.warning(
+                "Sequence '%s' appears to be %s but was declared as %s",
+                record.id, detected.value, explicit_type.value,
+            )
+
         entities.append(Entity(
             entity_type=etype,
             value=seq,

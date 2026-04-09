@@ -181,6 +181,8 @@ def _build_entity_list(
     ligand: tuple[str, ...],
     smiles: tuple[str, ...],
     glycan: tuple[str, ...],
+    *,
+    force: bool = False,
 ) -> EntityList:
     """Build an EntityList from CLI option tuples.
 
@@ -194,6 +196,10 @@ def _build_entity_list(
     Raises:
         click.UsageError: If no entities are provided.
     """
+    from predict_structure.entities import MAX_SEQUENCES, MAX_TOTAL_RESIDUES
+
+    max_seq = None if force else MAX_SEQUENCES
+    max_res = None if force else MAX_TOTAL_RESIDUES
     entities = EntityList()
 
     for fasta_path in protein:
@@ -202,15 +208,21 @@ def _build_entity_list(
         if is_boltz_yaml(path):
             entities.add(EntityType.PROTEIN, str(path), name=path.stem)
             continue
-        for ent in parse_fasta_entities(path, explicit_type=EntityType.PROTEIN):
+        for ent in parse_fasta_entities(
+            path, explicit_type=EntityType.PROTEIN, max_sequences=max_seq,
+        ):
             entities.add(ent.entity_type, ent.value, name=ent.name)
 
     for fasta_path in dna:
-        for ent in parse_fasta_entities(Path(fasta_path), explicit_type=EntityType.DNA):
+        for ent in parse_fasta_entities(
+            Path(fasta_path), explicit_type=EntityType.DNA, max_sequences=max_seq,
+        ):
             entities.add(ent.entity_type, ent.value, name=ent.name)
 
     for fasta_path in rna:
-        for ent in parse_fasta_entities(Path(fasta_path), explicit_type=EntityType.RNA):
+        for ent in parse_fasta_entities(
+            Path(fasta_path), explicit_type=EntityType.RNA, max_sequences=max_seq,
+        ):
             entities.add(ent.entity_type, ent.value, name=ent.name)
 
     for code in ligand:
@@ -227,6 +239,12 @@ def _build_entity_list(
             "No input entities provided. Use --protein, --dna, --rna, "
             "--ligand, --smiles, or --glycan to specify input."
         )
+
+    # Validate total size
+    try:
+        entities.validate_size(max_residues=max_res)
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
 
     return entities
 
@@ -271,6 +289,7 @@ def shared_options(func):
     @optgroup.option("--msa", type=click.Path(), default=None, help="MSA file (.a3m, .sto, .pqt)")
     @optgroup.option("--output-format", type=click.Choice(["pdb", "mmcif"]), default="pdb")
     @click.option("--debug", is_flag=True, default=False, help="Print the command instead of executing it")
+    @click.option("--force", is_flag=True, default=False, help="Bypass input size limits")
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
@@ -398,6 +417,7 @@ def run_prediction(
 
     # 2. Validate entity types against adapter capabilities
     adapter.validate_entities(entity_list)
+    adapter.validate_sequences(entity_list)
     logger.info("Entity validation passed")
 
     # -----------------------------------------------------------------
@@ -713,7 +733,7 @@ def main(ctx, job, job_output_dir, verbose):
 def boltz(protein, dna, rna, ligand, smiles, glycan,
           sampling_steps, use_msa_server, msa_server_url, use_potentials, **shared):
     """Predict structure with Boltz-2 (diffusion-based, proteins/DNA/RNA/ligands)."""
-    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan)
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, force=shared.get("force", False))
     extra = {
         "sampling_steps": sampling_steps,
         "use_msa_server": use_msa_server or (msa_server_url is not None),
@@ -752,7 +772,7 @@ def chai(protein, dna, rna, ligand, smiles, glycan,
          template_hits_path, num_trunk_samples, recycle_msa_subsample,
          no_low_memory, **shared):
     """Predict structure with Chai-1 (diffusion-based protein prediction)."""
-    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan)
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, force=shared.get("force", False))
     extra = {
         "sampling_steps": sampling_steps,
         "use_msa_server": use_msa_server or (msa_server_url is not None),
@@ -788,7 +808,7 @@ def chai(protein, dna, rna, ligand, smiles, glycan,
 def alphafold(protein, dna, rna, ligand, smiles, glycan,
               af2_data_dir, af2_model_preset, af2_db_preset, af2_max_template_date, **shared):
     """Predict structure with AlphaFold 2 (MSA-based, high accuracy)."""
-    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan)
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, force=shared.get("force", False))
     extra = {
         "af2_data_dir": af2_data_dir,
         "af2_model_preset": af2_model_preset,
@@ -817,7 +837,7 @@ def alphafold(protein, dna, rna, ligand, smiles, glycan,
 def esmfold(protein, dna, rna, ligand, smiles, glycan,
             fp16, chunk_size, max_tokens_per_batch, **shared):
     """Predict structure with ESMFold (single-sequence, no MSA needed, CPU-capable)."""
-    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan)
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, force=shared.get("force", False))
     extra = {
         "esm_fp16": fp16,
         "esm_chunk_size": chunk_size,
@@ -850,7 +870,7 @@ def openfold(protein, dna, rna, ligand, smiles, glycan,
              num_diffusion_samples, num_model_seeds,
              use_msa_server, use_templates, checkpoint, runner_yaml, **shared):
     """Predict structure with OpenFold 3 (AF3-class, protein/DNA/RNA/ligands)."""
-    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan)
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, force=shared.get("force", False))
     extra = {
         "num_diffusion_samples": num_diffusion_samples,
         "num_model_seeds": num_model_seeds,
@@ -909,7 +929,7 @@ def auto(protein, dna, rna, ligand, smiles, glycan, use_msa_server, **shared):
     Priority order (CPU):                 ESMFold > others
     Non-protein entities:                 AlphaFold and ESMFold excluded
     """
-    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan)
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, force=shared.get("force", False))
     tool_name = _auto_select_tool(
         entity_list,
         device=shared.get("device", "gpu"),
