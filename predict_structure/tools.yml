@@ -44,7 +44,7 @@
 data_root: /local_databases
 
 container:
-  sif: file:///scout/containers/folding_260407.1.sif
+  sif: file:///scout/containers/folding_260409.2.sif
 
 tools:
   boltz:
