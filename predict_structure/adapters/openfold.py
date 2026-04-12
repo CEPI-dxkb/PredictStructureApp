@@ -56,7 +56,10 @@ class OpenFoldAdapter(BaseAdapter):
             Path to the written JSON query file.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
-        use_msas = kwargs.get("use_msa_server", False)
+        # use_msas controls MSA feature processing in the OpenFold JSON.
+        # Enable when a precomputed MSA file is provided OR the MSA server
+        # is requested. Disable (empty features) when neither is available.
+        use_msas = msa_path is not None or kwargs.get("use_msa_server", False)
         return entities_to_openfold_json(
             entity_list,
             output_dir / "query.json",
