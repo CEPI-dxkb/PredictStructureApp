@@ -86,7 +86,7 @@ tools:
     image: docker://openfoldconsortium/openfold3:stable
     cwl: cwl/tools/openfold.cwl
     conda_env: openfold
-    data_dir: /scout/data/openfold
+    data_dir: openfold
     command:
       - /opt/conda-openfold/bin/run_openfold
       - predict

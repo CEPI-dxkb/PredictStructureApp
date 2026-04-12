@@ -876,8 +876,8 @@ def esmfold(protein, dna, rna, ligand, smiles, glycan,
 @optgroup.group("OpenFold 3 options")
 @optgroup.option("--num-diffusion-samples", type=int, default=5, help="Diffusion samples per query [default: 5]")
 @optgroup.option("--num-model-seeds", type=int, default=1, help="Independent model seeds [default: 1]")
-@optgroup.option("--use-msa-server/--no-msa-server", default=True, help="Use ColabFold MSA server [default: True]")
-@optgroup.option("--use-templates/--no-templates", default=True, help="Use template structures [default: True]")
+@optgroup.option("--use-msa-server/--no-msa-server", default=False, help="Use ColabFold MSA server [default: False]")
+@optgroup.option("--use-templates/--no-templates", default=False, help="Use template structures [default: False]")
 @optgroup.option("--checkpoint", default=None, help="Model checkpoint name (e.g. openfold3_p2_v1)")
 @optgroup.option("--runner-yaml", type=click.Path(exists=True), default=None,
                  help="Runner YAML for advanced config (e.g. disable DeepSpeed for H200)")

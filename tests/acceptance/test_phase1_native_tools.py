@@ -83,8 +83,7 @@ class TestBoltzNative:
              "--recycling_steps", "3",
              "--output_format", "mmcif",
              "--accelerator", "gpu"],
-            gpu=True, binds=binds, timeout=1800, no_dev_overlay=True,
-            env={"BOLTZ_CACHE": "/local_databases/boltz"},
+            gpu=True, binds=binds, timeout=1800,            env={"BOLTZ_CACHE": "/local_databases/boltz"},
         )
         assert result.returncode == 0, (
             f"boltz protein+msa failed (rc={result.returncode}).\n"
@@ -107,8 +106,7 @@ class TestBoltzNative:
              "--recycling_steps", "3",
              "--output_format", "mmcif",
              "--accelerator", "gpu"],
-            gpu=True, binds=binds, timeout=60, no_dev_overlay=True,
-            env={"BOLTZ_CACHE": "/local_databases/boltz"},
+            gpu=True, binds=binds, timeout=60,            env={"BOLTZ_CACHE": "/local_databases/boltz"},
         )
         # Document: does boltz reject protein without MSA?
         if result.returncode != 0:
@@ -134,8 +132,7 @@ class TestBoltzNative:
              "--recycling_steps", "3",
              "--output_format", "mmcif",
              "--accelerator", "gpu"],
-            gpu=True, binds=binds, timeout=1800, no_dev_overlay=True,
-            env={"BOLTZ_CACHE": "/local_databases/boltz"},
+            gpu=True, binds=binds, timeout=1800,            env={"BOLTZ_CACHE": "/local_databases/boltz"},
         )
         assert result.returncode == 0, (
             f"boltz protein+msa:empty failed (rc={result.returncode}).\n"
@@ -158,8 +155,7 @@ class TestBoltzNative:
              "--recycling_steps", "3",
              "--output_format", "mmcif",
              "--accelerator", "gpu"],
-            gpu=True, binds=binds, timeout=1800, no_dev_overlay=True,
-            env={"BOLTZ_CACHE": "/local_databases/boltz"},
+            gpu=True, binds=binds, timeout=1800,            env={"BOLTZ_CACHE": "/local_databases/boltz"},
         )
         assert result.returncode == 0, (
             f"boltz dna-only failed (rc={result.returncode}).\n"
@@ -185,8 +181,7 @@ class TestESMFoldNative:
              "-o", "/output",
              "--num-recycles", "4",
              "--fp16"],
-            gpu=True, binds=binds, timeout=120, no_dev_overlay=True,
-        )
+            gpu=True, binds=binds, timeout=120,        )
         assert result.returncode == 0, (
             f"esm-fold-hf failed (rc={result.returncode}).\n"
             f"STDERR:\n{result.stderr[-2000:]}"
@@ -205,8 +200,7 @@ class TestESMFoldNative:
              "-o", "/output",
              "--num-recycles", "4",
              "--cpu-only"],
-            gpu=False, binds=binds, timeout=300, no_dev_overlay=True,
-        )
+            gpu=False, binds=binds, timeout=300,        )
         assert result.returncode == 0, (
             f"esm-fold-hf CPU failed (rc={result.returncode}).\n"
             f"STDERR:\n{result.stderr[-2000:]}"
@@ -253,8 +247,7 @@ class TestChaiNative:
              "--num-trunk-recycles", "3",
              "--num-diffn-timesteps", "200",
              "--device", "cuda"],
-            gpu=True, binds=binds, timeout=1800, no_dev_overlay=True,
-            env={"CHAI_DOWNLOADS_DIR": "/local_databases/chai"},
+            gpu=True, binds=binds, timeout=1800,            env={"CHAI_DOWNLOADS_DIR": "/local_databases/chai"},
         )
         assert result.returncode == 0, (
             f"chai-lab protein failed (rc={result.returncode}).\n"
@@ -284,8 +277,7 @@ class TestChaiNative:
              "--num-diffn-timesteps", "200",
              "--msa-directory", "/data/msa",
              "--device", "cuda"],
-            gpu=True, binds=binds, timeout=1800, no_dev_overlay=True,
-            env={"CHAI_DOWNLOADS_DIR": "/local_databases/chai"},
+            gpu=True, binds=binds, timeout=1800,            env={"CHAI_DOWNLOADS_DIR": "/local_databases/chai"},
         )
         assert result.returncode == 0, (
             f"chai-lab protein+msa failed (rc={result.returncode}).\n"
@@ -308,8 +300,7 @@ class TestChaiNative:
              "--num-trunk-recycles", "3",
              "--num-diffn-timesteps", "200",
              "--device", "cuda"],
-            gpu=True, binds=binds, timeout=1800, no_dev_overlay=True,
-            env={"CHAI_DOWNLOADS_DIR": "/local_databases/chai"},
+            gpu=True, binds=binds, timeout=1800,            env={"CHAI_DOWNLOADS_DIR": "/local_databases/chai"},
         )
         assert result.returncode == 0, (
             f"chai-lab dna failed (rc={result.returncode}).\n"
@@ -364,8 +355,7 @@ class TestOpenFoldNative:
              "--use-msa-server", "False",
              "--use-templates", "False",
              "--inference-ckpt-path", "/local_databases/openfold/of3-p2-155k.pt"],
-            gpu=True, binds=binds, timeout=1800, no_dev_overlay=True,
-        )
+            gpu=True, binds=binds, timeout=1800,        )
         assert result.returncode == 0, (
             f"run_openfold protein failed (rc={result.returncode}).\n"
             f"STDOUT:\n{result.stdout[-2000:]}\n"
@@ -393,8 +383,7 @@ class TestOpenFoldNative:
              "--use-msa-server", "False",
              "--use-templates", "False",
              "--inference-ckpt-path", "/local_databases/openfold/of3-p2-155k.pt"],
-            gpu=True, binds=binds, timeout=1800, no_dev_overlay=True,
-        )
+            gpu=True, binds=binds, timeout=1800,        )
         assert result.returncode == 0, (
             f"run_openfold protein+msa failed (rc={result.returncode}).\n"
             f"STDOUT:\n{result.stdout[-2000:]}\n"
@@ -421,8 +410,7 @@ class TestOpenFoldNative:
              "--use-msa-server", "False",
              "--use-templates", "False",
              "--inference-ckpt-path", "/local_databases/openfold/of3-p2-155k.pt"],
-            gpu=True, binds=binds, timeout=1800, no_dev_overlay=True,
-        )
+            gpu=True, binds=binds, timeout=1800,        )
         assert result.returncode == 0, (
             f"run_openfold dna failed (rc={result.returncode}).\n"
             f"STDOUT:\n{result.stdout[-2000:]}\n"
@@ -459,8 +447,7 @@ class TestAlphaFoldNative:
              "--max_template_date", "2022-01-01",
              "--nouse_gpu_relax",
              "--random_seed", "42"],
-            gpu=True, binds=binds, timeout=3600, no_dev_overlay=True,
-        )
+            gpu=True, binds=binds, timeout=3600,        )
         assert result.returncode == 0, (
             f"run_alphafold.py failed (rc={result.returncode}).\n"
             f"STDOUT:\n{result.stdout[-2000:]}\n"

@@ -37,7 +37,7 @@ class ExecResult:
 class ApptainerRunner:
     """Execute commands inside an Apptainer/Singularity container."""
 
-    def __init__(self, sif_path: str, gpu_id: str | None = None, mount_dev: bool = True):
+    def __init__(self, sif_path: str, gpu_id: str | None = None):
         self.sif = sif_path
         self.name = Path(sif_path).stem
         # Pin to a single GPU. Inherits CUDA_VISIBLE_DEVICES from env if set,
@@ -46,10 +46,6 @@ class ApptainerRunner:
         # Accepts a single GPU ("0") or multiple ("1,2,3,4") for tools
         # that benefit from multi-GPU (e.g. AlphaFold/JAX).
         self.gpu_id = gpu_id or os.environ.get("CUDA_VISIBLE_DEVICES", "0")
-        # Mount the dev predict_structure/ package into the container so we
-        # can test code changes without rebuilding the container.
-        self.mount_dev = mount_dev
-        self._dev_package = PROJECT_ROOT / "predict_structure"
 
     def exec(
         self,
@@ -59,7 +55,6 @@ class ApptainerRunner:
         ro_binds: dict[str, str] | None = None,
         timeout: int = 600,
         env: dict[str, str] | None = None,
-        no_dev_overlay: bool = False,
     ) -> ExecResult:
         """Run a command inside the container.
 
@@ -93,14 +88,14 @@ class ApptainerRunner:
         }
         for key, val in cache_env.items():
             cmd.extend(["--env", f"{key}={val}"])
-        if self.mount_dev and self._dev_package.is_dir() and not no_dev_overlay:
-            # Overlay the dev predict_structure/ package into the container's
-            # installed site-packages so code changes are tested immediately.
-            # NOTE: This bind can interfere with other conda envs in the SIF
-            # (numba in boltz loses squashfs file locators). Disable for
-            # native tool tests that don't use predict-structure.
-            container_pkg = "/opt/conda-predict/lib/python3.12/site-packages/predict_structure"
-            cmd.extend(["--bind", f"{self._dev_package}:{container_pkg}"])
+        # Mount dev code at /mnt and prepend to PYTHONPATH so it takes
+        # precedence over the container's installed version. This avoids
+        # binding over /opt/conda-predict/ which breaks JIT compilation
+        # in other conda envs (numba in Boltz, triton/evoformer in OpenFold).
+        dev_pkg = PROJECT_ROOT / "predict_structure"
+        if dev_pkg.is_dir():
+            cmd.extend(["--bind", f"{PROJECT_ROOT}:/mnt/predict-structure"])
+            cmd.extend(["--env", "PYTHONPATH=/mnt/predict-structure"])
         if gpu:
             cmd.append("--nv")
             # Pin to a single GPU to prevent tools (JAX/AlphaFold) from

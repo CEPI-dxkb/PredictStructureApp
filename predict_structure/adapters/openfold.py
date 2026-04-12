@@ -56,7 +56,7 @@ class OpenFoldAdapter(BaseAdapter):
             Path to the written JSON query file.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
-        use_msas = kwargs.get("use_msa_server", True)
+        use_msas = kwargs.get("use_msa_server", False)
         return entities_to_openfold_json(
             entity_list,
             output_dir / "query.json",
@@ -95,12 +95,13 @@ class OpenFoldAdapter(BaseAdapter):
         num_model_seeds = kwargs.get("num_model_seeds", 1)
         cmd.extend(["--num-model-seeds", str(num_model_seeds)])
 
-        # MSA server (default True for OpenFold 3)
-        use_msa_server = kwargs.get("use_msa_server", True)
+        # MSA server disabled by default -- our use case is all-local
+        # (either no MSA or a precomputed MSA file)
+        use_msa_server = kwargs.get("use_msa_server", False)
         cmd.extend(["--use-msa-server", str(use_msa_server)])
 
-        # Templates (default True)
-        use_templates = kwargs.get("use_templates", True)
+        # Templates disabled by default (evoformer_attn JIT fails on H200)
+        use_templates = kwargs.get("use_templates", False)
         cmd.extend(["--use-templates", str(use_templates)])
 
         # Checkpoint: explicit path from data dir, or named checkpoint
@@ -117,10 +118,19 @@ class OpenFoldAdapter(BaseAdapter):
             except (FileNotFoundError, KeyError):
                 pass  # Let OF3 use its default download location
 
-        # Runner YAML for platform-specific settings (e.g. H200 DeepSpeed fix)
+        # Runner YAML for platform-specific settings (e.g. H200 DeepSpeed fix).
+        # Auto-resolve from data directory if not explicitly provided.
         runner_yaml = kwargs.get("runner_yaml")
         if runner_yaml:
             cmd.extend(["--runner-yaml", str(runner_yaml)])
+        else:
+            try:
+                data_dir = get_data_dir("openfold")
+                runner = data_dir / "runner.yml"
+                if runner.exists():
+                    cmd.extend(["--runner-yaml", str(runner)])
+            except (FileNotFoundError, KeyError):
+                pass
 
         return cmd
 
