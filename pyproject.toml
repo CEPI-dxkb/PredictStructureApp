@@ -45,6 +45,11 @@ cwl = [
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "pytest-timeout>=2.2",
+    "pytest-xdist>=3.5",
+    "pytest-json-report>=1.5",
+    "filelock>=3.12",
+    "jsonschema>=4.17",
     "black>=23.0",
     "ruff>=0.1",
     "mypy>=1.0",
@@ -91,4 +96,10 @@ markers = [
     "cwl: CWL validation tests (no Docker or GPU needed)",
     "docker: requires Docker daemon",
     "gpu: requires GPU hardware",
+    "slow: tests taking > 5 minutes (AlphaFold, full Boltz)",
+    "container: requires Apptainer container",
+    "workspace: requires BV-BRC workspace token",
+    "phase1: Phase 1 native tool tests",
+    "phase2: Phase 2 CLI integration tests",
+    "phase3: Phase 3 service script + workspace tests",
 ]

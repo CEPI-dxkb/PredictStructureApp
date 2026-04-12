@@ -256,6 +256,12 @@ def entities_to_boltz_yaml(
             entry["sequence"] = entity.value
             if msa_path is not None:
                 entry["msa"] = str(msa_path.resolve())
+            else:
+                # Single-sequence mode: Boltz requires an explicit msa field
+                # for protein chains. Setting "empty" avoids the error
+                # "Missing MSA's in input and --use_msa_server flag not set"
+                # at the cost of reduced prediction accuracy.
+                entry["msa"] = "empty"
             sequences.append({"protein": entry})
 
         elif entity.entity_type == EntityType.DNA:
