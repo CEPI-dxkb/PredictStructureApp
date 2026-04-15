@@ -411,11 +411,12 @@ inputs:
       valueFrom: |
         ${
           if (inputs.tool === "alphafold") {
-            return self;
+            if (self) { return self; }
+            return "/local_databases/alphafold/databases";
           }
           return null;
         }
-    doc: "AlphaFold2 database directory (~2TB) [default: /databases]"
+    doc: "AlphaFold2 database directory [default: /local_databases/alphafold/databases]"
 
   af2_model_preset:
     type: string?
