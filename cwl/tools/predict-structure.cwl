@@ -68,6 +68,7 @@ hints:
     cudaDeviceCountMax: 1
   gowe:Execution:
     executor: worker
+    gpu: true
   gowe:ResourceData:
     datasets:
       - id: boltz
