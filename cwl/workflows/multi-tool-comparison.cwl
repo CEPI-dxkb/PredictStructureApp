@@ -3,37 +3,18 @@ class: Workflow
 
 label: "Multi-Tool Structure Prediction Comparison"
 doc: |
-  Runs multiple folding tools on the same input, extracts the best
-  structure from each, and compares them pairwise using protein_compare.
+  Runs Boltz, OpenFold, Chai, and ESMFold on the same input, extracts
+  the best structure from each, renames them by tool, and compares all
+  pairwise using protein_compare batch.
 
-  Default tools: Boltz, OpenFold, Chai, ESMFold (AlphaFold excluded
-  due to long runtime and large database requirements).
-
-  Architecture:
-    protein.fasta ──┬─ predict (boltz)    → extract → boltz.pdb
-                    ├─ predict (openfold) → extract → openfold.pdb
-                    ├─ predict (chai)     → extract → chai.pdb
-                    └─ predict (esmfold)  → extract → esmfold.pdb
-                                                        ↓
-                                               protein_compare batch
-                                                        ↓
-                                               report.html + results.csv
+  Output files are named model_1.<tool>.pdb for clear identification
+  in the comparison report.
 
 requirements:
-  ScatterFeatureRequirement: {}
   InlineJavascriptRequirement: {}
+  MultipleInputFeatureRequirement: {}
 
 inputs:
-  # --- Tool selection ---
-  tools:
-    type:
-      type: array
-      items:
-        type: enum
-        symbols: [boltz, openfold, chai, alphafold, esmfold]
-    default: [boltz, openfold, chai, esmfold]
-    doc: "Tools to run and compare [default: boltz, openfold, chai, esmfold]"
-
   # --- Entity inputs ---
   protein:
     type:
@@ -70,7 +51,7 @@ inputs:
   output_dir:
     type: string
     default: output
-    doc: "Output directory for predictions"
+    doc: "Output directory"
   num_samples:
     type: int?
     doc: "Number of structure samples"
@@ -109,11 +90,12 @@ inputs:
     doc: "Use pLDDT-weighted RMSD in comparison"
 
 steps:
-  predict:
+  # --- Predict with each tool ---
+
+  predict_boltz:
     run: ../tools/predict-structure.cwl
-    scatter: tool
     in:
-      tool: tools
+      tool: { default: boltz }
       protein: protein
       dna: dna
       rna: rna
@@ -128,17 +110,128 @@ steps:
       output_format: output_format
     out: [predictions]
 
-  extract:
-    run: ../tools/select-structure.cwl
-    scatter: predictions
+  predict_openfold:
+    run: ../tools/predict-structure.cwl
     in:
-      predictions: predict/predictions
+      tool: { default: openfold }
+      protein: protein
+      dna: dna
+      rna: rna
+      ligand: ligand
+      smiles: smiles
+      output_dir: output_dir
+      num_samples: num_samples
+      num_recycles: num_recycles
+      seed: seed
+      msa: msa
+      device: device
+      output_format: output_format
+    out: [predictions]
+
+  predict_chai:
+    run: ../tools/predict-structure.cwl
+    in:
+      tool: { default: chai }
+      protein: protein
+      dna: dna
+      rna: rna
+      ligand: ligand
+      smiles: smiles
+      output_dir: output_dir
+      num_samples: num_samples
+      num_recycles: num_recycles
+      seed: seed
+      msa: msa
+      device: device
+      output_format: output_format
+    out: [predictions]
+
+  predict_esmfold:
+    run: ../tools/predict-structure.cwl
+    in:
+      tool: { default: esmfold }
+      protein: protein
+      dna: dna
+      rna: rna
+      ligand: ligand
+      smiles: smiles
+      output_dir: output_dir
+      num_samples: num_samples
+      num_recycles: num_recycles
+      seed: seed
+      msa: msa
+      device: device
+      output_format: output_format
+    out: [predictions]
+
+  # --- Extract structures ---
+
+  extract_boltz:
+    run: ../tools/select-structure.cwl
+    in:
+      predictions: predict_boltz/predictions
     out: [structure]
+
+  extract_openfold:
+    run: ../tools/select-structure.cwl
+    in:
+      predictions: predict_openfold/predictions
+    out: [structure]
+
+  extract_chai:
+    run: ../tools/select-structure.cwl
+    in:
+      predictions: predict_chai/predictions
+    out: [structure]
+
+  extract_esmfold:
+    run: ../tools/select-structure.cwl
+    in:
+      predictions: predict_esmfold/predictions
+    out: [structure]
+
+  # --- Rename with tool suffix ---
+
+  rename_boltz:
+    run: ../tools/rename-structure.cwl
+    in:
+      structure: extract_boltz/structure
+      tool: { default: boltz }
+    out: [renamed]
+
+  rename_openfold:
+    run: ../tools/rename-structure.cwl
+    in:
+      structure: extract_openfold/structure
+      tool: { default: openfold }
+    out: [renamed]
+
+  rename_chai:
+    run: ../tools/rename-structure.cwl
+    in:
+      structure: extract_chai/structure
+      tool: { default: chai }
+    out: [renamed]
+
+  rename_esmfold:
+    run: ../tools/rename-structure.cwl
+    in:
+      structure: extract_esmfold/structure
+      tool: { default: esmfold }
+    out: [renamed]
+
+  # --- Compare all structures ---
 
   compare:
     run: ../tools/protein-compare-batch.cwl
     in:
-      structures: extract/structure
+      structures:
+        source:
+          - rename_boltz/renamed
+          - rename_openfold/renamed
+          - rename_chai/renamed
+          - rename_esmfold/renamed
+        linkMerge: merge_flattened
       output_csv:
         default: results.csv
       output_html:
@@ -151,20 +244,34 @@ steps:
 outputs:
   predictions:
     type: Directory[]
-    outputSource: predict/predictions
+    outputSource:
+      - predict_boltz/predictions
+      - predict_openfold/predictions
+      - predict_chai/predictions
+      - predict_esmfold/predictions
+    linkMerge: merge_flattened
     doc: "Prediction output directories (one per tool)"
+
   structures:
     type: File[]
-    outputSource: extract/structure
-    doc: "Extracted structure files (one per tool)"
+    outputSource:
+      - rename_boltz/renamed
+      - rename_openfold/renamed
+      - rename_chai/renamed
+      - rename_esmfold/renamed
+    linkMerge: merge_flattened
+    doc: "Renamed structure files (model_1.boltz.pdb, etc.)"
+
   comparison_report:
     type: File?
     outputSource: compare/comparison_html
     doc: "HTML comparison report"
+
   comparison_csv:
     type: File
     outputSource: compare/comparison_csv
     doc: "CSV with pairwise TM-score, RMSD, etc."
+
   comparison_json:
     type: File?
     outputSource: compare/comparison_json
