@@ -171,3 +171,38 @@ after the full workflow completes would produce the correct report.
 **Root cause:** Likely a GoWe issue with `linkMerge: merge_flattened` across
 multiple source steps. The CWL spec requires all sources to be resolved before
 the step can execute.
+
+---
+
+## Phase 1 on base-gpu.2026-04-16.001.sif (2026-04-20)
+
+Base container from `/container-build/gpu-builds/cuda-12.2-cudnn-8.9.6/`.
+Contains Boltz, Chai, AlphaFold, DiffDock. Missing OpenFold, ESMFold,
+predict-structure CLI, and the BV-BRC service layer.
+
+Ran partial Phase 1 (Boltz/Chai/AlphaFold only -- 8 of 13 tests):
+
+| Test | Status | Time |
+|------|--------|------|
+| Boltz protein+msa | PASS | 60s |
+| Boltz protein (no msa) | PASS | 17s |
+| Boltz protein msa:empty | PASS | 58s |
+| Boltz dna | PASS | 64s |
+| Chai protein | PASS | 65s |
+| Chai protein+msa | PASS | 66s |
+| Chai dna | PASS | 64s |
+| AlphaFold protein | PASS | 1530s (26m) |
+
+**8/8 PASS (32 min total)** -- base-gpu tools work correctly.
+
+### Missing Components
+
+To make base-gpu a full folding container, need to add:
+- `/opt/conda-openfold/bin/run_openfold` (OpenFold 3)
+- `/opt/conda-esmfold/bin/esm-fold-hf` (ESMFold)
+- `/opt/conda-predict/bin/predict-structure` (unified CLI)
+- `/kb/module/` + `/opt/patric-common/deployment` (BV-BRC layer)
+
+Attempted to build via Apptainer `%post` -- failed with fakeroot uid/gid
+extraction errors on the 33 GB base SIF. Working alternative: writable
+overlay at `/scout/tmp/folding_overlay.img` (40 GB).
