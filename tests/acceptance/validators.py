@@ -138,6 +138,21 @@ def validate_output_directory(
             elif len(residues) > 0:
                 result.passed("confidence_residue_count", f"{len(residues)} residues")
 
+            # Optional per_atom_plddt field (added in 2026-04-23)
+            atoms = conf_data.get("per_atom_plddt")
+            if atoms is not None:
+                if len(atoms) < len(residues):
+                    result.failed(
+                        "confidence_atom_count",
+                        f"per_atom_plddt ({len(atoms)}) shorter than per_residue_plddt ({len(residues)})",
+                    )
+                else:
+                    ratio = len(atoms) / len(residues) if residues else 0
+                    result.passed(
+                        "confidence_atom_count",
+                        f"{len(atoms)} atoms ({ratio:.1f} atoms/residue)",
+                    )
+
         except json.JSONDecodeError as e:
             result.failed("confidence_json_parse", str(e))
         except jsonschema.ValidationError as e:

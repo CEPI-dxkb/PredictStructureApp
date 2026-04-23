@@ -31,6 +31,31 @@ class TestWriteConfidenceJson:
         data = json.loads(path.read_text())
         assert data["ptm"] is None
 
+    def test_per_atom_plddt_optional(self, tmp_output):
+        """per_atom_plddt is optional; omitted when not provided."""
+        from predict_structure.normalizers import write_confidence_json
+
+        path = write_confidence_json(
+            tmp_output, plddt_mean=50.0, ptm=None,
+            per_residue_plddt=[50.0],
+        )
+        data = json.loads(path.read_text())
+        assert "per_atom_plddt" not in data
+
+    def test_per_atom_plddt_included(self, tmp_output):
+        """per_atom_plddt is written when provided, length >= per_residue."""
+        from predict_structure.normalizers import write_confidence_json
+
+        path = write_confidence_json(
+            tmp_output, plddt_mean=70.0, ptm=0.5,
+            per_residue_plddt=[70.0, 72.0],  # 2 residues
+            per_atom_plddt=[70.1, 70.0, 70.2, 69.8, 70.0, 72.1, 72.0, 72.3, 71.8, 72.0],  # 10 atoms
+        )
+        data = json.loads(path.read_text())
+        assert "per_atom_plddt" in data
+        assert len(data["per_atom_plddt"]) == 10
+        assert len(data["per_atom_plddt"]) >= len(data["per_residue_plddt"])
+
 
 class TestWriteMetadataJson:
     def test_schema(self, tmp_output):

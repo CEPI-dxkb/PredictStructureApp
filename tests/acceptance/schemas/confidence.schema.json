@@ -27,6 +27,16 @@
         "maximum": 100
       },
       "description": "Per-residue pLDDT array (0-100 scale)."
+    },
+    "per_atom_plddt": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 100
+      },
+      "description": "Optional per-atom pLDDT (0-100), ordered to match ATOM records in model_1.pdb. For AF3-style tools (Boltz, Chai, OpenFold) this contains true per-atom values; for AF2/ESMFold the per-residue value is replicated across each residue's atoms. Length >= per_residue_plddt length."
     }
   },
   "additionalProperties": true
