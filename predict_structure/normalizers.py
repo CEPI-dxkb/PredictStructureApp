@@ -56,7 +56,12 @@ def write_confidence_json(
         "ptm": round(ptm, 4) if ptm is not None else None,
         "per_residue_plddt": [round(v, 2) for v in per_residue_plddt],
     }
-    if per_atom_plddt:
+    if per_atom_plddt is not None:
+        if len(per_atom_plddt) < len(per_residue_plddt):
+            raise ValueError(
+                f"per_atom_plddt ({len(per_atom_plddt)}) shorter than "
+                f"per_residue_plddt ({len(per_residue_plddt)})"
+            )
         data["per_atom_plddt"] = [round(v, 2) for v in per_atom_plddt]
     path.write_text(json.dumps(data, indent=2))
     return path
@@ -94,18 +99,22 @@ def write_metadata_json(
 
 
 def _extract_bfactors(pdb_path: Path) -> tuple[list[float], list[float]]:
-    """Extract CA and all-atom B-factors from a PDB file in one pass.
+    """Extract per-residue and per-atom B-factors from a PDB file in one pass.
 
-    Hetatms (ligands, waters) are excluded from the all-atom list so the
-    result aligns with ATOM records in model_1.pdb. Only the first model
-    is read.
+    Hetatms (ligands, waters) are excluded from both lists. Only the first
+    model is read.
+
+    Per-residue convention:
+      - Protein residues: CA atom's B-factor (standard pLDDT convention).
+      - DNA/RNA residues: C1' (sugar carbon; standard backbone reference).
+      - Fallback (no CA or C1'): first atom in the residue.
 
     Returns:
-        (ca_bfactors, all_atom_bfactors)
+        (per_residue_bfactors, per_atom_bfactors)
     """
     parser = PDBParser(QUIET=True)
     structure = parser.get_structure("s", str(pdb_path))
-    ca: list[float] = []
+    per_residue: list[float] = []
     all_atom: list[float] = []
     for model in structure:
         for chain in model:
@@ -114,21 +123,30 @@ def _extract_bfactors(pdb_path: Path) -> tuple[list[float], list[float]]:
                 # " " means a standard residue, anything else is a hetatm.
                 if residue.id[0] != " ":
                     continue
-                for atom in residue:
-                    all_atom.append(atom.get_bfactor())
+                residue_atoms = list(residue)
+                if not residue_atoms:
+                    continue
+                all_atom.extend(a.get_bfactor() for a in residue_atoms)
+                # Pick a representative atom: CA for protein, C1' for
+                # nucleic acids, else first atom.
                 if "CA" in residue:
-                    ca.append(residue["CA"].get_bfactor())
+                    rep = residue["CA"]
+                elif "C1'" in residue:
+                    rep = residue["C1'"]
+                else:
+                    rep = residue_atoms[0]
+                per_residue.append(rep.get_bfactor())
         break  # first model only
-    return ca, all_atom
+    return per_residue, all_atom
 
 
 def _extract_ca_bfactors(pdb_path: Path) -> list[float]:
-    """Return per-residue pLDDT via CA B-factors (thin wrapper for back-compat)."""
+    """Return per-residue pLDDT (thin wrapper for back-compat)."""
     return _extract_bfactors(pdb_path)[0]
 
 
 def _extract_all_atom_bfactors(pdb_path: Path) -> list[float]:
-    """Return per-atom pLDDT via all-atom B-factors (thin wrapper for back-compat)."""
+    """Return per-atom pLDDT (thin wrapper for back-compat)."""
     return _extract_bfactors(pdb_path)[1]
 
 
@@ -222,6 +240,10 @@ def normalize_boltz_output(raw_dir: Path, output_dir: Path) -> Path:
 
     if plddt_array or ptm is not None:
         _, per_atom = _extract_bfactors(output_dir / "model_1.pdb")
+        # Apply the same 0-1 -> 0-100 heuristic as per-residue so both
+        # arrays share the same scale.
+        if per_atom and max(per_atom) <= 1.0:
+            per_atom = [v * 100 for v in per_atom]
         write_confidence_json(output_dir, plddt_mean, ptm, plddt_array,
                               per_atom_plddt=per_atom)
     else:

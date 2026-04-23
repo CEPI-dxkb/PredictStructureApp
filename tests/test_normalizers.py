@@ -85,10 +85,11 @@ class TestNormalizeBoltzOutput:
         pred_dir = raw / "predictions" / "test_input"
         pred_dir.mkdir(parents=True)
 
-        # Minimal PDB content for CIF conversion test — write as .cif
-        # Use a minimal PDB file and rename it to test the flow
+        # Minimal PDB with 3 residues (matching length of mock plddt array below)
         pdb_content = (
-            "ATOM      1  CA  ALA A   1       1.000   2.000   3.000  1.00  0.85           C\n"
+            "ATOM      1  CA  ALA A   1       1.000   2.000   3.000  1.00  0.91           C\n"
+            "ATOM      2  CA  GLY A   2       4.000   5.000   6.000  1.00  0.88           C\n"
+            "ATOM      3  CA  SER A   3       7.000   8.000   9.000  1.00  0.85           C\n"
             "END\n"
         )
         # Write a real PDB and convert to CIF for the test fixture

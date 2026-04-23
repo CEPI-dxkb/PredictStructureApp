@@ -282,8 +282,15 @@ directly, either provide an MSA file or use `msa: empty` in the YAML.
 ## Container Build
 
 The folding container is built in stages using apptainer definition files
-from the runtime_build repository at
-`/home/wilke/Development/runtime_build/gpu-builds/cuda-12.2-cudnn-8.9.6/`:
+from the `runtime_build` repository. Set `RUNTIME_BUILD` to its
+`gpu-builds/cuda-12.2-cudnn-8.9.6/` directory (layout identical across
+checkouts):
+
+```bash
+export RUNTIME_BUILD=<path-to-runtime_build>/gpu-builds/cuda-12.2-cudnn-8.9.6
+```
+
+Stages:
 
 1. `base-build.def` -- CUDA + cuDNN + miniforge
 2. `reqts-boltz.def` -- Boltz 2
@@ -294,45 +301,49 @@ from the runtime_build repository at
 7. `reqts-predict-structure.def` -- predict-structure CLI (from GitHub)
 8. `reqts-bvbrc-service.def` -- BV-BRC AppService layer (final production SIF)
 
-### Build Flags (required on this host)
+### Build Flags
 
-Two flags are required because `wilke` is not in `/etc/subuid`/`/etc/subgid`:
+Two flags are required when the build user is **not** in `/etc/subuid` /
+`/etc/subgid`:
 
 ```bash
 --fakeroot                      # required for %post script
-APPTAINER_TMPDIR=/scout/tmp    # default /tmp is too small (50GB) for 33GB SIF extraction
+APPTAINER_TMPDIR=<big-scratch>  # /tmp is often a small tmpfs (e.g. 50GB) and
+                                # can't hold a 30GB+ SIF extraction
 ```
+
+Pick `APPTAINER_TMPDIR` to point at a filesystem with at least ~1.5x the
+base SIF size free.
 
 ### Build Command Template
 
 ```bash
-APPTAINER_TMPDIR=/scout/tmp apptainer build --fakeroot \
+APPTAINER_TMPDIR=$APPTAINER_TMPDIR apptainer build --fakeroot \
   --build-arg base=<previous_stage>.sif \
   <output>.sif \
-  /home/wilke/Development/runtime_build/gpu-builds/cuda-12.2-cudnn-8.9.6/reqts-<tool>.def
+  $RUNTIME_BUILD/reqts-<tool>.def
 ```
 
 For the BV-BRC service layer (final stage), add `app_repo`:
 
 ```bash
-APPTAINER_TMPDIR=/scout/tmp apptainer build --fakeroot \
-  --build-arg base=/scout/containers/base-gpu.YYYY-MM-DD.NNN.sif \
+APPTAINER_TMPDIR=$APPTAINER_TMPDIR apptainer build --fakeroot \
+  --build-arg base=<containers-dir>/base-gpu.YYYY-MM-DD.NNN.sif \
   --build-arg app_repo=https://github.com/CEPI-dxkb/PredictStructureApp.git \
-  /scout/containers/folding_YYMMDD.N.sif \
-  /home/wilke/Development/runtime_build/gpu-builds/cuda-12.2-cudnn-8.9.6/reqts-bvbrc-service.def
+  <containers-dir>/folding_YYMMDD.N.sif \
+  $RUNTIME_BUILD/reqts-bvbrc-service.def
 ```
 
-### Exact Build for folding_260422.1.sif
+### Example Build (folding_260422.1.sif)
 
-Built 2026-04-22 14:57 CDT from `base-gpu.2026-04-22.002.sif` via
-`reqts-bvbrc-service.def`. Based on the def file recovered from the SIF:
+Built from `base-gpu.2026-04-22.002.sif` via `reqts-bvbrc-service.def`:
 
 ```bash
-APPTAINER_TMPDIR=/scout/tmp apptainer build --fakeroot \
-  --build-arg base=/scout/tmp/base-gpu.2026-04-22.002.sif \
+APPTAINER_TMPDIR=$APPTAINER_TMPDIR apptainer build --fakeroot \
+  --build-arg base=<containers-dir>/base-gpu.2026-04-22.002.sif \
   --build-arg app_repo=https://github.com/CEPI-dxkb/PredictStructureApp.git \
-  /scout/containers/folding_260422.1.sif \
-  /home/wilke/Development/runtime_build/gpu-builds/cuda-12.2-cudnn-8.9.6/reqts-bvbrc-service.def
+  <containers-dir>/folding_260422.1.sif \
+  $RUNTIME_BUILD/reqts-bvbrc-service.def
 ```
 
 Note: This installs predict-structure from GitHub **main** branch. To pick up

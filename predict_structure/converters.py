@@ -432,14 +432,21 @@ def entities_to_openfold_json(
                 chain_msa_dir = msa_staging_dir / f"chain_{entity.chain_id}"
                 chain_msa_dir.mkdir(exist_ok=True)
                 staged = chain_msa_dir / f"{OPENFOLD3_MSA_BASENAME}{msa_ext}"
+                # Remove any existing entry at the staged path to guarantee
+                # we never copy *through* a stale symlink into the user's
+                # original MSA file.
+                if staged.is_symlink() or staged.exists():
+                    staged.unlink()
                 try:
                     staged.symlink_to(msa_source)
-                except (OSError, FileExistsError):
-                    shutil.copy2(str(msa_source), str(staged))
-                # Use absolute path but do NOT resolve symlinks -- OpenFold
-                # infers the MSA type from the basename, so we must keep the
-                # staged basename (colabfold_main) rather than resolving back
-                # to the user's original filename.
+                except OSError:
+                    # Cross-device, unsupported FS, or no symlink privilege.
+                    # follow_symlinks=False ensures we write to `staged` even
+                    # if something re-creates it as a symlink before we copy.
+                    shutil.copy2(str(msa_source), str(staged),
+                                 follow_symlinks=False)
+                # Keep the staged basename -- OpenFold infers MSA type from it,
+                # so we must not resolve back to the user's original filename.
                 chain["main_msa_file_paths"] = [str(staged.absolute())]
         elif entity.entity_type == EntityType.DNA:
             chain["molecule_type"] = "dna"
