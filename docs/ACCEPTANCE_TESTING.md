@@ -117,6 +117,23 @@ CUDA_VISIBLE_DEVICES=0 PREDICT_STRUCTURE_SIF=/scout/containers/folding_prod.sif 
   --json-report --json-report-file=output/phase3.json
 ```
 
+**Two modes for `test_phase3_workspace.py`:**
+
+| Mode | When to use | How |
+|------|-------------|-----|
+| **Baked-in** (default) | Acceptance / regression testing a new container build before release -- exercises the Perl and app_spec frozen into the SIF | no env var |
+| **Dev overlay** | Iterating on `service-scripts/App-PredictStructure.pl` or `app_specs/PredictStructure.json` without rebuilding the SIF | `PREDICT_STRUCTURE_DEV_SERVICE=1` |
+
+```bash
+# Dev iteration: overlay the host's service-scripts/ and app_specs/
+PREDICT_STRUCTURE_DEV_SERVICE=1 \
+CUDA_VISIBLE_DEVICES=0 PREDICT_STRUCTURE_SIF=/scout/containers/folding_prod.sif \
+  conda run -n predict-structure python -m pytest tests/acceptance/test_phase3_workspace.py -v
+```
+
+If a Phase 3 test passes only with the overlay, the fix still needs to land
+in the container image before the build is release-ready.
+
 ### Full Suite on Both Containers in Parallel
 
 Each container on separate GPUs (requires enough GPUs):

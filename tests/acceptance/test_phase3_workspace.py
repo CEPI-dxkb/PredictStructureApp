@@ -186,3 +186,146 @@ class TestServiceScriptWithWorkspace:
                 env={"KB_AUTH_TOKEN": token},
                 timeout=30,
             )
+
+    @pytest.mark.slow
+    def test_service_chai_report_workspace_roundtrip(
+        self, container, workspace_token, tmp_path
+    ):
+        """Full Chai + report + workspace upload roundtrip.
+
+        Exercises the BV-BRC production flow end-to-end:
+          1. Upload the input FASTA to the workspace (mimics user upload)
+          2. Service script downloads input from workspace
+          3. Runs Chai-1 prediction on GPU
+          4. Runs protein_compare characterize to generate HTML/PDF/JSON report
+          5. Uploads the full normalized output directory to the workspace via p3-cp
+
+        Verifies the uploaded workspace contains both prediction artifacts
+        (model_1.pdb, confidence.json, metadata.json) and the characterization
+        report (report.html, report.json).
+        """
+        token = workspace_token.read_text().strip()
+        ws_base = f"{_ws_home(token)}/acceptance_test_chai_report"
+        ws_input = f"{ws_base}/simple_protein.fasta"
+        ws_output = ws_base
+
+        # Step 1: Upload input FASTA to workspace so the service script can
+        # download it (production path). Use p3-cp, which the service script
+        # also uses for upload.
+        container.exec(
+            ["p3-mkdir", ws_base],
+            gpu=False,
+            env={"KB_AUTH_TOKEN": token},
+            timeout=30,
+        )
+        upload_input = container.exec(
+            ["p3-cp",
+             "/data/simple_protein.fasta",
+             f"ws:{ws_input}"],
+            gpu=False,
+            env={"KB_AUTH_TOKEN": token},
+            binds={str(TEST_DATA_HOST): "/data"},
+            timeout=60,
+        )
+        assert upload_input.returncode == 0, (
+            f"Input upload failed: {upload_input.stderr}"
+        )
+
+        params = {
+            "tool": "chai",
+            "input_file": ws_input,
+            "output_path": ws_output,
+            "output_file": "chai_report_test",
+            "num_samples": 1,
+            "num_recycles": 3,
+            "sampling_steps": 200,
+            "output_format": "pdb",
+            "msa_mode": "none",
+            "seed": 42,
+        }
+
+        params_file = tmp_path / "params.json"
+        params_file.write_text(json.dumps(params, indent=2))
+
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        binds = {
+            str(TEST_DATA_HOST): "/data",
+            str(output_dir): "/output",
+            str(tmp_path): "/params",
+        }
+
+        try:
+            result = container.service(
+                params_json=Path(f"/params/{params_file.name}"),
+                binds=binds,
+                timeout=1800,
+                env={"KB_AUTH_TOKEN": token},
+            )
+            assert result.returncode == 0, (
+                f"Service script chai+report failed.\n"
+                f"STDERR:\n{result.stderr[-2000:]}"
+            )
+
+            # The BV-BRC AppScript framework uploads results into the hidden
+            # progress folder: <output_path>/.<output_file>/<run_folder>/
+            # where run_folder = <output_file>_<timestamp>_<task_id>.
+            result_parent = f"{ws_output}/.{params['output_file']}"
+            ls_parent = container.exec(
+                ["p3-ls", result_parent],
+                gpu=False,
+                env={"KB_AUTH_TOKEN": token},
+                timeout=30,
+            )
+            assert ls_parent.returncode == 0, (
+                f"Cannot list result folder {result_parent}: {ls_parent.stderr}"
+            )
+            run_dirs = [
+                s for s in ls_parent.stdout.strip().split("\n") if s
+            ]
+            assert run_dirs, (
+                f"No run subdirectory created under {result_parent}:\n"
+                f"{ls_parent.stdout}"
+            )
+            run_dir = f"{result_parent}/{run_dirs[0]}"
+
+            # List the run directory contents
+            ls_run = container.exec(
+                ["p3-ls", run_dir],
+                gpu=False,
+                env={"KB_AUTH_TOKEN": token},
+                timeout=30,
+            )
+            assert ls_run.returncode == 0, (
+                f"Cannot list run dir: {ls_run.stderr}"
+            )
+            files = ls_run.stdout.strip().split("\n")
+
+            assert any("model_1" in f for f in files), (
+                f"model_1.pdb not uploaded under {run_dir}:\n{ls_run.stdout}"
+            )
+            assert "confidence.json" in files, (
+                f"confidence.json not uploaded under {run_dir}:\n{ls_run.stdout}"
+            )
+            assert "metadata.json" in files, (
+                f"metadata.json not uploaded under {run_dir}:\n{ls_run.stdout}"
+            )
+
+            # Characterization report from `protein_compare characterize`.
+            # `-o <prefix>` writes <prefix>.html/.json/.pdf (not a directory),
+            # so these land at the top level of the run dir.
+            assert "report.html" in files, (
+                f"report.html not uploaded under {run_dir}. Files: {files}\n"
+                "protein_compare characterize may have failed -- check logs."
+            )
+            assert "report.json" in files, (
+                f"report.json not uploaded under {run_dir}. Files: {files}"
+            )
+
+        finally:
+            container.exec(
+                ["p3-rm", "-r", ws_output],
+                gpu=False,
+                env={"KB_AUTH_TOKEN": token},
+                timeout=30,
+            )

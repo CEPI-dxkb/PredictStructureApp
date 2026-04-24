@@ -454,13 +454,23 @@ sub run_report {
         return;
     }
 
-    my $report_dir = "$output_dir/report";
-    make_path($report_dir);
+    # protein_compare characterize uses -o as a filename PREFIX and writes
+    # <prefix>.html / <prefix>.json / <prefix>.pdf (not a directory). Use
+    # "<output_dir>/report" so the files land as report.html / report.json
+    # / report.pdf alongside the prediction artifacts.
+    my $report_prefix = "$output_dir/report";
+
+    # Use the predict-structure conda env's python (has protein_compare),
+    # not whatever 'python' is first on PATH (PATRIC runtime python lacks it).
+    my $bin = find_predict_structure_binary();
+    my $python = $bin;
+    $python =~ s{/predict-structure$}{/python};
+    $python = "python" unless -x $python;
 
     my @cmd = (
-        "python", "-m", "protein_compare", "characterize",
+        $python, "-m", "protein_compare", "characterize",
         $model_pdb,
-        "-o", $report_dir,
+        "-o", $report_prefix,
         "--format", "all",
     );
 
@@ -549,9 +559,9 @@ sub upload_results {
         '--map-suffix' => "png=png",
         '--map-suffix' => "svg=svg",
         '--map-suffix' => "csv=csv",
-        '--map-suffix' => "fasta=protein_feature_fasta",
-        '--map-suffix' => "fa=protein_feature_fasta",
-        '--map-suffix' => "faa=protein_feature_fasta",
+        '--map-suffix' => "fasta=contigs",
+        '--map-suffix' => "fa=contigs",
+        '--map-suffix' => "faa=feature_protein_fasta",
     );
 
     my @cmd = ("p3-cp", "--overwrite", "-r", @mapping, $local_dir, "ws:$ws_path");
