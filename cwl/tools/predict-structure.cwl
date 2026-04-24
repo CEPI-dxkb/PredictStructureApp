@@ -588,6 +588,24 @@ outputs:
       glob: "$(inputs.output_dir)/confidence.json"
     doc: "Confidence scores (pLDDT, pTM, per-residue)"
 
+  results:
+    type: File?
+    outputBinding:
+      glob: "$(inputs.output_dir)/results.json"
+    doc: "Summary + file manifest (sha256, size) for downstream pipelines"
+
+  ro_crate:
+    type: File?
+    outputBinding:
+      glob: "$(inputs.output_dir)/ro-crate-metadata.json"
+    doc: "RO-Crate 1.1 Process Run Crate provenance (best-effort)"
+
+  reports:
+    type: Directory?
+    outputBinding:
+      glob: "$(inputs.output_dir)/report"
+    doc: "Characterization reports (report.html/json/pdf) from protein_compare"
+
 stdout: predict-structure.log
 stderr: predict-structure.err
 

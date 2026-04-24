@@ -117,7 +117,11 @@ class ApptainerRunner:
         proc = subprocess.run(
             cmd,
             capture_output=True,
-            text=True,
+            # Workspace listings (p3-ls) can contain non-UTF-8 bytes from
+            # user-provided filenames. Replace undecodable bytes instead
+            # of raising UnicodeDecodeError.
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
         elapsed = time.monotonic() - start
@@ -206,6 +210,17 @@ class ApptainerRunner:
         default_binds = {}
         if Path(LOCAL_DATABASES).is_dir():
             default_binds[LOCAL_DATABASES] = LOCAL_DATABASES
+        # Opt-in: bind the dev service-scripts and app_specs dirs over the
+        # SIF's baked-in copies so edits to App-PredictStructure.pl /
+        # PredictStructure.json are testable without rebuilding the SIF.
+        # Enable with PREDICT_STRUCTURE_DEV_SERVICE=1.
+        if os.environ.get("PREDICT_STRUCTURE_DEV_SERVICE", "").lower() in ("1", "true", "yes"):
+            dev_service_scripts = PROJECT_ROOT / "service-scripts"
+            dev_app_specs = PROJECT_ROOT / "app_specs"
+            if dev_service_scripts.is_dir():
+                default_binds[str(dev_service_scripts)] = "/kb/module/service-scripts"
+            if dev_app_specs.is_dir():
+                default_binds[str(dev_app_specs)] = "/kb/module/app_specs"
         if binds:
             default_binds.update(binds)
 

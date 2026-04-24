@@ -10,18 +10,13 @@ Tests the Perl service script end-to-end inside the container:
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
-from tests.acceptance.matrix import CRAMBIN_RESIDUES
-from tests.acceptance.validators import assert_valid_output
-
 pytestmark = [pytest.mark.phase3, pytest.mark.gpu, pytest.mark.container]
 
 TEST_DATA_HOST = Path(__file__).parent.parent.parent / "test_data"
-ACCEPTANCE_DATA = TEST_DATA_HOST / "acceptance"
 
 
 def _make_binds(tmp_path: Path) -> tuple[dict[str, str], Path]:
@@ -37,13 +32,6 @@ def _make_binds(tmp_path: Path) -> tuple[dict[str, str], Path]:
         str(tmp_path): "/params",
     }
     return binds, output_dir
-
-
-def _write_params(tmp_path: Path, params: dict) -> Path:
-    """Write a params.json file and return its path."""
-    params_file = tmp_path / "params.json"
-    params_file.write_text(json.dumps(params, indent=2))
-    return params_file
 
 
 class TestPerlSyntax:
@@ -63,98 +51,55 @@ class TestPerlSyntax:
         assert "syntax OK" in result.stderr
 
 
+SERVICE_PARAMS_DIR = TEST_DATA_HOST / "service_params"
+
+
+def _load_service_params(filename: str, tmp_path: Path) -> Path:
+    """Copy a canonical service-params file into tmp_path for binding."""
+    src = SERVICE_PARAMS_DIR / filename
+    dst = tmp_path / "params.json"
+    dst.write_text(src.read_text())
+    return dst
+
+
 class TestServiceScriptExecution:
-    """Execute App-PredictStructure.pl with params JSON for each tool."""
+    """Execute App-PredictStructure.pl with canonical params JSON files.
 
-    def test_esmfold_input_file(self, container, tmp_path):
-        """ESMFold with input_file mode (fastest tool)."""
-        params = {
-            "tool": "esmfold",
-            "input_file": "/data/simple_protein.fasta",
-            "output_path": "/output",
-            "output_file": "esmfold_test",
-            "num_recycles": 4,
-            "output_format": "pdb",
-            "msa_mode": "none",
-            "seed": 42,
-            "fp16": True,
-        }
-        params_file = _write_params(tmp_path, params)
+    Param files live in test_data/service_params/ and are also used by
+    the BV-BRC test harness, so changes here track production usage.
+    """
+
+    def _run(self, container, tmp_path, params_filename, timeout):
+        params_file = _load_service_params(params_filename, tmp_path)
         binds, output_dir = _make_binds(tmp_path)
-
         result = container.service(
             params_json=Path(f"/params/{params_file.name}"),
             binds=binds,
-            timeout=300,
+            timeout=timeout,
         )
         assert result.returncode == 0, (
-            f"Service script failed (rc={result.returncode}).\n"
+            f"Service script {params_filename} failed (rc={result.returncode}).\n"
             f"STDOUT:\n{result.stdout[-2000:]}\n"
             f"STDERR:\n{result.stderr[-2000:]}"
         )
 
+    def test_esmfold_input_file(self, container, tmp_path):
+        """ESMFold with input_file mode (fastest tool)."""
+        self._run(container, tmp_path, "esmfold_input_file.json", 300)
+
     def test_esmfold_text_input(self, container, tmp_path):
         """ESMFold with text_input mode (inline sequences)."""
-        params = {
-            "tool": "esmfold",
-            "text_input": [
-                {
-                    "type": "protein",
-                    "sequence": "TTCCPSIVARSNFNVCRLPGTPEALCATYTGCIIIPGATCPGDYAN",
-                }
-            ],
-            "output_path": "/output",
-            "output_file": "esmfold_text_test",
-            "num_recycles": 4,
-            "output_format": "pdb",
-            "msa_mode": "none",
-            "seed": 42,
-            "fp16": True,
-        }
-        params_file = _write_params(tmp_path, params)
-        binds, output_dir = _make_binds(tmp_path)
-
-        result = container.service(
-            params_json=Path(f"/params/{params_file.name}"),
-            binds=binds,
-            timeout=300,
-        )
-        assert result.returncode == 0, (
-            f"Service script text_input failed.\n"
-            f"STDERR:\n{result.stderr[-2000:]}"
-        )
+        self._run(container, tmp_path, "esmfold_text_input.json", 300)
 
     @pytest.mark.slow
-    @pytest.mark.parametrize("tool,extra_params", [
-        ("boltz", {"num_samples": 1, "sampling_steps": 200}),
-        ("openfold", {"num_diffusion_samples": 1}),
-        ("chai", {"num_samples": 1, "sampling_steps": 200}),
+    @pytest.mark.parametrize("params_file", [
+        "boltz_input_file.json",
+        "openfold_input_file.json",
+        "chai_input_file.json",
     ])
-    def test_gpu_tools(self, container, tool, extra_params, tmp_path):
+    def test_gpu_tools(self, container, params_file, tmp_path):
         """GPU tools via service script with input_file mode."""
-        params = {
-            "tool": tool,
-            "input_file": "/data/simple_protein.fasta",
-            "output_path": "/output",
-            "output_file": f"{tool}_test",
-            "num_recycles": 3,
-            "output_format": "pdb",
-            "msa_mode": "none",
-            "seed": 42,
-        }
-        params.update(extra_params)
-        params_file = _write_params(tmp_path, params)
-        binds, output_dir = _make_binds(tmp_path)
-
-        result = container.service(
-            params_json=Path(f"/params/{params_file.name}"),
-            binds=binds,
-            timeout=3600,
-        )
-        assert result.returncode == 0, (
-            f"Service script {tool} failed.\n"
-            f"STDERR:\n{result.stderr[-2000:]}"
-        )
+        self._run(container, tmp_path, params_file, 3600)
 
 
 class TestServiceScriptMSAMode:
@@ -163,20 +108,8 @@ class TestServiceScriptMSAMode:
     @pytest.mark.slow
     def test_msa_upload_mode(self, container, tmp_path):
         """Boltz with msa_mode=upload and local MSA file."""
-        params = {
-            "tool": "boltz",
-            "input_file": "/data/simple_protein.fasta",
-            "output_path": "/output",
-            "output_file": "boltz_msa_test",
-            "num_samples": 1,
-            "output_format": "pdb",
-            "msa_mode": "upload",
-            "msa_file": "/data/msa/crambin.a3m",
-            "seed": 42,
-        }
-        params_file = _write_params(tmp_path, params)
+        params_file = _load_service_params("boltz_msa_upload.json", tmp_path)
         binds, output_dir = _make_binds(tmp_path)
-
         result = container.service(
             params_json=Path(f"/params/{params_file.name}"),
             binds=binds,

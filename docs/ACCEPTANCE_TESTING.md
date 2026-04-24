@@ -117,6 +117,72 @@ CUDA_VISIBLE_DEVICES=0 PREDICT_STRUCTURE_SIF=/scout/containers/folding_prod.sif 
   --json-report --json-report-file=output/phase3.json
 ```
 
+**Two modes for `test_phase3_workspace.py`:**
+
+| Mode | When to use | How |
+|------|-------------|-----|
+| **Baked-in** (default) | Acceptance / regression testing a new container build before release -- exercises the Perl and app_spec frozen into the SIF | no env var |
+| **Dev overlay** | Iterating on `service-scripts/App-PredictStructure.pl` or `app_specs/PredictStructure.json` without rebuilding the SIF | `PREDICT_STRUCTURE_DEV_SERVICE=1` |
+
+```bash
+# Dev iteration: overlay the host's service-scripts/ and app_specs/
+PREDICT_STRUCTURE_DEV_SERVICE=1 \
+CUDA_VISIBLE_DEVICES=0 PREDICT_STRUCTURE_SIF=/scout/containers/folding_prod.sif \
+  conda run -n predict-structure python -m pytest tests/acceptance/test_phase3_workspace.py -v
+```
+
+If a Phase 3 test passes only with the overlay, the fix still needs to land
+in the container image before the build is release-ready.
+
+**Workspace layout.** Tests write under
+`<user-home>/AppTests/<tool>/<testname>-<YYYYMMDD-HHMMSS>/` -- the timestamped
+leaf is the "versioned output_path" the service script uploads into. Tests
+clean up their own sub-folder on completion.
+
+```
+<user-home>/AppTests/
+├── _inputs/                              ← staging for test input FASTAs
+│   └── <testname>-<ts>-simple_protein.fasta
+├── misc/    upload_and_verify-<ts>/      ← raw upload test scratch
+├── esmfold/ workspace_roundtrip-<ts>/    ← service-script output
+│   └── model_1.pdb, model_1.cif, confidence.json, metadata.json, ...
+└── chai/    report_workspace_roundtrip-<ts>/
+    └── model_1.pdb, model_1.cif, confidence.json, metadata.json,
+        report.html, report.json, report.pdf, raw/, raw_output/
+```
+
+Test inputs are staged in `_inputs/` (sibling folder) rather than inside the
+output dir. This keeps the output dir fresh so `p3-cp -r` lands files at the
+top level instead of nesting under `output/` (p3-cp's behavior when the
+target already exists).
+
+**Two file layouts in Phase 3:**
+
+| File | Scope |
+|------|-------|
+| `test_phase3_workspace.py` | Pure workspace ops (`p3-whoami`, `p3-ls`, `p3-cp`) |
+| `test_phase3_appscript_workspace.py` | Service script + workspace end-to-end roundtrips |
+| `test_phase3_service_script.py` | Service script offline (no workspace I/O) |
+
+**Phase-3 env var toggles:**
+
+| Env var | Effect |
+|---------|--------|
+| `PREDICT_STRUCTURE_DEV_SERVICE=1` | Overlay host's `service-scripts/` + `app_specs/` into the SIF (see table above) |
+| `PREDICT_STRUCTURE_KEEP_WORKSPACE=1` | Skip post-test `p3-rm`; each test prints the kept path |
+| `P3_DEBUG_RUN_SUBFOLDER=1` | (service script) Nest results under a per-run subfolder `predict_structure_result_<ts>_<task_id>/`. Default is flat -- results land directly in `output_path`. Useful when multiple runs share one `output_path`. |
+
+Example -- investigate artifacts after a failing Chai run:
+
+```bash
+PREDICT_STRUCTURE_DEV_SERVICE=1 PREDICT_STRUCTURE_KEEP_WORKSPACE=1 \
+CUDA_VISIBLE_DEVICES=0 PREDICT_STRUCTURE_SIF=/scout/containers/folding_prod.sif \
+  conda run -n predict-structure python -m pytest \
+  tests/acceptance/test_phase3_appscript_workspace.py -v -s
+# Then:
+# p3-ls -l /<user>@bvbrc/home/AppTests/chai/report_workspace_roundtrip-<ts>/
+```
+
 ### Full Suite on Both Containers in Parallel
 
 Each container on separate GPUs (requires enough GPUs):
@@ -282,8 +348,15 @@ directly, either provide an MSA file or use `msa: empty` in the YAML.
 ## Container Build
 
 The folding container is built in stages using apptainer definition files
-from the runtime_build repository at
-`/home/wilke/Development/runtime_build/gpu-builds/cuda-12.2-cudnn-8.9.6/`:
+from the `runtime_build` repository. Set `RUNTIME_BUILD` to its
+`gpu-builds/cuda-12.2-cudnn-8.9.6/` directory (layout identical across
+checkouts):
+
+```bash
+export RUNTIME_BUILD=<path-to-runtime_build>/gpu-builds/cuda-12.2-cudnn-8.9.6
+```
+
+Stages:
 
 1. `base-build.def` -- CUDA + cuDNN + miniforge
 2. `reqts-boltz.def` -- Boltz 2
@@ -294,45 +367,49 @@ from the runtime_build repository at
 7. `reqts-predict-structure.def` -- predict-structure CLI (from GitHub)
 8. `reqts-bvbrc-service.def` -- BV-BRC AppService layer (final production SIF)
 
-### Build Flags (required on this host)
+### Build Flags
 
-Two flags are required because `wilke` is not in `/etc/subuid`/`/etc/subgid`:
+Two flags are required when the build user is **not** in `/etc/subuid` /
+`/etc/subgid`:
 
 ```bash
 --fakeroot                      # required for %post script
-APPTAINER_TMPDIR=/scout/tmp    # default /tmp is too small (50GB) for 33GB SIF extraction
+APPTAINER_TMPDIR=<big-scratch>  # /tmp is often a small tmpfs (e.g. 50GB) and
+                                # can't hold a 30GB+ SIF extraction
 ```
+
+Pick `APPTAINER_TMPDIR` to point at a filesystem with at least ~1.5x the
+base SIF size free.
 
 ### Build Command Template
 
 ```bash
-APPTAINER_TMPDIR=/scout/tmp apptainer build --fakeroot \
+APPTAINER_TMPDIR=$APPTAINER_TMPDIR apptainer build --fakeroot \
   --build-arg base=<previous_stage>.sif \
   <output>.sif \
-  /home/wilke/Development/runtime_build/gpu-builds/cuda-12.2-cudnn-8.9.6/reqts-<tool>.def
+  $RUNTIME_BUILD/reqts-<tool>.def
 ```
 
 For the BV-BRC service layer (final stage), add `app_repo`:
 
 ```bash
-APPTAINER_TMPDIR=/scout/tmp apptainer build --fakeroot \
-  --build-arg base=/scout/containers/base-gpu.YYYY-MM-DD.NNN.sif \
+APPTAINER_TMPDIR=$APPTAINER_TMPDIR apptainer build --fakeroot \
+  --build-arg base=<containers-dir>/base-gpu.YYYY-MM-DD.NNN.sif \
   --build-arg app_repo=https://github.com/CEPI-dxkb/PredictStructureApp.git \
-  /scout/containers/folding_YYMMDD.N.sif \
-  /home/wilke/Development/runtime_build/gpu-builds/cuda-12.2-cudnn-8.9.6/reqts-bvbrc-service.def
+  <containers-dir>/folding_YYMMDD.N.sif \
+  $RUNTIME_BUILD/reqts-bvbrc-service.def
 ```
 
-### Exact Build for folding_260422.1.sif
+### Example Build (folding_260422.1.sif)
 
-Built 2026-04-22 14:57 CDT from `base-gpu.2026-04-22.002.sif` via
-`reqts-bvbrc-service.def`. Based on the def file recovered from the SIF:
+Built from `base-gpu.2026-04-22.002.sif` via `reqts-bvbrc-service.def`:
 
 ```bash
-APPTAINER_TMPDIR=/scout/tmp apptainer build --fakeroot \
-  --build-arg base=/scout/tmp/base-gpu.2026-04-22.002.sif \
+APPTAINER_TMPDIR=$APPTAINER_TMPDIR apptainer build --fakeroot \
+  --build-arg base=<containers-dir>/base-gpu.2026-04-22.002.sif \
   --build-arg app_repo=https://github.com/CEPI-dxkb/PredictStructureApp.git \
-  /scout/containers/folding_260422.1.sif \
-  /home/wilke/Development/runtime_build/gpu-builds/cuda-12.2-cudnn-8.9.6/reqts-bvbrc-service.def
+  <containers-dir>/folding_260422.1.sif \
+  $RUNTIME_BUILD/reqts-bvbrc-service.def
 ```
 
 Note: This installs predict-structure from GitHub **main** branch. To pick up

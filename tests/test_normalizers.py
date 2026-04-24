@@ -85,10 +85,11 @@ class TestNormalizeBoltzOutput:
         pred_dir = raw / "predictions" / "test_input"
         pred_dir.mkdir(parents=True)
 
-        # Minimal PDB content for CIF conversion test — write as .cif
-        # Use a minimal PDB file and rename it to test the flow
+        # Minimal PDB with 3 residues (matching length of mock plddt array below)
         pdb_content = (
-            "ATOM      1  CA  ALA A   1       1.000   2.000   3.000  1.00  0.85           C\n"
+            "ATOM      1  CA  ALA A   1       1.000   2.000   3.000  1.00  0.91           C\n"
+            "ATOM      2  CA  GLY A   2       4.000   5.000   6.000  1.00  0.88           C\n"
+            "ATOM      3  CA  SER A   3       7.000   8.000   9.000  1.00  0.85           C\n"
             "END\n"
         )
         # Write a real PDB and convert to CIF for the test fixture
@@ -279,6 +280,53 @@ class TestNormalizeOpenFoldOutput:
 
         with pytest.raises(FileNotFoundError):
             normalize_openfold_output(raw, tmp_output)
+
+
+class TestMoveReportsToSubdir:
+    def test_moves_existing_reports(self, tmp_path):
+        """report.html/.json/.pdf at top level are moved into report/."""
+        from predict_structure.normalizers import move_reports_to_subdir
+
+        out = tmp_path / "out"
+        out.mkdir()
+        (out / "report.html").write_text("<html></html>")
+        (out / "report.json").write_text("{}")
+        (out / "report.pdf").write_bytes(b"%PDF-1.4\n")
+        (out / "model_1.pdb").write_text("ATOM")
+
+        dest = move_reports_to_subdir(out)
+        assert dest == out / "report"
+        assert (out / "report" / "report.html").exists()
+        assert (out / "report" / "report.json").exists()
+        assert (out / "report" / "report.pdf").exists()
+        # Top level no longer has them
+        assert not (out / "report.html").exists()
+        assert not (out / "report.json").exists()
+        # Non-report files untouched
+        assert (out / "model_1.pdb").exists()
+
+    def test_no_reports_is_noop(self, tmp_path):
+        from predict_structure.normalizers import move_reports_to_subdir
+
+        out = tmp_path / "out"
+        out.mkdir()
+        (out / "model_1.pdb").write_text("ATOM")
+
+        dest = move_reports_to_subdir(out)
+        assert dest is None
+        assert not (out / "report").exists()
+
+    def test_partial_reports(self, tmp_path):
+        """Only html present -- moves it, still creates report/ dir."""
+        from predict_structure.normalizers import move_reports_to_subdir
+
+        out = tmp_path / "out"
+        out.mkdir()
+        (out / "report.html").write_text("<html></html>")
+
+        dest = move_reports_to_subdir(out)
+        assert dest == out / "report"
+        assert (out / "report" / "report.html").exists()
 
 
 class TestNormalizeAlphaFoldOutput:

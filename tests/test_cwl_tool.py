@@ -122,6 +122,17 @@ class TestUnifiedCWLStructure:
         symbols = set(cwl_doc["inputs"]["tool"]["type"]["symbols"])
         assert "auto" in symbols
 
+    def test_exposes_provenance_outputs(self, cwl_doc):
+        """predict-structure.cwl exposes results.json + ro-crate + report outputs."""
+        outputs = cwl_doc["outputs"]
+        for name in ("results", "ro_crate", "reports"):
+            assert name in outputs, f"Missing CWL output: {name}"
+        assert outputs["reports"]["type"] == "Directory?"
+        assert outputs["results"]["outputBinding"]["glob"].endswith("results.json")
+        assert outputs["ro_crate"]["outputBinding"]["glob"].endswith(
+            "ro-crate-metadata.json"
+        )
+
     def test_cwltool_validates(self):
         unified = CWL_DIR / "predict-structure.cwl"
         if not unified.exists():

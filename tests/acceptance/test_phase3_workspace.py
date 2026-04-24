@@ -1,20 +1,24 @@
-"""Phase 3: Real BV-BRC workspace integration tests.
+"""Phase 3: BV-BRC workspace connectivity and raw upload/download tests.
 
-Tests workspace file download/upload via the service script. Requires
-a valid .patric_token for real workspace access.
+Tests direct workspace operations (`p3-whoami`, `p3-ls`, `p3-cp`) without
+any service-script involvement. Requires a valid `.patric_token` for real
+workspace access.
+
+For service-script-with-workspace tests (end-to-end App-PredictStructure.pl
+roundtrips), see `test_phase3_appscript_workspace.py`.
 """
 
 from __future__ import annotations
 
-import json
-import subprocess
-from pathlib import Path
-
 import pytest
 
-pytestmark = [pytest.mark.phase3, pytest.mark.workspace, pytest.mark.container]
+from tests.acceptance.ws_utils import (
+    cleanup_ws,
+    make_output_path,
+    ws_home,
+)
 
-TEST_DATA_HOST = Path(__file__).parent.parent.parent / "test_data"
+pytestmark = [pytest.mark.phase3, pytest.mark.workspace, pytest.mark.container]
 
 
 class TestWorkspaceConnectivity:
@@ -33,17 +37,18 @@ class TestWorkspaceConnectivity:
         )
         assert result.stdout.strip(), "p3-whoami returned empty output"
 
-    def test_p3_ls_workspace(self, container, workspace_token):
-        """p3-ls should be able to list the home workspace."""
+    def test_p3_ls_home(self, container, workspace_token):
+        """p3-ls should be able to list the user's workspace home directory."""
         token = workspace_token.read_text().strip()
+        home = ws_home(token)
         result = container.exec(
-            ["p3-ls", "/"],
+            ["p3-ls", home],
             gpu=False,
             env={"KB_AUTH_TOKEN": token},
             timeout=30,
         )
         assert result.returncode == 0, (
-            f"p3-ls failed: {result.stderr}"
+            f"p3-ls {home} failed: {result.stderr}"
         )
 
 
@@ -58,15 +63,8 @@ class TestWorkspaceUpload:
         test_file = tmp_path / "test_upload.txt"
         test_file.write_text("acceptance test upload")
 
-        # Get workspace home path
-        whoami = container.exec(
-            ["p3-whoami"],
-            gpu=False,
-            env={"KB_AUTH_TOKEN": token},
-            timeout=30,
-        )
-        user = whoami.stdout.strip()
-        ws_path = f"/{user}@patricbrc.org/home/acceptance_test"
+        # Convention: AppTests/{tool}/{testname}-{ts}/
+        ws_path = make_output_path(container, token, "misc", "upload_and_verify")
 
         binds = {str(tmp_path): "/upload"}
 
@@ -101,85 +99,4 @@ class TestWorkspaceUpload:
                 f"Uploaded file not found in workspace:\n{ls_result.stdout}"
             )
         finally:
-            # Clean up
-            container.exec(
-                ["p3-rm", "-r", ws_path],
-                gpu=False,
-                env={"KB_AUTH_TOKEN": token},
-                timeout=30,
-            )
-
-
-class TestServiceScriptWithWorkspace:
-    """Full service script execution with workspace integration."""
-
-    def test_service_esmfold_workspace_roundtrip(
-        self, container, workspace_token, tmp_path
-    ):
-        """Run ESMFold via service script and verify workspace upload."""
-        token = workspace_token.read_text().strip()
-
-        # Get user for workspace path
-        whoami = container.exec(
-            ["p3-whoami"],
-            gpu=False,
-            env={"KB_AUTH_TOKEN": token},
-            timeout=30,
-        )
-        user = whoami.stdout.strip()
-        ws_output = f"/{user}@patricbrc.org/home/acceptance_test_output"
-
-        params = {
-            "tool": "esmfold",
-            "input_file": "/data/simple_protein.fasta",
-            "output_path": ws_output,
-            "output_file": "esmfold_acceptance",
-            "num_recycles": 4,
-            "output_format": "pdb",
-            "msa_mode": "none",
-            "seed": 42,
-            "fp16": True,
-        }
-
-        params_file = tmp_path / "params.json"
-        params_file.write_text(json.dumps(params, indent=2))
-
-        output_dir = tmp_path / "output"
-        output_dir.mkdir()
-
-        binds = {
-            str(TEST_DATA_HOST): "/data",
-            str(output_dir): "/output",
-            str(tmp_path): "/params",
-        }
-
-        try:
-            result = container.service(
-                params_json=Path(f"/params/{params_file.name}"),
-                binds=binds,
-                timeout=300,
-                env={"KB_AUTH_TOKEN": token},
-            )
-            assert result.returncode == 0, (
-                f"Service script with workspace failed.\n"
-                f"STDERR:\n{result.stderr[-2000:]}"
-            )
-
-            # Verify files exist in workspace
-            ls_result = container.exec(
-                ["p3-ls", "-l", ws_output],
-                gpu=False,
-                env={"KB_AUTH_TOKEN": token},
-                timeout=30,
-            )
-            # Should have uploaded prediction results
-            assert ls_result.returncode == 0, f"Cannot list ws output: {ls_result.stderr}"
-
-        finally:
-            # Clean up workspace
-            container.exec(
-                ["p3-rm", "-r", ws_output],
-                gpu=False,
-                env={"KB_AUTH_TOKEN": token},
-                timeout=30,
-            )
+            cleanup_ws(container, token, ws_path)

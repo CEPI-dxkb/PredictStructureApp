@@ -16,10 +16,12 @@ Examples:
 from __future__ import annotations
 
 import functools
+import json
 import logging
 import shutil
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import click
@@ -37,7 +39,8 @@ from predict_structure.entities import (
     is_boltz_yaml,
     parse_fasta_entities,
 )
-from predict_structure.normalizers import write_metadata_json
+from predict_structure.normalizers import move_reports_to_subdir, write_metadata_json
+from predict_structure.results import write_results_json, write_ro_crate
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +302,11 @@ def shared_options(func):
     @optgroup.option("--seed", type=int, default=None, help="Random seed")
     @optgroup.option("--msa", type=click.Path(), default=None, help="MSA file (.a3m, .sto, .pqt)")
     @optgroup.option("--output-format", type=click.Choice(["pdb", "mmcif"]), default="pdb")
+    @optgroup.option(
+        "--emit-rocrate/--no-emit-rocrate",
+        default=True,
+        help="Emit ro-crate-metadata.json provenance alongside results.json [default: emit]",
+    )
     @click.option("--debug", is_flag=True, default=False, help="Print the command instead of executing it")
     @click.option("--force", is_flag=True, default=False, help="Bypass input size limits")
     @functools.wraps(func)
@@ -330,6 +338,51 @@ def backend_options(func):
 # ---------------------------------------------------------------------------
 # Shared prediction logic
 # ---------------------------------------------------------------------------
+
+def _build_params_dict(shared: dict) -> dict:
+    """Extract the canonical per-run params saved in metadata.json."""
+    return {
+        "num_samples": shared["num_samples"],
+        "num_recycles": shared["num_recycles"],
+        "seed": shared.get("seed"),
+        "device": shared["device"],
+    }
+
+
+def _finalize_output(
+    output_path: Path,
+    tool_name: str,
+    shared: dict,
+    elapsed: float,
+) -> None:
+    """Post-normalization: metadata.json, relocate reports, results.json, ro-crate.
+
+    Runs in this exact order so later writers can read earlier ones:
+      1. write_metadata_json         -- canonical run metadata
+      2. move_reports_to_subdir      -- relocate report.* into report/
+      3. write_results_json          -- summary + file manifest
+      4. write_ro_crate              -- best-effort Process Run Crate
+
+    ``write_results_json`` requires ``confidence.json`` + ``metadata.json``
+    to be present after normalization. If either is missing we let the
+    exception propagate -- it signals a normalizer contract violation and
+    should fail loudly, matching the standalone `finalize-results` path.
+    """
+    import os
+
+    write_metadata_json(
+        output_path, tool_name, _build_params_dict(shared), elapsed, __version__,
+    )
+    move_reports_to_subdir(output_path)
+    results_path = write_results_json(
+        output_path,
+        command=sys.argv,
+        backend=shared["backend"],
+        container_image=os.environ.get("PREDICT_STRUCTURE_IMAGE"),
+    )
+    if shared.get("emit_rocrate", True):
+        write_ro_crate(output_path, results_path)
+
 
 def _docker_volumes_and_rewrite(
     cmd: list[str],
@@ -485,13 +538,7 @@ def run_prediction(
                 err=True,
             )
             sys.exit(1)
-        params_dict = {
-            "num_samples": shared["num_samples"],
-            "num_recycles": shared["num_recycles"],
-            "seed": shared.get("seed"),
-            "device": shared["device"],
-        }
-        write_metadata_json(output_path, tool_name, params_dict, elapsed, __version__)
+        _finalize_output(output_path, tool_name, shared, elapsed)
         click.echo(f"Prediction complete: {output_path}")
         return
 
@@ -594,13 +641,7 @@ def run_prediction(
         )
         sys.exit(1)
 
-    params_dict = {
-        "num_samples": shared["num_samples"],
-        "num_recycles": shared["num_recycles"],
-        "seed": shared.get("seed"),
-        "device": shared["device"],
-    }
-    write_metadata_json(output_path, tool_name, params_dict, elapsed, __version__)
+    _finalize_output(output_path, tool_name, shared, elapsed)
 
     click.echo(f"Prediction complete: {output_path}")
 
@@ -676,6 +717,7 @@ def _run_job_file(job_path: Path, base_output_dir: Path | None) -> None:
             "cwl_runner": options.get("cwl_runner"),
             "cwl_tool": options.get("cwl_tool"),
             "debug": options.get("debug", False),
+            "emit_rocrate": options.get("emit_rocrate", True),
         }
 
         entity_inputs = {
@@ -993,8 +1035,6 @@ def preflight(tool, protein, msa, use_msa_server, device):
         predict-structure preflight --tool esmfold --protein input.fasta
         predict-structure preflight --tool auto --protein input.fasta --use-msa-server
     """
-    import json as _json
-
     # Resolve tool
     if tool == "auto":
         if protein:
@@ -1025,7 +1065,74 @@ def preflight(tool, protein, msa, use_msa_server, device):
     }
     output.update(resources)
 
-    click.echo(_json.dumps(output))
+    click.echo(json.dumps(output))
+
+
+# ---------------------------------------------------------------------------
+# Provenance post-processing subcommands
+# ---------------------------------------------------------------------------
+
+
+@main.command("finalize-results")
+@click.argument("output_dir", type=click.Path(exists=True, file_okay=False, dir_okay=True))
+@click.option(
+    "--emit-rocrate/--no-emit-rocrate",
+    default=True,
+    help="Emit ro-crate-metadata.json alongside results.json [default: emit]",
+)
+def finalize_results(output_dir, emit_rocrate):
+    """(Re)generate results.json + ro-crate-metadata.json in an existing output dir.
+
+    Relocates any top-level report.html/.json/.pdf into report/ first, then
+    writes results.json (summary + file manifest with sha256), and optionally
+    ro-crate-metadata.json (Process Run Crate provenance).
+
+    Used by the BV-BRC service script after running protein_compare so the
+    manifest includes the freshly generated report files.
+    """
+    import os
+    out = Path(output_dir)
+    move_reports_to_subdir(out)
+    try:
+        results_path = write_results_json(
+            out,
+            command=sys.argv,
+            backend=os.environ.get("PREDICT_STRUCTURE_BACKEND"),
+            container_image=os.environ.get("PREDICT_STRUCTURE_IMAGE"),
+        )
+    except FileNotFoundError as exc:
+        raise click.ClickException(str(exc))
+    click.echo(f"Wrote {results_path}")
+    if emit_rocrate:
+        crate_path = write_ro_crate(out, results_path)
+        if crate_path is not None:
+            click.echo(f"Wrote {crate_path}")
+
+
+@main.command("aggregate-results")
+@click.option(
+    "--in", "inputs", type=click.Path(exists=True), multiple=True, required=True,
+    help="Per-tool results.json files to aggregate",
+)
+@click.option(
+    "-o", "--output", type=click.Path(), required=True,
+    help="Path for the aggregated results.json",
+)
+def aggregate_results(inputs, output):
+    """Aggregate multiple per-tool results.json files into a combined summary.
+
+    Produces a top-level results.json with a "runs" array, where each entry
+    is a full per-tool results.json. Used by the multi-tool CWL workflow.
+    """
+    runs = [json.loads(Path(p).read_text()) for p in inputs]
+    aggregate = {
+        "schema_version": "1.0",
+        "kind": "multi-tool",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "runs": runs,
+    }
+    Path(output).write_text(json.dumps(aggregate, indent=2))
+    click.echo(f"Wrote {output}")
 
 
 if __name__ == "__main__":

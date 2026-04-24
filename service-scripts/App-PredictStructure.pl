@@ -54,6 +54,11 @@ use Bio::KBase::AppService::AppScript;
 $ENV{P3_LOG_LEVEL} //= 'INFO';
 
 my $script = Bio::KBase::AppService::AppScript->new(\&run_app, \&preflight);
+# Opt out of the framework's automatic result-folder creation. It would
+# create <output_path>/.<output_file>/ (or <output_path>/ with no
+# output_file), which makes p3-cp -r on upload nest our results under an
+# extra <output>/ subdir. We manage the upload path ourselves.
+$script->donot_create_result_folder(1);
 $script->run(\@ARGV);
 
 # ---------------------------------------------------------------------------
@@ -275,22 +280,46 @@ sub run_app {
     run_report($output_dir);
 
     # -----------------------------------------------------------------
+    # 3b. Finalize results.json + ro-crate-metadata.json
+    # -----------------------------------------------------------------
+    # Delegate to the Python CLI so sha256/manifest logic stays in one
+    # place. This also relocates report.html/.json/.pdf into report/ for
+    # the unified layout. Non-fatal if it fails -- prediction artifacts
+    # still upload.
+    my $bin = find_predict_structure_binary();
+    my $fin_rc = system($bin, "finalize-results", $output_dir);
+    if ($fin_rc != 0) {
+        print STDERR "Warning: finalize-results failed (rc="
+            . ($fin_rc >> 8) . "); continuing with upload\n";
+    }
+
+    # -----------------------------------------------------------------
     # 4. Upload results to workspace
     # -----------------------------------------------------------------
 
-    my $output_folder = $app->result_folder();
-    die "Could not get result folder from app framework\n" unless $output_folder;
+    # We called donot_create_result_folder(1), so the framework's
+    # result_folder() is undef. Upload directly to the user-supplied
+    # output_path (the user/test is already providing a versioned path).
+    my $output_folder = $app->result_folder()
+        // $params->{output_path}
+        // die "No output_path in params and framework result_folder unset\n";
 
-    # Clean up trailing slashes/dots
+    # Clean up trailing slashes/dots in case the caller supplied them.
     $output_folder =~ s/\/+$//;
     $output_folder =~ s/\/\.$//;
 
-    # Create unique subfolder
-    my $output_base = $params->{output_file} // "predict_structure_result";
-    my $timestamp = POSIX::strftime("%Y%m%d_%H%M%S", localtime);
-    my $task_id = $app->{task_id} // "unknown";
-    my $run_folder = "${output_base}_${timestamp}_${task_id}";
-    $output_folder = "$output_folder/$run_folder";
+    # By default results are uploaded flat into $output_folder so the
+    # caller controls the final layout (typically via a versioned
+    # output_path). Set P3_DEBUG_RUN_SUBFOLDER=1 to nest each run under a
+    # timestamped subfolder (useful when debugging multiple runs sharing
+    # one output_path).
+    if ($ENV{P3_DEBUG_RUN_SUBFOLDER}) {
+        my $output_base = $params->{output_file} // "predict_structure_result";
+        my $timestamp = POSIX::strftime("%Y%m%d_%H%M%S", localtime);
+        my $task_id = $app->{task_id} // "unknown";
+        my $run_folder = "${output_base}_${timestamp}_${task_id}";
+        $output_folder = "$output_folder/$run_folder";
+    }
 
     print "Uploading results to workspace: $output_folder\n";
     upload_results($app, $output_dir, $output_folder);
@@ -454,13 +483,23 @@ sub run_report {
         return;
     }
 
-    my $report_dir = "$output_dir/report";
-    make_path($report_dir);
+    # protein_compare characterize uses -o as a filename PREFIX and writes
+    # <prefix>.html / <prefix>.json / <prefix>.pdf (not a directory). Use
+    # "<output_dir>/report" so the files land as report.html / report.json
+    # / report.pdf alongside the prediction artifacts.
+    my $report_prefix = "$output_dir/report";
+
+    # Use the predict-structure conda env's python (has protein_compare),
+    # not whatever 'python' is first on PATH (PATRIC runtime python lacks it).
+    my $bin = find_predict_structure_binary();
+    my $python = $bin;
+    $python =~ s{/predict-structure$}{/python};
+    $python = "python" unless -x $python;
 
     my @cmd = (
-        "python", "-m", "protein_compare", "characterize",
+        $python, "-m", "protein_compare", "characterize",
         $model_pdb,
-        "-o", $report_dir,
+        "-o", $report_prefix,
         "--format", "all",
     );
 
@@ -549,9 +588,9 @@ sub upload_results {
         '--map-suffix' => "png=png",
         '--map-suffix' => "svg=svg",
         '--map-suffix' => "csv=csv",
-        '--map-suffix' => "fasta=protein_feature_fasta",
-        '--map-suffix' => "fa=protein_feature_fasta",
-        '--map-suffix' => "faa=protein_feature_fasta",
+        '--map-suffix' => "fasta=contigs",
+        '--map-suffix' => "fa=contigs",
+        '--map-suffix' => "faa=feature_protein_fasta",
     );
 
     my @cmd = ("p3-cp", "--overwrite", "-r", @mapping, $local_dir, "ws:$ws_path");

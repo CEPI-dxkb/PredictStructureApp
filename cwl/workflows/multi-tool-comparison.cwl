@@ -108,7 +108,7 @@ steps:
       msa: msa
       device: device
       output_format: output_format
-    out: [predictions]
+    out: [predictions, results]
 
   predict_openfold:
     run: ../tools/predict-structure.cwl
@@ -126,7 +126,7 @@ steps:
       msa: msa
       device: device
       output_format: output_format
-    out: [predictions]
+    out: [predictions, results]
 
   predict_chai:
     run: ../tools/predict-structure.cwl
@@ -144,7 +144,7 @@ steps:
       msa: msa
       device: device
       output_format: output_format
-    out: [predictions]
+    out: [predictions, results]
 
   predict_esmfold:
     run: ../tools/predict-structure.cwl
@@ -162,7 +162,7 @@ steps:
       msa: msa
       device: device
       output_format: output_format
-    out: [predictions]
+    out: [predictions, results]
 
   # --- Extract structures ---
 
@@ -241,6 +241,19 @@ steps:
       confidence_weighted: confidence_weighted
     out: [comparison_csv, comparison_html, comparison_json]
 
+  aggregate_results:
+    run: ../tools/aggregate-results.cwl
+    in:
+      per_tool_results:
+        source:
+          - predict_boltz/results
+          - predict_openfold/results
+          - predict_chai/results
+          - predict_esmfold/results
+        linkMerge: merge_flattened
+        pickValue: all_non_null
+    out: [aggregated_results]
+
 outputs:
   predictions:
     type: Directory[]
@@ -276,3 +289,8 @@ outputs:
     type: File?
     outputSource: compare/comparison_json
     doc: "JSON comparison results"
+
+  results:
+    type: File
+    outputSource: aggregate_results/aggregated_results
+    doc: "Aggregated multi-tool results.json (summary of all per-tool runs)"

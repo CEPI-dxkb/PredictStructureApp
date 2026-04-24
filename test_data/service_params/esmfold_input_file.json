@@ -1,0 +1,11 @@
+{
+    "tool": "esmfold",
+    "input_file": "/data/simple_protein.fasta",
+    "output_path": "/output",
+    "output_file": "esmfold_test",
+    "num_recycles": 4,
+    "output_format": "pdb",
+    "msa_mode": "none",
+    "seed": 42,
+    "fp16": true
+}

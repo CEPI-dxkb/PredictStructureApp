@@ -42,6 +42,9 @@ esmfold = [
 cwl = [
     "cwltool>=3.1",
 ]
+provenance = [
+    "rocrate>=0.9",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -55,7 +58,7 @@ dev = [
     "mypy>=1.0",
 ]
 all = [
-    "predict-structure[cwl,esmfold,dev]",
+    "predict-structure[cwl,esmfold,dev,provenance]",
 ]
 
 [project.scripts]
