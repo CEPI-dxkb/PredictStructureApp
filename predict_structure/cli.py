@@ -16,6 +16,7 @@ Examples:
 from __future__ import annotations
 
 import functools
+import json
 import logging
 import shutil
 import sys
@@ -338,13 +339,21 @@ def backend_options(func):
 # Shared prediction logic
 # ---------------------------------------------------------------------------
 
+def _build_params_dict(shared: dict) -> dict:
+    """Extract the canonical per-run params saved in metadata.json."""
+    return {
+        "num_samples": shared["num_samples"],
+        "num_recycles": shared["num_recycles"],
+        "seed": shared.get("seed"),
+        "device": shared["device"],
+    }
+
+
 def _finalize_output(
     output_path: Path,
     tool_name: str,
-    params_dict: dict,
+    shared: dict,
     elapsed: float,
-    backend: str,
-    emit_rocrate: bool,
 ) -> None:
     """Post-normalization: metadata.json, relocate reports, results.json, ro-crate.
 
@@ -353,24 +362,25 @@ def _finalize_output(
       2. move_reports_to_subdir      -- relocate report.* into report/
       3. write_results_json          -- summary + file manifest
       4. write_ro_crate              -- best-effort Process Run Crate
+
+    ``write_results_json`` requires ``confidence.json`` + ``metadata.json``
+    to be present after normalization. If either is missing we let the
+    exception propagate -- it signals a normalizer contract violation and
+    should fail loudly, matching the standalone `finalize-results` path.
     """
     import os
 
-    write_metadata_json(output_path, tool_name, params_dict, elapsed, __version__)
+    write_metadata_json(
+        output_path, tool_name, _build_params_dict(shared), elapsed, __version__,
+    )
     move_reports_to_subdir(output_path)
-    try:
-        results_path = write_results_json(
-            output_path,
-            command=sys.argv,
-            backend=backend,
-            container_image=os.environ.get("PREDICT_STRUCTURE_IMAGE"),
-        )
-    except FileNotFoundError as exc:
-        # confidence.json may be missing if normalization was partial.
-        # Don't block the CLI -- just log.
-        logger.warning("Cannot write results.json: %s", exc)
-        return
-    if emit_rocrate:
+    results_path = write_results_json(
+        output_path,
+        command=sys.argv,
+        backend=shared["backend"],
+        container_image=os.environ.get("PREDICT_STRUCTURE_IMAGE"),
+    )
+    if shared.get("emit_rocrate", True):
         write_ro_crate(output_path, results_path)
 
 
@@ -528,16 +538,7 @@ def run_prediction(
                 err=True,
             )
             sys.exit(1)
-        params_dict = {
-            "num_samples": shared["num_samples"],
-            "num_recycles": shared["num_recycles"],
-            "seed": shared.get("seed"),
-            "device": shared["device"],
-        }
-        _finalize_output(
-            output_path, tool_name, params_dict, elapsed, backend,
-            emit_rocrate=shared.get("emit_rocrate", True),
-        )
+        _finalize_output(output_path, tool_name, shared, elapsed)
         click.echo(f"Prediction complete: {output_path}")
         return
 
@@ -640,16 +641,7 @@ def run_prediction(
         )
         sys.exit(1)
 
-    params_dict = {
-        "num_samples": shared["num_samples"],
-        "num_recycles": shared["num_recycles"],
-        "seed": shared.get("seed"),
-        "device": shared["device"],
-    }
-    _finalize_output(
-        output_path, tool_name, params_dict, elapsed, backend,
-        emit_rocrate=shared.get("emit_rocrate", True),
-    )
+    _finalize_output(output_path, tool_name, shared, elapsed)
 
     click.echo(f"Prediction complete: {output_path}")
 
@@ -1043,8 +1035,6 @@ def preflight(tool, protein, msa, use_msa_server, device):
         predict-structure preflight --tool esmfold --protein input.fasta
         predict-structure preflight --tool auto --protein input.fasta --use-msa-server
     """
-    import json as _json
-
     # Resolve tool
     if tool == "auto":
         if protein:
@@ -1075,7 +1065,7 @@ def preflight(tool, protein, msa, use_msa_server, device):
     }
     output.update(resources)
 
-    click.echo(_json.dumps(output))
+    click.echo(json.dumps(output))
 
 
 # ---------------------------------------------------------------------------
@@ -1134,15 +1124,14 @@ def aggregate_results(inputs, output):
     Produces a top-level results.json with a "runs" array, where each entry
     is a full per-tool results.json. Used by the multi-tool CWL workflow.
     """
-    import json as _json
-    runs = [_json.loads(Path(p).read_text()) for p in inputs]
+    runs = [json.loads(Path(p).read_text()) for p in inputs]
     aggregate = {
         "schema_version": "1.0",
         "kind": "multi-tool",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "runs": runs,
     }
-    Path(output).write_text(_json.dumps(aggregate, indent=2))
+    Path(output).write_text(json.dumps(aggregate, indent=2))
     click.echo(f"Wrote {output}")
 
 

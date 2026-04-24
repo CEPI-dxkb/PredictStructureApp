@@ -18,12 +18,23 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 from predict_structure import __version__
 
 logger = logging.getLogger(__name__)
 
 RESULTS_SCHEMA_VERSION = "1.0"
+
+Status = Literal["success", "partial", "failed"]
+
+# Maps our status enum to the schema.org ActionStatus types used in the
+# RO-Crate CreateAction.
+_SCHEMA_STATUS = {
+    "success": "CompletedActionStatus",
+    "partial": "CompletedActionStatus",
+    "failed": "FailedActionStatus",
+}
 
 # Maps a file basename (or suffix) to a role label used by downstream
 # consumers to find specific artifacts without hard-coding paths.
@@ -58,29 +69,33 @@ def _role_for(rel_path: str) -> str:
 def _collect_outputs(output_dir: Path) -> list[dict]:
     """Build the outputs manifest.
 
-    Recurses through the output directory but treats ``raw/`` as a single
-    opaque directory entry (we don't hash every raw file -- that's tool-
-    specific and can be large). Paths are POSIX-relative so the manifest
-    is portable across platforms and between CWL and BV-BRC runs.
+    Enumerates files directly under ``output_dir`` and one level into
+    ``report/``; ``raw/`` is listed as a single opaque directory entry so
+    we don't descend into (and hash) the tool-native payload, which can
+    be thousands of files for Boltz/OpenFold/AlphaFold.
     """
     entries: list[dict] = []
-    for item in sorted(output_dir.rglob("*")):
-        if not item.is_file():
-            continue
-        rel_parts = item.relative_to(output_dir).parts
-        # Skip files inside raw/ (directory entry added separately below).
-        # Skip results.json itself (self-reference would change the hash).
-        if rel_parts[0] == "raw":
-            continue
-        if rel_parts == ("results.json",):
-            continue
-        rel_posix = "/".join(rel_parts)
+
+    def _add_file(item: Path, rel: str) -> None:
         entries.append({
-            "path": rel_posix,
+            "path": rel,
             "size": item.stat().st_size,
             "sha256": _sha256_file(item),
-            "role": _role_for(rel_posix),
+            "role": _role_for(rel),
         })
+
+    for item in sorted(output_dir.iterdir()):
+        name = item.name
+        if name == "raw":
+            continue
+        if name == "results.json":  # avoid self-reference in its own manifest
+            continue
+        if item.is_file():
+            _add_file(item, name)
+        elif name == "report" and item.is_dir():
+            for sub in sorted(item.iterdir()):
+                if sub.is_file():
+                    _add_file(sub, f"report/{sub.name}")
 
     raw_dir = output_dir / "raw"
     if raw_dir.is_dir():
@@ -91,7 +106,7 @@ def _collect_outputs(output_dir: Path) -> list[dict]:
             "role": "raw_dir",
         })
 
-    return entries
+    return sorted(entries, key=lambda e: e["path"])
 
 
 def _infer_inputs(metadata: dict) -> list[dict]:
@@ -114,7 +129,7 @@ def write_results_json(
     command: list[str] | None = None,
     backend: str | None = None,
     container_image: str | None = None,
-    status: str = "success",
+    status: Status = "success",
 ) -> Path:
     """Write results.json summary + file manifest.
 
@@ -175,19 +190,23 @@ def write_results_json(
     return path
 
 
-def write_ro_crate(output_dir: Path, results_path: Path) -> Path | None:
+def write_ro_crate(
+    output_dir: Path,
+    results: Path | dict,
+) -> Path | None:
     """Write an RO-Crate 1.1 Process Run Crate describing the run.
 
     Best-effort: returns None (logs a warning) if the ``rocrate`` package
-    is not installed. The crate is populated entirely from
-    ``results.json`` so there's a single source of truth.
+    is not installed. The crate is populated entirely from the results
+    summary so there's a single source of truth.
 
     The emitted file is always named ``ro-crate-metadata.json`` per the
     RO-Crate spec.
 
     Args:
         output_dir: The normalized output directory.
-        results_path: Path to the already-written results.json.
+        results: Either a parsed results dict (preferred, avoids a re-read)
+            or a path to results.json.
 
     Returns:
         Path to ro-crate-metadata.json on success, None if rocrate is
@@ -203,11 +222,12 @@ def write_ro_crate(output_dir: Path, results_path: Path) -> Path | None:
         )
         return None
 
-    try:
-        results = json.loads(results_path.read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("Cannot read %s: %s; skipping RO-Crate", results_path, exc)
-        return None
+    if isinstance(results, Path):
+        try:
+            results = json.loads(results.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Cannot read %s: %s; skipping RO-Crate", results, exc)
+            return None
 
     crate = ROCrate()
     crate.name = f"{results.get('tool', 'predict-structure')} prediction"
@@ -263,8 +283,8 @@ def write_ro_crate(output_dir: Path, results_path: Path) -> Path | None:
         "agent": {"@id": ps_app["@id"]},
         "actionStatus": {
             "@id": "http://schema.org/"
-                   + ("CompletedActionStatus" if results.get("status") == "success"
-                      else "FailedActionStatus")
+                   + _SCHEMA_STATUS.get(results.get("status", "success"),
+                                        "CompletedActionStatus")
         },
         "description": " ".join(results.get("command", [])),
         "result": [{"@id": e["@id"]} for e in result_entities],
