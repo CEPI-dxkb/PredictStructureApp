@@ -198,6 +198,53 @@ class TestMSAFileMode:
 class TestJobBatchMode:
     """--job batch execution with YAML job spec."""
 
+    @pytest.mark.tier1
+    def test_job_full_run(self, container, tmp_path):
+        """End-to-end --job batch run produces normalized output per job."""
+        import yaml
+
+        job_dir = tmp_path / "jobs"
+        job_dir.mkdir()
+        # One ESMFold job (fast, no GPU drama)
+        jobs = [{
+            "protein": [PROTEIN_FASTA],
+            "tool": "esmfold",
+            "options": {"backend": "subprocess", "fp16": True},
+        }]
+        job_file = job_dir / "batch.yaml"
+        job_file.write_text(yaml.dump(jobs))
+
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        binds = {
+            str(TEST_DATA_HOST): "/data",
+            str(job_dir): "/jobs",
+            str(output_dir): "/output",
+        }
+        result = container.exec(
+            ["predict-structure", "--job", "/jobs/batch.yaml",
+             "-o", "/output"],
+            gpu=True,
+            binds=binds,
+            timeout=300,
+        )
+        assert result.returncode == 0, (
+            f"--job batch run failed:\n{result.stderr[-1500:]}"
+        )
+        # cli.py:_run_job_file names each job dir job_<3-digit-idx>.
+        # Discover them rather than hardcoding so this test still works
+        # if the naming scheme is generalized later.
+        job_dirs = sorted(p for p in output_dir.iterdir() if p.is_dir())
+        assert len(job_dirs) == len(jobs), (
+            f"Expected {len(jobs)} job dir(s), got {len(job_dirs)}: {job_dirs}"
+        )
+        for job_dir in job_dirs:
+            assert (job_dir / "model_1.pdb").exists(), (
+                f"{job_dir.name} produced no model_1.pdb: "
+                f"{list(job_dir.iterdir())}"
+            )
+            assert (job_dir / "results.json").exists()
+
     def test_job_debug_mode(self, container, tmp_path):
         """Job file with debug mode should print commands for each job."""
         # Create a job YAML inside test_data for bind mounting

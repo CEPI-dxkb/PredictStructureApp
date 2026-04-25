@@ -97,6 +97,8 @@ class TestServiceScriptWithWorkspace:
                 f"results.json not uploaded under {ws_output}:\n{ls_result.stdout}"
             )
 
+            # KEEP_WORKSPACE behavior is exercised in TestKeepWorkspace below.
+
             # Regression guard: $script->donot_create_result_folder(1) in
             # the Perl service script prevents the BV-BRC AppScript framework
             # from auto-creating <output_path> before our upload. If the
@@ -230,3 +232,58 @@ class TestServiceScriptWithWorkspace:
         finally:
             cleanup_ws(container, token, ws_output)
             cleanup_ws(container, token, ws_input)
+
+
+class TestKeepWorkspace:
+    """PREDICT_STRUCTURE_KEEP_WORKSPACE=1 skips cleanup so artifacts can be inspected."""
+
+    def test_keep_workspace_skips_cleanup(
+        self, container, workspace_token, tmp_path, monkeypatch, capsys
+    ):
+        """When the env var is set, cleanup_ws() prints + skips p3-rm."""
+        from tests.acceptance.ws_utils import cleanup_ws, make_output_path
+
+        monkeypatch.setenv("PREDICT_STRUCTURE_KEEP_WORKSPACE", "1")
+        token = workspace_token.read_text().strip()
+
+        # Allocate a fresh path; create a sentinel so we can verify it's
+        # still there after cleanup_ws() runs.
+        ws_path = make_output_path(container, token, "misc", "keep_test")
+        sentinel = tmp_path / "sentinel.txt"
+        sentinel.write_text("keep me")
+
+        # Upload sentinel via p3-cp so the path exists
+        container.exec(
+            ["p3-cp", "/data/sentinel.txt", f"ws:{ws_path}/sentinel.txt"],
+            gpu=False,
+            env={"KB_AUTH_TOKEN": token},
+            binds={str(tmp_path): "/data"},
+            timeout=30,
+        )
+
+        try:
+            # Should NOT delete; should print [keep-workspace] message.
+            cleanup_ws(container, token, ws_path)
+            captured = capsys.readouterr()
+            assert "[keep-workspace]" in captured.out, (
+                f"Expected keep-workspace message; got:\n{captured.out}"
+            )
+            assert ws_path in captured.out, (
+                f"Expected path {ws_path} in keep message; got:\n{captured.out}"
+            )
+
+            # Verify sentinel is still in workspace
+            ls = container.exec(
+                ["p3-ls", ws_path],
+                gpu=False,
+                env={"KB_AUTH_TOKEN": token},
+                timeout=30,
+            )
+            assert ls.returncode == 0, (
+                f"KEEP_WORKSPACE=1 did not preserve {ws_path}"
+            )
+            assert "sentinel.txt" in ls.stdout
+        finally:
+            # Real cleanup -- bypass the env var
+            monkeypatch.delenv("PREDICT_STRUCTURE_KEEP_WORKSPACE")
+            cleanup_ws(container, token, ws_path)

@@ -2,6 +2,35 @@
 
 Snapshot rating + gap inventory for the PredictStructureApp test suite.
 
+## Status — branch `tiered-fixture-ladder`
+
+Most of the gaps + the T1–T5 tier ladder have been implemented on the
+`tiered-fixture-ladder` branch. Status:
+
+| Item | Status |
+|---|---|
+| T1–T5 tier markers + Tier dataclass + `msa_args_for` policy helper | ✅ |
+| Per-tool MSA policy (Boltz/Chai require, OpenFold prefers, AF builds-own, ESMFold ignores) | ✅ |
+| Medium (1AKE 214 aa) + large (enolase 434 aa) protein fixtures | ✅ |
+| `scripts/generate_test_msas.sh` (one-shot ColabFold MSA generator) | ✅ -- run out-of-band; commit the resulting `.a3m` |
+| `scripts/generate_service_params.py` (18 tier×tool JSON files) | ✅ |
+| Phase 2 `TestTierCoverage` (23 cases, debug-mode, ~10s) | ✅ |
+| Phase 3 `TestServiceScriptTiers` (T1–T5 service-script execution) | ✅ |
+| Layout parity test (gap #1) | ✅ |
+| `results.json` schema + sha256 manifest validation (gap #3) | ✅ |
+| RO-Crate validation (gap #4, skipped if rocrate not in SIF) | ✅ |
+| `finalize-results` / `aggregate-results` standalone tests (gap #6) | ✅ |
+| Concurrency hazard in `make_output_path` (gap #7) | ✅ -- UUID8 suffix |
+| Failure-mode tests (gap #8) | ✅ |
+| `donot_create_result_folder` regression guard (gap #9) | ✅ |
+| `KEEP_WORKSPACE` regression test (gap #13) | ✅ |
+| `--job` batch end-to-end (gap #14) | ✅ |
+| CWL workflow execution test (gap #2) | ✅ -- `tests/acceptance/test_cwl_workflow_execution.py`, gated on `cwltool` |
+| Multi-tool workflow execution (gap #5) | partial -- `aggregate-results` exercised via CLI test; full multi-tool fan-out deferred (4× GPU runtime) |
+| Container build CI (gap #10) | deferred -- infra, separate follow-up |
+| MSA-server mode (gap #11) | out of scope per user lock |
+| Phase 1 native T2/T5 tier tests | deferred -- Phase 2/3 tier coverage is the higher-leverage layer |
+
 ## Inventory
 
 - **358 unit tests** (no GPU, no container) — adapters, converters,
