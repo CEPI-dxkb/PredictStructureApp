@@ -291,6 +291,147 @@ def pytest_addoption(parser):
         help="CUDA device index to pin tests to (e.g. '0', '1'). "
              "Prevents tools like AlphaFold/JAX from grabbing all GPUs.",
     )
+    parser.addoption(
+        "--runtime-out",
+        action="store",
+        default=None,
+        help="Write per-test runtime JSON to this path. Defaults to "
+             "$PREDICT_STRUCTURE_RUNTIME_OUT or 'output/test_runtimes.json' "
+             "if either is set / the default exists. Pass an empty string "
+             "to disable.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Runtime extractor: tier-aware per-test runtime recorder
+#
+# Captures every test's call-phase duration plus its applied markers and
+# emits both per-test entries and per-tier aggregates (count, total, p50,
+# p95) at session end. Lets `pytest -m tier1 --sif ...` answer "what's
+# the actual cost per tier" without needing pytest-json-report parsing.
+# ---------------------------------------------------------------------------
+
+_RUNTIME_RECORDS: list[dict] = []
+_TIER_NAMES = ("tier1", "tier2", "tier3", "tier4", "tier5")
+
+
+def pytest_runtest_makereport(item, call):
+    """Record duration of the test's call phase per item.
+
+    Runs in both setup+call phases; we record one entry per test using
+    the `call` phase if reached, otherwise the `setup` phase (catches
+    tests skipped in setup, e.g. by ``pytest.skip()`` in a fixture).
+    """
+    # Only record once per test: prefer the call phase, fall back to
+    # setup if the call phase never runs (skip-in-setup, fixture error).
+    if call.when == "setup":
+        if call.excinfo is None:
+            return  # setup OK; wait for call phase
+        # else: setup failed/skipped -- record now
+    elif call.when != "call":
+        return  # ignore teardown
+
+    if call.excinfo is None:
+        outcome = "passed"
+    elif call.excinfo.errisinstance(_pytest_skipped_exc()):
+        outcome = "skipped"
+    else:
+        outcome = "failed"
+
+    keywords = set(item.keywords)
+    tiers = [t for t in _TIER_NAMES if t in keywords]
+    phases = [p for p in ("phase1", "phase2", "phase3") if p in keywords]
+    _RUNTIME_RECORDS.append({
+        "nodeid": item.nodeid,
+        "duration_s": round(call.duration, 3),
+        "outcome": outcome,
+        "tiers": tiers,
+        "phases": phases,
+        "markers": sorted(
+            m for m in keywords
+            if m in {"slow", "gpu", "workspace", "container", "cwl", "docker"}
+        ),
+    })
+
+
+def _pytest_skipped_exc():
+    """Return the pytest Skipped exception class (deferred import)."""
+    import _pytest.outcomes
+    return _pytest.outcomes.Skipped
+
+
+def _percentile(values: list[float], p: float) -> float:
+    if not values:
+        return 0.0
+    s = sorted(values)
+    k = (len(s) - 1) * p
+    lo, hi = int(k), min(int(k) + 1, len(s) - 1)
+    if lo == hi:
+        return s[lo]
+    return s[lo] + (s[hi] - s[lo]) * (k - lo)
+
+
+def _resolve_runtime_path(config) -> Path | None:
+    cli = config.getoption("--runtime-out")
+    if cli == "":
+        return None  # explicitly disabled
+    if cli:
+        return Path(cli)
+    env = os.environ.get("PREDICT_STRUCTURE_RUNTIME_OUT")
+    if env == "":
+        return None
+    if env:
+        return Path(env)
+    # Default if `output/` already exists in the project dir
+    default = PROJECT_ROOT / "output" / "test_runtimes.json"
+    if default.parent.is_dir():
+        return default
+    return None
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Emit per-test + per-tier runtime JSON at the end of the session."""
+    if not _RUNTIME_RECORDS:
+        return
+    out_path = _resolve_runtime_path(session.config)
+    if out_path is None:
+        return
+
+    # Per-tier aggregates (each test contributes to every tier marker
+    # it carries; almost always one).
+    tier_buckets: dict[str, list[float]] = {t: [] for t in _TIER_NAMES}
+    untiered: list[float] = []
+    for r in _RUNTIME_RECORDS:
+        if r["tiers"]:
+            for t in r["tiers"]:
+                tier_buckets[t].append(r["duration_s"])
+        else:
+            untiered.append(r["duration_s"])
+
+    aggregates = {}
+    for tier, durs in tier_buckets.items():
+        if not durs:
+            continue
+        aggregates[tier] = {
+            "count": len(durs),
+            "total_s": round(sum(durs), 2),
+            "mean_s": round(sum(durs) / len(durs), 2),
+            "p50_s": round(_percentile(durs, 0.50), 2),
+            "p95_s": round(_percentile(durs, 0.95), 2),
+            "max_s": round(max(durs), 2),
+        }
+    if untiered:
+        aggregates["__untiered__"] = {
+            "count": len(untiered),
+            "total_s": round(sum(untiered), 2),
+            "mean_s": round(sum(untiered) / len(untiered), 2),
+        }
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps({
+        "tests": _RUNTIME_RECORDS,
+        "aggregates": aggregates,
+    }, indent=2))
 
 
 def _get_container_params(config):

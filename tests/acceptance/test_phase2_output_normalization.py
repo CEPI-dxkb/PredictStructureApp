@@ -16,7 +16,11 @@ from pathlib import Path
 import pytest
 
 from tests.acceptance.matrix import CRAMBIN_RESIDUES, PROTEIN_FASTA
-from tests.acceptance.validators import assert_valid_output, validate_output_directory
+from tests.acceptance.validators import (
+    assert_valid_output,
+    assert_valid_results_json,
+    validate_output_directory,
+)
 
 pytestmark = [pytest.mark.phase2, pytest.mark.gpu, pytest.mark.container]
 
@@ -110,6 +114,26 @@ class TestMetadataJSON:
         )
         meta = json.loads((output_dir / "metadata.json").read_text())
         assert meta.get("runtime_seconds", 0) > 0
+
+
+class TestResultsJson:
+    """results.json must be present, schema-valid, and have a correct manifest."""
+
+    def test_results_json_valid_for_esmfold(self, container, tmp_path):
+        output_dir, _ = _run_and_validate(
+            container, "esmfold", tmp_path, extra_args=["--fp16"]
+        )
+        assert_valid_results_json(output_dir)
+
+    def test_results_metrics_match_confidence(self, container, tmp_path):
+        """results.json metrics scalar mirror confidence.json values."""
+        output_dir, _ = _run_and_validate(
+            container, "esmfold", tmp_path, extra_args=["--fp16"]
+        )
+        results = json.loads((output_dir / "results.json").read_text())
+        conf = json.loads((output_dir / "confidence.json").read_text())
+        assert results["metrics"]["plddt_mean"] == conf["plddt_mean"]
+        assert results["metrics"]["num_residues"] == len(conf["per_residue_plddt"])
 
 
 class TestOutputFormat:

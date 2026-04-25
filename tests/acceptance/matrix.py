@@ -15,10 +15,17 @@ PROTEIN_FASTA = "/data/simple_protein.fasta"
 MULTIMER_FASTA = "/data/multimer.fasta"
 DNA_FASTA = "/data/dna.fasta"
 RNA_FASTA = "/data/rna.fasta"
-MSA_FILE = "/data/msa/crambin.a3m"
+MEDIUM_PROTEIN_FASTA = "/data/medium_protein.fasta"
+LARGE_PROTEIN_FASTA = "/data/large_protein.fasta"
 
-# Crambin has 46 residues
+MSA_FILE = "/data/msa/crambin.a3m"
+MEDIUM_MSA_FILE = "/data/msa/medium_protein.a3m"
+LARGE_MSA_FILE = "/data/msa/large_protein.a3m"
+
+# Sequence-length constants for fixtures (used to validate per_residue_plddt)
 CRAMBIN_RESIDUES = 46
+MEDIUM_PROTEIN_RESIDUES = 214   # adenylate kinase, E. coli (P69441 / 1AKE)
+LARGE_PROTEIN_RESIDUES = 434    # enolase 1, S. cerevisiae (P00924 / ENO1)
 
 
 @dataclass
@@ -203,3 +210,117 @@ def tool_cases(matrix: list[ToolTestCase], tool: str) -> list[ToolTestCase]:
 def gpu_cases(matrix: list[ToolTestCase]) -> list[ToolTestCase]:
     """Filter to GPU-required cases (everything except esmfold_cpu)."""
     return [tc for tc in matrix if "cpu" not in tc.input_type]
+
+
+# ---------------------------------------------------------------------------
+# Tier ladder (T1-T5)
+#
+# Each phase exercises every applicable tier so a regression in any layer
+# (native tool / adapter / service-script) is caught for every use-case
+# class. See docs/TEST_COVERAGE.md "Cross-phase fixture coverage".
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Tier:
+    """A standard test fixture profile used uniformly across phases."""
+
+    name: str                                     # "tier1" .. "tier5"
+    fasta: str                                    # container-side path
+    msa: str | None                               # container-side path; None => no MSA available
+    expected_residues: int
+    extra_entities: tuple[tuple[str, str], ...] = ()  # ("--ligand", "ATP"), ...
+    description: str = ""
+
+
+TIER1 = Tier(
+    name="tier1",
+    fasta=PROTEIN_FASTA,
+    msa=MSA_FILE,
+    expected_residues=CRAMBIN_RESIDUES,
+    description="smoke (crambin, 46 aa)",
+)
+
+TIER2 = Tier(
+    name="tier2",
+    fasta=MEDIUM_PROTEIN_FASTA,
+    msa=MEDIUM_MSA_FILE,
+    expected_residues=MEDIUM_PROTEIN_RESIDUES,
+    description="functional (1AKE, 214 aa)",
+)
+
+TIER3 = Tier(
+    name="tier3",
+    fasta=PROTEIN_FASTA,
+    msa=MSA_FILE,
+    expected_residues=CRAMBIN_RESIDUES,
+    extra_entities=(("--ligand", "ATP"),),
+    description="multi-entity (protein + ligand)",
+)
+
+TIER4 = Tier(
+    name="tier4",
+    fasta=MULTIMER_FASTA,
+    msa=None,
+    expected_residues=55,
+    description="multimer (2 chains)",
+)
+
+TIER5 = Tier(
+    name="tier5",
+    fasta=LARGE_PROTEIN_FASTA,
+    msa=LARGE_MSA_FILE,
+    expected_residues=LARGE_PROTEIN_RESIDUES,
+    description="large (471 aa scaling)",
+)
+
+ALL_TIERS: list[Tier] = [TIER1, TIER2, TIER3, TIER4, TIER5]
+TIERS_BY_NAME: dict[str, Tier] = {t.name: t for t in ALL_TIERS}
+
+
+# Tools where the tiered tests are meaningful. ESMFold ignores MSA and has
+# limited entity-type support; AlphaFold builds its own MSA and rejects
+# non-protein entities -- those constraints are captured in
+# `tier_supported_for_tool` and `msa_args_for`.
+TOOLS_WITH_TIERS: tuple[str, ...] = ("boltz", "chai", "openfold", "alphafold", "esmfold")
+
+
+def msa_args_for(tool: str, tier: Tier) -> list[str]:
+    """Return ['--msa', path] CLI args for tools that benefit from an MSA file.
+
+    Per-tool MSA policy (see docs/TEST_COVERAGE.md "Per-tool MSA policy"):
+
+      Boltz, Chai      -- require an MSA (or --use-msa-server, which we
+                          exclude). Pass tier.msa if available.
+      OpenFold         -- optional but preferred. Pass tier.msa if available.
+      AlphaFold        -- builds its own MSA from the bound database; passing
+                          a file would be ignored / conflict. Always [].
+      ESMFold          -- single-sequence model, ignores MSA entirely. [].
+
+    If the tier has no MSA fixture (T4 multimer, or no-MSA variant), [].
+    """
+    if tool in {"alphafold", "esmfold"}:
+        return []
+    if tier.msa is None:
+        return []
+    return ["--msa", tier.msa]
+
+
+def tier_supported_for_tool(tool: str, tier: Tier) -> bool:
+    """Whether this tier's entity profile is supported by the tool.
+
+    AlphaFold and ESMFold reject non-protein entities (ligands, DNA, RNA),
+    so multi-entity tiers (T3) are protein-only for them and therefore
+    skipped if the tier's `extra_entities` includes any non-protein flag.
+    """
+    if not tier.extra_entities:
+        return True
+    if tool in {"alphafold", "esmfold"}:
+        # Only allow if extra_entities is empty (already handled above)
+        return False
+    return True
+
+
+def tier_entity_args(tier: Tier) -> list[str]:
+    """Flatten tier.extra_entities into a flat CLI args list."""
+    return [arg for pair in tier.extra_entities for arg in pair]

@@ -105,4 +105,9 @@ markers = [
     "phase1: Phase 1 native tool tests",
     "phase2: Phase 2 CLI integration tests",
     "phase3: Phase 3 service script + workspace tests",
+    "tier1: smoke -- small protein, every tool, every layer",
+    "tier2: functional -- medium protein (~200-300 aa), full pipeline",
+    "tier3: multi-entity -- protein + ligand/DNA/RNA at small size",
+    "tier4: multimer -- multi-chain protein",
+    "tier5: large -- ~500 aa scaling regression",
 ]

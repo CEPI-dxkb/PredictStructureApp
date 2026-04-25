@@ -6,6 +6,7 @@ prediction output directory structure.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -230,4 +231,97 @@ def assert_valid_output(output_dir: Path | str, **kwargs) -> ValidationResult:
     if not result.ok:
         failures = "\n".join(f"  - {n}: {d}" for n, d in result.failures)
         raise AssertionError(f"Output validation failed:\n{failures}\n\n{result.summary()}")
+    return result
+
+
+# ---------------------------------------------------------------------------
+# results.json (summary + sha256 manifest) -- written by predict_structure.results
+# ---------------------------------------------------------------------------
+
+
+def _sha256(path: Path, buf_size: int = 64 * 1024) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        while chunk := fh.read(buf_size):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def validate_results_json(output_dir: Path | str) -> ValidationResult:
+    """Validate results.json against schema + verify sha256 manifest matches.
+
+    Asserts:
+      - File exists at output_dir/results.json
+      - JSON validates against tests/acceptance/schemas/results.schema.json
+      - Each outputs[*] entry's sha256 + size match the on-disk file
+      - raw_dir entry has size=null + sha256=null
+      - results.json itself is NOT in the manifest (self-reference would
+        break hash stability)
+    """
+    output_dir = Path(output_dir)
+    result = ValidationResult()
+
+    results_path = output_dir / "results.json"
+    if not results_path.is_file():
+        result.failed("results_exists", f"{results_path} not found")
+        return result
+
+    try:
+        data = json.loads(results_path.read_text())
+    except json.JSONDecodeError as e:
+        result.failed("results_json_parse", str(e))
+        return result
+    result.passed("results_exists")
+
+    try:
+        schema = _load_schema("results.schema.json")
+        jsonschema.validate(data, schema)
+        result.passed("results_schema")
+    except FileNotFoundError:
+        result.warned("results_schema", "results.schema.json not present")
+    except jsonschema.ValidationError as e:
+        result.failed("results_schema", e.message)
+
+    paths_seen: set[str] = set()
+    for entry in data.get("outputs", []):
+        rel = entry["path"]
+        paths_seen.add(rel)
+        if rel == "results.json":
+            result.failed("results_self_reference", "manifest lists itself")
+            continue
+        if entry["role"] == "raw_dir":
+            if entry["size"] is not None or entry["sha256"] is not None:
+                result.failed("raw_dir_entry",
+                              f"{rel} should have null size+sha256")
+            continue
+        target = output_dir / rel
+        if not target.is_file():
+            result.failed("manifest_file_missing",
+                          f"{rel} listed but missing on disk")
+            continue
+        actual_size = target.stat().st_size
+        if entry["size"] != actual_size:
+            result.failed("manifest_size",
+                          f"{rel}: declared {entry['size']}, actual {actual_size}")
+            continue
+        actual_hash = _sha256(target)
+        if entry["sha256"] != actual_hash:
+            result.failed("manifest_sha256",
+                          f"{rel}: declared {entry['sha256'][:12]}..., "
+                          f"actual {actual_hash[:12]}...")
+            continue
+    if paths_seen:
+        result.passed("manifest_files", f"{len(paths_seen)} entries verified")
+
+    return result
+
+
+def assert_valid_results_json(output_dir: Path | str) -> ValidationResult:
+    """Validate results.json and raise AssertionError on failure."""
+    result = validate_results_json(output_dir)
+    if not result.ok:
+        failures = "\n".join(f"  - {n}: {d}" for n, d in result.failures)
+        raise AssertionError(
+            f"results.json validation failed:\n{failures}\n\n{result.summary()}"
+        )
     return result

@@ -1,0 +1,10 @@
+{
+  "tool": "openfold",
+  "output_path": "/output",
+  "output_file": "tier4_openfold_test",
+  "num_recycles": 3,
+  "output_format": "pdb",
+  "msa_mode": "none",
+  "seed": 42,
+  "input_file": "/data/multimer.fasta"
+}

@@ -77,10 +77,22 @@ class TestServiceScriptExecution:
             binds=binds,
             timeout=timeout,
         )
+        # The BV-BRC AppScript framework returns exit 0 even when the
+        # Perl `die`s -- it catches the exception and writes JobFailed
+        # internally. So we ALSO assert the prediction produced its
+        # canonical output (matches docs/OUTPUT_NORMALIZATION.md §1).
         assert result.returncode == 0, (
-            f"Service script {params_filename} failed (rc={result.returncode}).\n"
-            f"STDOUT:\n{result.stdout[-2000:]}\n"
-            f"STDERR:\n{result.stderr[-2000:]}"
+            f"Service script {params_filename} returned non-zero "
+            f"(rc={result.returncode}).\nSTDERR:\n{result.stderr[-2000:]}"
+        )
+        local_output = output_dir / "output"
+        produced = list(local_output.iterdir()) if local_output.is_dir() else []
+        assert (local_output / "model_1.pdb").is_file(), (
+            f"{params_filename}: prediction did not produce model_1.pdb -- "
+            "framework likely caught a die() and reported success.\n"
+            f"Local output dir: {local_output}\n"
+            f"Files produced: {[p.name for p in produced]}\n"
+            f"STDERR tail:\n{result.stderr[-2000:]}"
         )
 
     def test_esmfold_input_file(self, container, tmp_path):
@@ -100,6 +112,106 @@ class TestServiceScriptExecution:
     def test_gpu_tools(self, container, params_file, tmp_path):
         """GPU tools via service script with input_file mode."""
         self._run(container, tmp_path, params_file, 3600)
+
+
+class TestServiceScriptTiers:
+    """Per-tier service-script execution.
+
+    Reads from the auto-generated test_data/service_params/tier{N}_{tool}.json
+    set so coverage automatically follows fixture changes (re-run
+    scripts/generate_service_params.py).
+    """
+
+    def _run(self, container, tmp_path, params_file: str, timeout: int):
+        params_file_local = _load_service_params(params_file, tmp_path)
+        binds, output_dir = _make_binds(tmp_path)
+        result = container.service(
+            params_json=Path(f"/params/{params_file_local.name}"),
+            binds=binds,
+            timeout=timeout,
+        )
+        # The BV-BRC AppScript framework returns exit 0 even when the
+        # Perl `die`s -- it catches the exception and writes JobFailed
+        # internally. So we ALSO assert the prediction produced its
+        # canonical output (matches docs/OUTPUT_NORMALIZATION.md §1).
+        assert result.returncode == 0, (
+            f"{params_file}: service script returned non-zero "
+            f"(rc={result.returncode}).\nSTDERR:\n{result.stderr[-2000:]}"
+        )
+        local_output = output_dir / "output"
+        produced = list(local_output.iterdir()) if local_output.is_dir() else []
+        assert (local_output / "model_1.pdb").is_file(), (
+            f"{params_file}: prediction did not produce model_1.pdb -- "
+            "framework likely caught a die() and reported success.\n"
+            f"Local output dir: {local_output}\n"
+            f"Files produced: {[p.name for p in produced]}\n"
+            f"STDERR tail:\n{result.stderr[-2000:]}"
+        )
+
+    @pytest.mark.tier1
+    @pytest.mark.parametrize("params_file", [
+        "tier1_esmfold.json",
+    ])
+    def test_tier1_fast(self, container, params_file, tmp_path):
+        """Tier 1 ESMFold via service script -- fast smoke."""
+        self._run(container, tmp_path, params_file, 300)
+
+    @pytest.mark.slow
+    @pytest.mark.tier1
+    @pytest.mark.parametrize("params_file", [
+        "tier1_boltz.json",
+        "tier1_openfold.json",
+        "tier1_chai.json",
+    ])
+    def test_tier1_gpu(self, container, params_file, tmp_path):
+        """Tier 1 GPU tools via service script."""
+        self._run(container, tmp_path, params_file, 3600)
+
+    @pytest.mark.slow
+    @pytest.mark.tier2
+    @pytest.mark.parametrize("params_file", [
+        "tier2_esmfold.json",
+        "tier2_boltz.json",
+        "tier2_openfold.json",
+        "tier2_chai.json",
+    ])
+    def test_tier2_functional(self, container, params_file, tmp_path):
+        """Tier 2 (medium protein, ~214 aa) full pipeline via service script."""
+        self._run(container, tmp_path, params_file, 3600)
+
+    @pytest.mark.slow
+    @pytest.mark.tier3
+    @pytest.mark.parametrize("params_file", [
+        "tier3_boltz.json",
+        "tier3_openfold.json",
+        "tier3_chai.json",
+    ])
+    def test_tier3_multi_entity(self, container, params_file, tmp_path):
+        """Tier 3 (protein + DNA via text_input) -- multi-entity service path."""
+        self._run(container, tmp_path, params_file, 3600)
+
+    @pytest.mark.slow
+    @pytest.mark.tier4
+    @pytest.mark.parametrize("params_file", [
+        "tier4_esmfold.json",
+        "tier4_boltz.json",
+        "tier4_openfold.json",
+        "tier4_chai.json",
+    ])
+    def test_tier4_multimer(self, container, params_file, tmp_path):
+        """Tier 4 (multimer) via service script."""
+        self._run(container, tmp_path, params_file, 3600)
+
+    @pytest.mark.slow
+    @pytest.mark.tier5
+    @pytest.mark.parametrize("params_file", [
+        "tier5_boltz.json",
+        "tier5_openfold.json",
+        "tier5_chai.json",
+    ])
+    def test_tier5_large(self, container, params_file, tmp_path):
+        """Tier 5 (large, ~434 aa) scaling via service script."""
+        self._run(container, tmp_path, params_file, 7200)
 
 
 class TestServiceScriptMSAMode:

@@ -13,15 +13,21 @@ from pathlib import Path
 import pytest
 
 from tests.acceptance.matrix import (
+    ALL_TIERS,
     CRAMBIN_RESIDUES,
     DNA_FASTA,
     MSA_FILE,
     PARAM_VARIATIONS,
     PROTEIN_FASTA,
     RNA_FASTA,
+    TOOLS_WITH_TIERS,
     TOOL_INPUT_MATRIX,
+    Tier,
     ToolTestCase,
+    msa_args_for,
     parametrize_matrix,
+    tier_entity_args,
+    tier_supported_for_tool,
 )
 from tests.acceptance.timing import check_timing
 from tests.acceptance.validators import assert_valid_output
@@ -192,6 +198,57 @@ class TestMSAFileMode:
 class TestJobBatchMode:
     """--job batch execution with YAML job spec."""
 
+    @pytest.mark.tier1
+    def test_job_full_run(self, container, tmp_path):
+        """End-to-end --job batch run produces normalized output per job."""
+        import yaml
+
+        job_dir = tmp_path / "jobs"
+        job_dir.mkdir()
+        # One ESMFold job (fast, no GPU drama)
+        jobs = [{
+            "protein": [PROTEIN_FASTA],
+            "tool": "esmfold",
+            "options": {"backend": "subprocess", "fp16": True},
+        }]
+        job_file = job_dir / "batch.yaml"
+        job_file.write_text(yaml.dump(jobs))
+
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        # /local_databases is rw because tools cache HF weights into it.
+        # ApptainerRunner.predict() binds it automatically, but exec()
+        # doesn't -- mirror that behavior here.
+        binds = {
+            str(TEST_DATA_HOST): "/data",
+            str(job_dir): "/jobs",
+            str(output_dir): "/output",
+            "/local_databases": "/local_databases",
+        }
+        result = container.exec(
+            ["predict-structure", "--job", "/jobs/batch.yaml",
+             "-o", "/output"],
+            gpu=True,
+            binds=binds,
+            timeout=300,
+        )
+        assert result.returncode == 0, (
+            f"--job batch run failed:\n{result.stderr[-1500:]}"
+        )
+        # cli.py:_run_job_file names each job dir job_<3-digit-idx>.
+        # Discover them rather than hardcoding so this test still works
+        # if the naming scheme is generalized later.
+        job_dirs = sorted(p for p in output_dir.iterdir() if p.is_dir())
+        assert len(job_dirs) == len(jobs), (
+            f"Expected {len(jobs)} job dir(s), got {len(job_dirs)}: {job_dirs}"
+        )
+        for job_dir in job_dirs:
+            assert (job_dir / "model_1.pdb").exists(), (
+                f"{job_dir.name} produced no model_1.pdb: "
+                f"{list(job_dir.iterdir())}"
+            )
+            assert (job_dir / "results.json").exists()
+
     def test_job_debug_mode(self, container, tmp_path):
         """Job file with debug mode should print commands for each job."""
         # Create a job YAML inside test_data for bind mounting
@@ -286,3 +343,75 @@ class TestParameterVariations:
     @pytest.mark.parametrize("tc", parametrize_matrix(PARAM_VARIATIONS))
     def test_param_variation(self, container, tc: ToolTestCase, tmp_path):
         _run_matrix_test(container, tc, tmp_path)
+
+
+# =========================================================================
+# Tier coverage matrix -- T1-T5 across every applicable tool, --debug mode
+#
+# Fast cross-cutting check that the CLI builds a sensible command for
+# every (tool, tier) combo respecting the per-tool MSA policy. Runs in
+# --debug (no GPU work) so the full matrix completes in seconds. Full
+# pipeline runs are covered in Phase 1 (native) and TestToolInputMatrix
+# above for the "small" tier.
+# =========================================================================
+
+
+def _tier_marker(tier_name: str):
+    """Return the pytest marker matching a tier name."""
+    return getattr(pytest.mark, tier_name)
+
+
+def _tier_param(tool: str, tier: Tier):
+    """Build a pytest.param with the right tier marker (and `slow` for T5)."""
+    marks = [_tier_marker(tier.name)]
+    if tier.name == "tier5":
+        marks.append(pytest.mark.slow)
+    return pytest.param(tool, tier, id=f"{tool}-{tier.name}", marks=marks)
+
+
+def _tier_param_grid():
+    """Cartesian product of TOOLS_WITH_TIERS x ALL_TIERS, filtered by support."""
+    out = []
+    for tier in ALL_TIERS:
+        for tool in TOOLS_WITH_TIERS:
+            if not tier_supported_for_tool(tool, tier):
+                continue
+            out.append(_tier_param(tool, tier))
+    return out
+
+
+class TestTierCoverage:
+    """Every (tool, tier) supported pair builds a sensible CLI command.
+
+    Runs `predict-structure <tool> ... --debug` so we exercise:
+      - Tier fixture path resolution
+      - msa_args_for(tool, tier) policy is applied correctly
+      - Adapter accepts the resulting argv
+    Without spending GPU time. Full pipeline correctness lives in
+    TestToolInputMatrix (T1) and Phase 1 native tool tests.
+    """
+
+    @pytest.mark.parametrize("tool,tier", _tier_param_grid())
+    def test_debug_command_builds(
+        self, container, tool: str, tier: Tier, tmp_path
+    ):
+        binds, output_dir = _default_binds(tmp_path)
+        cmd = ["predict-structure", tool, "--protein", tier.fasta]
+        cmd += tier_entity_args(tier)
+        cmd += msa_args_for(tool, tier)
+        cmd += ["-o", "/output", "--backend", "subprocess",
+                "--seed", "42", "--debug"]
+        if tool == "alphafold":
+            cmd += ["--af2-data-dir", "/local_databases/alphafold/databases"]
+
+        result = container.exec(cmd, gpu=False, binds=binds, timeout=60)
+        assert result.returncode == 0, (
+            f"{tool}/{tier.name} --debug failed (rc={result.returncode}).\n"
+            f"CMD: {' '.join(cmd)}\n"
+            f"STDERR:\n{result.stderr[-1500:]}"
+        )
+        # --debug should print the resolved command line
+        assert tool in result.stdout or tier.fasta in result.stdout, (
+            f"--debug output didn't echo the command for {tool}/{tier.name}:\n"
+            f"{result.stdout[:1500]}"
+        )

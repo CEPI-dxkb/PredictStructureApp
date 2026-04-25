@@ -7,6 +7,7 @@ Shared by `test_phase3_workspace.py` (pure workspace ops) and
 from __future__ import annotations
 
 import os
+import uuid
 from datetime import datetime
 
 
@@ -61,8 +62,10 @@ def make_output_path(container, token: str, tool: str, testname: str) -> str:
     apptests = ws_apptests(token)
     tool_dir = f"{apptests}/{tool}"
     ensure_ws_dirs(container, token, apptests, tool_dir)
+    # Timestamp + 8-hex UUID suffix so parallel pytest workers don't
+    # collide when starting in the same wall-clock second.
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    return f"{tool_dir}/{testname}-{ts}"
+    return f"{tool_dir}/{testname}-{ts}-{uuid.uuid4().hex[:8]}"
 
 
 def upload_test_input(
@@ -93,7 +96,8 @@ def upload_test_input(
     inputs_dir = f"{apptests}/_inputs"
     ensure_ws_dirs(container, token, apptests, inputs_dir)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    ws_path = f"{inputs_dir}/{testname}-{ts}-{filename}"
+    suffix = uuid.uuid4().hex[:8]
+    ws_path = f"{inputs_dir}/{testname}-{ts}-{suffix}-{filename}"
     result = container.exec(
         ["p3-cp", f"/data/{filename}", f"ws:{ws_path}"],
         gpu=False,

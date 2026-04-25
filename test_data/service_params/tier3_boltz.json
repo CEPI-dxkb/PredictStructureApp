@@ -1,0 +1,21 @@
+{
+  "tool": "boltz",
+  "output_path": "/output",
+  "output_file": "tier3_boltz_test",
+  "num_recycles": 3,
+  "output_format": "pdb",
+  "msa_mode": "none",
+  "seed": 42,
+  "text_input": [
+    {
+      "type": "protein",
+      "sequence": "MKMTSKEELKQLSEAKKALEEKALKAREEKKAESLENRKEEAEAQAKEALKQELEAEARAEEALQDA"
+    },
+    {
+      "type": "dna",
+      "sequence": "ATGCGTACGTAGCTAGCTAGCGT"
+    }
+  ],
+  "sampling_steps": 200,
+  "num_samples": 1
+}

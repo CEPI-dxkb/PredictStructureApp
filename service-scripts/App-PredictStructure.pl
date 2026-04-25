@@ -550,6 +550,15 @@ sub download_workspace_file {
     my $basename = basename($ws_path);
     my $local_path = "$local_dir/$basename";
 
+    # If the path is local-readable inside the container (acceptance
+    # tests bind-mount fixtures at /data, /tmp, etc.), copy directly.
+    # BV-BRC workspace paths look like /<user>@<domain>/... which never
+    # exist as local files, so this is unambiguous.
+    if (-f $ws_path) {
+        copy($ws_path, $local_path) or die "Local copy failed: $!\n";
+        return $local_path;
+    }
+
     if ($app && $app->can('workspace')) {
         try {
             $app->workspace->download_file($ws_path, $local_path, 1);
@@ -557,12 +566,7 @@ sub download_workspace_file {
             die "Failed to download $ws_path: $_\n";
         };
     } else {
-        # Fallback for testing without workspace connection
-        if (-f $ws_path) {
-            copy($ws_path, $local_path) or die "Copy failed: $!\n";
-        } else {
-            die "File not found: $ws_path\n";
-        }
+        die "File not found: $ws_path (no workspace connection)\n";
     }
 
     return $local_path;

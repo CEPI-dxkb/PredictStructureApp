@@ -1,0 +1,11 @@
+{
+  "tool": "openfold",
+  "output_path": "/output",
+  "output_file": "tier2_openfold_test",
+  "num_recycles": 3,
+  "output_format": "pdb",
+  "msa_mode": "upload",
+  "seed": 42,
+  "input_file": "/data/medium_protein.fasta",
+  "msa_file": "/data/msa/medium_protein.a3m"
+}
