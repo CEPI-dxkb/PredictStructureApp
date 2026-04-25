@@ -92,11 +92,12 @@ def main() -> int:
         print()
 
         n_passed = sum(1 for r in tests if r["outcome"] == "passed")
-        n_failed = sum(1 for r in tests if r["outcome"] != "passed")
+        n_skipped = sum(1 for r in tests if r["outcome"] == "skipped")
+        n_failed = sum(1 for r in tests if r["outcome"] == "failed")
         total = sum(r["duration_s"] for r in tests)
         print(
             f"_{len(tests)} tests, "
-            f"{n_passed} passed / {n_failed} failed, "
+            f"{n_passed} passed / {n_failed} failed / {n_skipped} skipped, "
             f"{fmt_seconds(total)} total wall-clock_"
         )
 

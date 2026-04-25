@@ -316,16 +316,35 @@ _TIER_NAMES = ("tier1", "tier2", "tier3", "tier4", "tier5")
 
 
 def pytest_runtest_makereport(item, call):
-    """Record duration of the test's call phase per item."""
-    if call.when != "call":
-        return
+    """Record duration of the test's call phase per item.
+
+    Runs in both setup+call phases; we record one entry per test using
+    the `call` phase if reached, otherwise the `setup` phase (catches
+    tests skipped in setup, e.g. by ``pytest.skip()`` in a fixture).
+    """
+    # Only record once per test: prefer the call phase, fall back to
+    # setup if the call phase never runs (skip-in-setup, fixture error).
+    if call.when == "setup":
+        if call.excinfo is None:
+            return  # setup OK; wait for call phase
+        # else: setup failed/skipped -- record now
+    elif call.when != "call":
+        return  # ignore teardown
+
+    if call.excinfo is None:
+        outcome = "passed"
+    elif call.excinfo.errisinstance(_pytest_skipped_exc()):
+        outcome = "skipped"
+    else:
+        outcome = "failed"
+
     keywords = set(item.keywords)
     tiers = [t for t in _TIER_NAMES if t in keywords]
     phases = [p for p in ("phase1", "phase2", "phase3") if p in keywords]
     _RUNTIME_RECORDS.append({
         "nodeid": item.nodeid,
         "duration_s": round(call.duration, 3),
-        "outcome": "failed" if call.excinfo else "passed",
+        "outcome": outcome,
         "tiers": tiers,
         "phases": phases,
         "markers": sorted(
@@ -333,6 +352,12 @@ def pytest_runtest_makereport(item, call):
             if m in {"slow", "gpu", "workspace", "container", "cwl", "docker"}
         ),
     })
+
+
+def _pytest_skipped_exc():
+    """Return the pytest Skipped exception class (deferred import)."""
+    import _pytest.outcomes
+    return _pytest.outcomes.Skipped
 
 
 def _percentile(values: list[float], p: float) -> float:
