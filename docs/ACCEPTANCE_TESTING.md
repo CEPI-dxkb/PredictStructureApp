@@ -95,6 +95,19 @@ We previously bind-mounted directly over `/opt/conda-predict/lib/...`,
 but that broke JIT compilation in other conda envs (numba/Boltz,
 triton/OpenFold). The PYTHONPATH approach avoids that.
 
+**To validate the SIF as-shipped** (no overlay) -- useful for release
+acceptance to catch staleness in the bundled `predict-structure`
+package -- set `PREDICT_STRUCTURE_NO_DEV_OVERLAY=1`:
+
+```bash
+# Test the SIF exactly as it will run in production
+PREDICT_STRUCTURE_NO_DEV_OVERLAY=1 \
+  pytest tests/acceptance/ -m tier1 --sif $SIF
+```
+
+Same shape as `PREDICT_STRUCTURE_DEV_SERVICE` (Perl + app_specs
+overlay). Default is overlay-on, matching the dev-iteration workflow.
+
 ## Running tests
 
 ### Quick smoke (~30 s)
@@ -272,6 +285,7 @@ the target already exists).
 | Env var | Effect |
 |---------|--------|
 | `PREDICT_STRUCTURE_DEV_SERVICE=1` | Overlay host's `service-scripts/` + `app_specs/` into the SIF |
+| `PREDICT_STRUCTURE_NO_DEV_OVERLAY=1` | Disable the default `predict_structure/` Python overlay -- test the SIF as-shipped (release acceptance mode) |
 | `PREDICT_STRUCTURE_KEEP_WORKSPACE=1` | Skip post-test `p3-rm`; each test prints the kept path |
 | `P3_DEBUG_RUN_SUBFOLDER=1` | (service script) Nest results under a per-run subfolder. Default is flat -- results land directly in `output_path` |
 
