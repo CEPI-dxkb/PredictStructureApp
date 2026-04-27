@@ -88,7 +88,12 @@ def _collect_outputs(output_dir: Path) -> list[dict]:
         name = item.name
         if name == "raw":
             continue
-        if name == "results.json":  # avoid self-reference in its own manifest
+        # Skip files that are written AFTER results.json (their size +
+        # sha256 would be stale by the time the manifest lands on disk):
+        # - results.json itself (self-reference)
+        # - ro-crate-metadata.json (write_ro_crate runs after write_results_json
+        #   and would rewrite this file)
+        if name in ("results.json", "ro-crate-metadata.json"):
             continue
         if item.is_file():
             _add_file(item, name)

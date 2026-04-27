@@ -89,8 +89,10 @@ class TestWriteResultsJson:
         assert "confidence.json" in paths
         assert "metadata.json" in paths
         assert "raw" in paths  # directory entry
-        # results.json must NOT list itself (self-reference)
+        # Excluded from the manifest -- both are written after results.json
+        # (or self-reference) so their declared size/sha256 would be stale.
         assert "results.json" not in paths
+        assert "ro-crate-metadata.json" not in paths
         # No raw/* files should appear (raw is opaque)
         assert not any(p.startswith("raw/") for p in paths)
 
