@@ -92,8 +92,17 @@ class ApptainerRunner:
         # precedence over the container's installed version. This avoids
         # binding over /opt/conda-predict/ which breaks JIT compilation
         # in other conda envs (numba in Boltz, triton/evoformer in OpenFold).
+        #
+        # Set PREDICT_STRUCTURE_NO_DEV_OVERLAY=1 to disable -- useful when
+        # validating the SIF as-shipped (e.g. release acceptance) instead
+        # of testing source iterations. Without the overlay, missing
+        # subcommands or older code paths in the SIF will surface as test
+        # failures, which is the point.
+        no_overlay = os.environ.get(
+            "PREDICT_STRUCTURE_NO_DEV_OVERLAY", ""
+        ).lower() in ("1", "true", "yes")
         dev_pkg = PROJECT_ROOT / "predict_structure"
-        if dev_pkg.is_dir():
+        if dev_pkg.is_dir() and not no_overlay:
             cmd.extend(["--bind", f"{PROJECT_ROOT}:/mnt/predict-structure"])
             cmd.extend(["--env", "PYTHONPATH=/mnt/predict-structure"])
         if gpu:
