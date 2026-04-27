@@ -6,3 +6,9 @@ __pycache__/
 dist/
 build/
 container/deps/
+
+# Claude Code session state
+.claude/
+
+# Local test/build run artifacts (logs, JSON reports, MSAs from runs)
+output/

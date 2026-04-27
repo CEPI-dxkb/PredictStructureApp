@@ -4,35 +4,55 @@
 
 The acceptance test suite validates PredictStructureApp across three phases:
 
-- **Phase 1 -- Native tools**: Calls tool binaries directly inside the container (no predict-structure involved). Establishes ground truth -- what each tool can do on its own.
-- **Phase 2 -- predict-structure CLI**: Tests through `predict-structure <tool> --backend subprocess`. Validates adapters, entity flags, auto-selection, output normalization, and batch mode.
-- **Phase 3 -- Perl service script + workspace**: Tests `App-PredictStructure.pl` with params JSON, preflight resource estimation, and real BV-BRC workspace integration.
+- **Phase 1 -- Native tools**: Calls tool binaries directly inside the
+  container (no `predict-structure` involved). Establishes ground truth
+  -- what each tool can do on its own.
+- **Phase 2 -- predict-structure CLI**: Tests through
+  `predict-structure <tool> --backend subprocess`. Validates adapters,
+  entity flags, auto-selection, output normalization, batch mode, and
+  the **T1-T5 tier ladder** in `--debug` mode.
+- **Phase 3 -- Perl service script + workspace**: Tests
+  `App-PredictStructure.pl` with params JSON, preflight resource
+  estimation, real BV-BRC workspace integration, and the full T1-T5
+  tier ladder end-to-end through the BV-BRC AppScript framework.
 
-**Total: 113 tests** (13 Phase 1 + 64 Phase 2 + 36 Phase 3)
+Plus several cross-cutting suites:
 
-The framework uses pytest with parametrized tests. All tests run inside Apptainer containers with GPU passthrough.
+- **`test_layout_parity.py`** -- proves the BV-BRC app-script and CWL
+  workflow produce the identical output tree.
+- **`test_provenance_cli.py`** -- exercises `finalize-results` and
+  `aggregate-results` standalone.
+- **`test_provenance_validation.py`** -- validates `ro-crate-metadata.json`
+  against the Process Run Crate spec.
+- **`test_cwl_workflow_execution.py`** -- runs the CWL workflow
+  end-to-end via `cwltool`.
+- **`test_failure_modes.py`** -- fault-injects to verify graceful
+  failure handling.
+
+**Currently 175 acceptance tests collected.** See
+`docs/TEST_COVERAGE.md` for the full per-tier validation matrix.
 
 ## Prerequisites
 
-- **Apptainer** installed and available on PATH
+- **Apptainer** installed and on `PATH`
 - **GPU(s)** available (verify with `nvidia-smi`)
-- **Production container** at `/scout/containers/folding_prod.sif` (symlink to latest build)
+- **Production container**: `/scout/containers/folding_260425.1.sif`
+  (most-recently-validated build) or a newer SIF
 - **Model weights** at `/local_databases/`:
   - `boltz/` -- Boltz-2 weights (~50 GB)
   - `chai/` -- Chai-1 weights (~30 GB)
   - `openfold/` -- OpenFold 3 weights + `runner.yml` for H200 DeepSpeed workaround
   - `alphafold/databases/` -- AlphaFold 2 genetic databases (~2 TB for full_dbs)
   - `cache/hub/` -- HuggingFace model cache (ESMFold weights)
-- **Python dev dependencies** in a conda env:
+- **Python dev env**:
   ```bash
   conda activate predict-structure
-  pip install -e ".[dev]"
+  pip install -e ".[all]"   # includes [dev] + [provenance] + [cwl] + [esmfold]
   ```
-- **Phase 3 workspace tests**: Valid `.patric_token` file at `~/.patric_token` (or set `PATRIC_TOKEN_PATH`)
+- **Phase 3 workspace tests**: Valid `.patric_token` at `~/.patric_token`
+  (or set `PATRIC_TOKEN_PATH`).
 
 ## Container Requirements
-
-The container must have:
 
 | Path | Purpose |
 |------|---------|
@@ -41,146 +61,127 @@ The container must have:
 | `/opt/conda-chai/bin/chai-lab` | Chai binary |
 | `/opt/conda-alphafold/bin/python` + `/app/alphafold/run_alphafold.py` | AlphaFold |
 | `/opt/conda-esmfold/bin/esm-fold-hf` | ESMFold binary |
-| `/opt/conda-predict/bin/predict-structure` | Unified CLI |
+| `/opt/conda-predict/bin/predict-structure` | Unified CLI (must include `finalize-results` subcommand) |
+| `/opt/conda-predict/bin/python` with `rocrate` | RO-Crate provenance |
 | `/kb/module/service-scripts/App-PredictStructure.pl` | BV-BRC service (Phase 3 only) |
 | `/opt/patric-common/runtime` + `/opt/patric-common/deployment` | BV-BRC Perl runtime (Phase 3) |
 
+For container build instructions see [`docs/CONTAINER_BUILD.md`](CONTAINER_BUILD.md).
+
 ## Configuration
 
-### Container Selection
+### Container selection
 
-Choose which container to test using one of these methods:
+Pick the SIF via one of:
 
-1. `--sif` flag: full path to the `.sif` file
-2. `PREDICT_STRUCTURE_SIF` environment variable
+1. `--sif` flag: full path to the `.sif`
+2. `PREDICT_STRUCTURE_SIF` env var
 3. `--container-label prod` to use `/scout/containers/folding_prod.sif`
 
-### GPU Pinning
+### GPU pinning
 
-Use `--gpu-id` flag or `CUDA_VISIBLE_DEVICES` environment variable.
-**Critical for AlphaFold** -- JAX will claim all visible GPUs unless explicitly constrained.
+Use `--gpu-id` or `CUDA_VISIBLE_DEVICES`. **Critical for AlphaFold** --
+JAX claims all visible GPUs unless explicitly constrained.
 
-Accepts single GPU (`--gpu-id 0`) or multiple (`--gpu-id 0,1,2,3`).
+Single (`--gpu-id 0`) or multiple (`--gpu-id 0,1,2,3`).
 
-### Dev Code Overlay
+### Dev code overlay
 
-The test framework mounts the local `predict_structure/` package at `/mnt/predict-structure` inside the container and prepends it to `PYTHONPATH`. This lets you test code changes without rebuilding the container.
+The framework mounts the local `predict_structure/` package at
+`/mnt/predict-structure` and prepends to `PYTHONPATH`. Lets you test
+source changes without rebuilding the container.
 
-**Note:** We previously bind-mounted directly over `/opt/conda-predict/lib/python3.12/site-packages/predict_structure/`, but that broke JIT compilation in other conda envs (numba/Boltz, triton/OpenFold). The PYTHONPATH approach avoids that interference.
+We previously bind-mounted directly over `/opt/conda-predict/lib/...`,
+but that broke JIT compilation in other conda envs (numba/Boltz,
+triton/OpenFold). The PYTHONPATH approach avoids that.
 
-## Running Tests
+## Running tests
 
-### Quick Smoke (~30 s)
+### Quick smoke (~30 s)
 
 ```bash
-PREDICT_STRUCTURE_SIF=/scout/containers/folding_prod.sif \
+PREDICT_STRUCTURE_SIF=/scout/containers/folding_260425.1.sif \
   conda run -n predict-structure python -m pytest \
   tests/acceptance/test_phase1_native_tools.py::TestESMFoldNative::test_protein \
   --gpu-id 0 --timeout 120 -v
 ```
 
-### Phase 1 -- Native Tools (~40 min)
-
-Tests all 5 tools directly. AlphaFold alone takes ~26 min.
+### Tier ladder (recommended primary entry point)
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1,2,3 PREDICT_STRUCTURE_SIF=/scout/containers/folding_prod.sif \
-  conda run -n predict-structure python -m pytest tests/acceptance/test_phase1_native_tools.py \
-  --gpu-id 0,1,2,3 --timeout 3600 -v \
-  --json-report --json-report-file=output/phase1.json
+SIF=/scout/containers/folding_260425.1.sif
+
+# Smoke -- small protein, fast feedback (~6 min)
+pytest tests/acceptance/ -m "tier1 and not slow" --sif $SIF -v
+
+# Functional medium protein (~5 min)
+pytest tests/acceptance/ -m tier2 --sif $SIF --timeout 3600
+
+# Multi-entity coverage (protein + DNA via text_input) (~4 min)
+pytest tests/acceptance/ -m tier3 --sif $SIF --timeout 3600
+
+# Multimer (~5 min)
+pytest tests/acceptance/ -m tier4 --sif $SIF --timeout 3600
+
+# Large scaling check (~5 min on H200)
+pytest tests/acceptance/ -m tier5 --sif $SIF --timeout 7200
+
+# Full T1-T5 sweep (~25 min total)
+pytest tests/acceptance/ -m "tier1 or tier2 or tier3 or tier4 or tier5" --sif $SIF
 ```
 
-### Phase 2 -- predict-structure CLI (~2 h with AlphaFold, ~10 min without)
+### Phase-scoped runs
 
 ```bash
-# Skip slow tests (AlphaFold multimer) for faster iteration
-CUDA_VISIBLE_DEVICES=0 PREDICT_STRUCTURE_SIF=/scout/containers/folding_prod.sif \
-  conda run -n predict-structure python -m pytest tests/acceptance/ -m "phase2 and not slow" \
-  --gpu-id 0 --timeout 3600 -v \
-  --json-report --json-report-file=output/phase2.json
+SIF=/scout/containers/folding_260425.1.sif
 
-# Full Phase 2 including slow tests
-CUDA_VISIBLE_DEVICES=0,1,2,3 PREDICT_STRUCTURE_SIF=/scout/containers/folding_prod.sif \
-  conda run -n predict-structure python -m pytest tests/acceptance/ -m phase2 \
-  --gpu-id 0,1,2,3 --timeout 7200 -v \
-  --json-report --json-report-file=output/phase2.json
+# Phase 1 native tools (~40 min, includes AlphaFold)
+pytest tests/acceptance/test_phase1_native_tools.py --sif $SIF \
+  --gpu-id 0,1,2,3 --timeout 3600 -v
+
+# Phase 2 CLI integration (skip slow AlphaFold for fast iteration)
+pytest tests/acceptance/ -m "phase2 and not slow" --sif $SIF --gpu-id 0 -v
+
+# Phase 3 service script + workspace (requires .patric_token)
+pytest tests/acceptance/ -m phase3 --sif $SIF --gpu-id 0 --timeout 3600 -v
 ```
 
-### Phase 3 -- Service Script + Workspace
-
-Requires `.patric_token` for workspace tests. Tests without a token will skip gracefully.
-
-```bash
-CUDA_VISIBLE_DEVICES=0 PREDICT_STRUCTURE_SIF=/scout/containers/folding_prod.sif \
-  conda run -n predict-structure python -m pytest tests/acceptance/ -m phase3 \
-  --gpu-id 0 --timeout 3600 -v \
-  --json-report --json-report-file=output/phase3.json
-```
-
-**Two modes for `test_phase3_workspace.py`:**
+### Phase 3 modes (baked-in vs dev overlay)
 
 | Mode | When to use | How |
 |------|-------------|-----|
-| **Baked-in** (default) | Acceptance / regression testing a new container build before release -- exercises the Perl and app_spec frozen into the SIF | no env var |
+| **Baked-in** (default) | Acceptance / regression-testing a new SIF before release -- exercises the Perl + app_spec frozen into the SIF | no env var |
 | **Dev overlay** | Iterating on `service-scripts/App-PredictStructure.pl` or `app_specs/PredictStructure.json` without rebuilding the SIF | `PREDICT_STRUCTURE_DEV_SERVICE=1` |
 
 ```bash
-# Dev iteration: overlay the host's service-scripts/ and app_specs/
+# Dev iteration -- overlay host's service-scripts/ and app_specs/
 PREDICT_STRUCTURE_DEV_SERVICE=1 \
-CUDA_VISIBLE_DEVICES=0 PREDICT_STRUCTURE_SIF=/scout/containers/folding_prod.sif \
-  conda run -n predict-structure python -m pytest tests/acceptance/test_phase3_workspace.py -v
+  pytest tests/acceptance/test_phase3_appscript_workspace.py --sif $SIF -v
 ```
 
-If a Phase 3 test passes only with the overlay, the fix still needs to land
-in the container image before the build is release-ready.
+If a Phase 3 test passes only with the overlay, the fix still needs to
+land in the container before the build is release-ready.
 
 ### Test runtime extraction
 
-The acceptance suite records every test's call-phase duration in
-`output/test_runtimes.json` (default; pass `--runtime-out PATH` or set
-`PREDICT_STRUCTURE_RUNTIME_OUT` to override; pass an empty string to
-disable). The JSON has per-test entries plus per-tier aggregates
-(count, total, mean, p50, p95, max).
+The suite records every test's call-phase duration in
+`output/test_runtimes.json` (default; override with `--runtime-out` or
+`PREDICT_STRUCTURE_RUNTIME_OUT`). The JSON has per-test entries plus
+per-tier aggregates (count, total, mean, p50, p95, max).
 
 ```bash
-# Run a tier and capture runtimes
-pytest tests/acceptance/ -m tier1 --sif ... --runtime-out output/tier1.json
-
-# Print a markdown summary (per-tier aggregates + top-N slowest)
+pytest tests/acceptance/ -m tier1 --sif $SIF --runtime-out output/tier1.json
 python scripts/runtime_summary.py --in output/tier1.json --top 10
 
 # Built-in pytest "top-N" alternative
-pytest tests/acceptance/ -m tier1 --sif ... --durations=20
+pytest tests/acceptance/ -m tier1 --sif $SIF --durations=20
 
-# Full per-test JSON via pytest-json-report (already in dev extras)
-pytest tests/acceptance/ -m tier1 --sif ... \
+# Full per-test JSON via pytest-json-report (in dev extras)
+pytest tests/acceptance/ -m tier1 --sif $SIF \
   --json-report --json-report-file=output/tier1.full.json
 ```
 
-### Tier ladder
-
-Run a specific tier across all phases:
-
-```bash
-# Smoke -- small protein, fast feedback (~minutes)
-pytest tests/acceptance/ -m tier1 --sif /scout/containers/folding_prod.sif -v
-
-# Functional medium-protein run (~30 min)
-pytest tests/acceptance/ -m tier2 --sif ... --timeout 3600
-
-# Multi-entity coverage
-pytest tests/acceptance/ -m tier3 --sif ... --timeout 3600
-
-# Multimer
-pytest tests/acceptance/ -m tier4 --sif ... --timeout 3600
-
-# Large scaling check (~hours, gated slow)
-pytest tests/acceptance/ -m tier5 --sif ... --timeout 7200
-```
-
-Observed wall-clock on `folding_260425.1.sif` (H200 NVL, single GPU,
-default sampling settings -- num_samples=1, num_recycles=3,
-sampling_steps=200):
+### Observed wall-clock (folding_260425.1.sif, H200 NVL)
 
 | Tier slice | Tests | Wall-clock |
 |---|---|---|
@@ -205,143 +206,98 @@ ESMFold + AlphaFold are excluded from T3/T5 service-script tests by
 design (ESMFold has no service-script multi-entity surface; AlphaFold
 builds its own MSAs from databases).
 
-Combine with phase markers to scope further:
+### Combine markers
 
 ```bash
-# Phase 2 tier 1 only -- fast adapter-layer regression suite
-pytest tests/acceptance/ -m "phase2 and tier1" --sif ...
+# Phase 2 tier 1 -- fast adapter-layer regression
+pytest tests/acceptance/ -m "phase2 and tier1" --sif $SIF
 
-# Everything except T5 (default CI: skip the slowest tier)
-pytest tests/acceptance/ -m "not tier5" --sif ...
+# Everything except the slowest tier
+pytest tests/acceptance/ -m "not tier5" --sif $SIF
 ```
 
-Fixtures by tier (see `tests/acceptance/matrix.py`):
+### Fixtures by tier
 
 | Tier | Fixture | Size | MSA |
 |---|---|---|---|
 | `tier1` | `simple_protein.fasta` (crambin) | 46 aa | `crambin.a3m` |
-| `tier2` | `medium_protein.fasta` (1AKE adenylate kinase) | 214 aa | `medium_protein.a3m` (generate via `scripts/generate_test_msas.sh`) |
-| `tier3` | `simple_protein.fasta` + `--ligand ATP` (or text_input protein+DNA in Phase 3) | 46+ aa | `crambin.a3m` |
+| `tier2` | `medium_protein.fasta` (1AKE adenylate kinase) | 214 aa | `medium_protein.a3m` |
+| `tier3` | `simple_protein.fasta` + `--ligand ATP` (Phase 2) / `text_input` protein+DNA (Phase 3) | 46+ | `crambin.a3m` (Phase 2) / none (Phase 3) |
 | `tier4` | `multimer.fasta` | 2 chains | none |
-| `tier5` | `large_protein.fasta` (yeast enolase) | 434 aa | `large_protein.a3m` (generate via script) |
+| `tier5` | `large_protein.fasta` (yeast enolase) | 434 aa | `large_protein.a3m` |
 
-The `medium_protein.a3m` and `large_protein.a3m` fixtures must be
-generated once via `scripts/generate_test_msas.sh` (uses ColabFold MSA
-server inside the SIF) and committed. Phase-3 service-script tier files
-(`test_data/service_params/tier{N}_{tool}.json`) are auto-generated by
-`scripts/generate_service_params.py`; rerun and `git diff` should be
-empty.
+The `medium_protein.a3m` and `large_protein.a3m` fixtures are generated
+once via `scripts/generate_test_msas.sh` (uses ColabFold MSA server)
+and committed. Phase-3 service-script tier files
+(`test_data/service_params/tier{N}_{tool}.json`) and Q/A specs
+(`tier{N}_{tool}.expected.json`) are auto-generated by
+`scripts/generate_service_params.py`; rerun with `--check` to detect
+drift in CI.
 
-**Workspace layout.** Tests write under
-`<user-home>/AppTests/<tool>/<testname>-<YYYYMMDD-HHMMSS>/` -- the timestamped
-leaf is the "versioned output_path" the service script uploads into. Tests
-clean up their own sub-folder on completion.
+### Workspace layout
+
+Phase 3 tests write under
+`<user-home>/AppTests/<tool>/<testname>-<YYYYMMDD-HHMMSS>-<uuid8>/` --
+the timestamped+random leaf is the "versioned output_path" the service
+script uploads into. Tests clean up their own sub-folder on completion.
 
 ```
 <user-home>/AppTests/
 ├── _inputs/                              ← staging for test input FASTAs
-│   └── <testname>-<ts>-simple_protein.fasta
+│   └── <testname>-<ts>-<uuid>-simple_protein.fasta
 ├── misc/    upload_and_verify-<ts>/      ← raw upload test scratch
 ├── esmfold/ workspace_roundtrip-<ts>/    ← service-script output
-│   └── model_1.pdb, model_1.cif, confidence.json, metadata.json, ...
+│   └── model_1.pdb, model_1.cif, confidence.json, metadata.json,
+│       results.json, ro-crate-metadata.json, raw/
 └── chai/    report_workspace_roundtrip-<ts>/
-    └── model_1.pdb, model_1.cif, confidence.json, metadata.json,
-        report.html, report.json, report.pdf, raw/, raw_output/
+    └── (same as above) + report/{report.html, report.json, report.pdf}
 ```
 
-Test inputs are staged in `_inputs/` (sibling folder) rather than inside the
-output dir. This keeps the output dir fresh so `p3-cp -r` lands files at the
-top level instead of nesting under `output/` (p3-cp's behavior when the
-target already exists).
+Inputs stage in `_inputs/` (sibling folder), NOT inside the output
+dir. This keeps the output dir fresh so `p3-cp -r` lands files at the
+top level instead of nesting under `output/` (p3-cp's behavior when
+the target already exists).
 
-**Two file layouts in Phase 3:**
+### Phase 3 file layouts
 
 | File | Scope |
 |------|-------|
 | `test_phase3_workspace.py` | Pure workspace ops (`p3-whoami`, `p3-ls`, `p3-cp`) |
 | `test_phase3_appscript_workspace.py` | Service script + workspace end-to-end roundtrips |
-| `test_phase3_service_script.py` | Service script offline (no workspace I/O) |
+| `test_phase3_service_script.py` | Service script offline (no workspace I/O); includes T1-T5 tier coverage |
+| `test_phase3_preflight.py` | Preflight resource estimation |
 
-**Phase-3 env var toggles:**
+### Phase-3 env var toggles
 
 | Env var | Effect |
 |---------|--------|
-| `PREDICT_STRUCTURE_DEV_SERVICE=1` | Overlay host's `service-scripts/` + `app_specs/` into the SIF (see table above) |
+| `PREDICT_STRUCTURE_DEV_SERVICE=1` | Overlay host's `service-scripts/` + `app_specs/` into the SIF |
 | `PREDICT_STRUCTURE_KEEP_WORKSPACE=1` | Skip post-test `p3-rm`; each test prints the kept path |
-| `P3_DEBUG_RUN_SUBFOLDER=1` | (service script) Nest results under a per-run subfolder `predict_structure_result_<ts>_<task_id>/`. Default is flat -- results land directly in `output_path`. Useful when multiple runs share one `output_path`. |
+| `P3_DEBUG_RUN_SUBFOLDER=1` | (service script) Nest results under a per-run subfolder. Default is flat -- results land directly in `output_path` |
 
 Example -- investigate artifacts after a failing Chai run:
 
 ```bash
 PREDICT_STRUCTURE_DEV_SERVICE=1 PREDICT_STRUCTURE_KEEP_WORKSPACE=1 \
-CUDA_VISIBLE_DEVICES=0 PREDICT_STRUCTURE_SIF=/scout/containers/folding_prod.sif \
-  conda run -n predict-structure python -m pytest \
-  tests/acceptance/test_phase3_appscript_workspace.py -v -s
+CUDA_VISIBLE_DEVICES=0 PREDICT_STRUCTURE_SIF=$SIF \
+  pytest tests/acceptance/test_phase3_appscript_workspace.py -v -s
 # Then:
-# p3-ls -l /<user>@bvbrc/home/AppTests/chai/report_workspace_roundtrip-<ts>/
+# p3-ls -l /<user>@bvbrc/home/AppTests/chai/report_workspace_roundtrip-<ts>-<uuid>/
 ```
 
-### Full Suite on Both Containers in Parallel
+## Bind mounts
 
-Each container on separate GPUs (requires enough GPUs):
+Tests automatically configure these Apptainer binds:
 
-```bash
-# Container 1 on GPUs 0-3
-CUDA_VISIBLE_DEVICES=0,1,2,3 PREDICT_STRUCTURE_SIF=/scout/containers/folding_prod.sif \
-  conda run -n predict-structure python -m pytest tests/acceptance/ \
-  --gpu-id 0,1,2,3 --timeout 7200 -v \
-  --json-report --json-report-file=output/full_prod.json &
-
-# Container 2 on GPUs 4-7
-CUDA_VISIBLE_DEVICES=4,5,6,7 PREDICT_STRUCTURE_SIF=/scout/containers/all-2026-0410.01.sif \
-  conda run -n predict-structure python -m pytest tests/acceptance/ \
-  --gpu-id 4,5,6,7 --timeout 7200 -v \
-  --json-report --json-report-file=output/full_all.json &
-```
-
-## Test Structure
-
-### Phase 1 -- Native Tools (`test_phase1_native_tools.py`)
-
-Calls tool binaries directly -- no `predict-structure` CLI. Tests the
-tool x [protein | dna] x [msa | no-msa] matrix.
-
-13 tests: Boltz (4), Chai (3), OpenFold (3), AlphaFold (1), ESMFold (2).
-
-### Phase 2 -- predict-structure CLI (`test_phase2_*.py`)
-
-Tests through `predict-structure <tool> --backend subprocess`:
-
-- Tool x input type matrix (from `matrix.py`)
-- `--debug` mode (prints command without executing)
-- Entity flags (`--protein`, `--dna`, `--ligand`, `--smiles`)
-- Auto-selection logic with real tools
-- Output normalization (standardized directory layout, confidence JSON)
-- Batch mode (`--job spec.yaml`)
-- Parameter variations (sampling steps, num samples, recycles)
-
-### Phase 3 -- Perl Service Script (`test_phase3_*.py`)
-
-Tests the BV-BRC service integration:
-
-- `App-PredictStructure.pl` with `params_*.json` files
-- `predict-structure preflight` resource estimation
-- Real workspace upload/download via `p3-cp` (requires token)
-
-## Bind Mounts
-
-Tests automatically configure these Apptainer bind mounts:
-
-| Host Path | Container Path | Mode | Purpose |
-|-----------|----------------|------|---------|
+| Host path | Container path | Mode | Purpose |
+|---|---|---|---|
 | `test_data/` | `/data` | rw | Test input files |
 | Per-test tmp dir | `/output` | rw | Isolated output |
-| `/local_databases` | `/local_databases` | rw | Model weights + cache (cache dir needs writes) |
+| `/local_databases` | `/local_databases` | rw | Model weights + cache |
 | Repo root | `/mnt/predict-structure` | rw | Dev code via PYTHONPATH |
+| `service-scripts/` | `/kb/module/service-scripts` | rw | Only when `PREDICT_STRUCTURE_DEV_SERVICE=1` |
 
-### Cache Environment Variables
-
-Set inside the container to direct all writable caches to the shared location:
+### Cache env vars set in-container
 
 ```
 HF_HOME=/local_databases/cache
@@ -354,32 +310,10 @@ NUMBA_CACHE_DIR=/local_databases/cache/tmp
 PYTHONPATH=/mnt/predict-structure
 ```
 
-## Results
+## Validation status
 
-Results are written to `tests/acceptance/RESULTS.md`. JSON reports go to `output/*.json`.
-
-Latest results (2026-04-17): 101/113 pass on `folding_260412.1.sif`.
-Remaining failures:
-- 4x OpenFold normalizer (per-atom vs per-residue pLDDT count)
-- 1x OpenFold precomputed MSA input format
-- 2x workspace minor issues (UTF-8 decode, upload listing)
-
-## Adding New Tests
-
-### Phase 1 (Native Tool Tests)
-
-Call tool binaries directly -- do not use `predict-structure`. Prepare input
-in the tool's native format (YAML for Boltz, FASTA for Chai/ESMFold, JSON for
-OpenFold), then use `ApptainerRunner.exec()` to run it. Verify output files.
-
-### Phase 2 (CLI Integration Tests)
-
-Use the test matrix in `tests/acceptance/matrix.py` and `ApptainerRunner.predict()`.
-To add a new test case:
-
-1. Add a `ToolTestCase` to the matrix in `matrix.py`
-2. Mark expected failures with `xfail_reason`
-3. Use `validators.assert_valid_output()` to check normalized output
+See [`docs/TEST_COVERAGE.md`](TEST_COVERAGE.md) for the latest
+end-to-end validation matrix and rating.
 
 ## Markers
 
@@ -390,27 +324,29 @@ To add a new test case:
 | `phase3` | Perl service script + workspace tests |
 | `tier1` | Smoke -- small protein (crambin, 46 aa), every tool, every layer |
 | `tier2` | Functional -- medium protein (~214 aa), full pipeline |
-| `tier3` | Multi-entity -- protein + ligand/DNA/RNA at small size |
+| `tier3` | Multi-entity -- protein + ligand/DNA/RNA |
 | `tier4` | Multimer -- multi-chain protein |
 | `tier5` | Large -- ~434 aa, scaling regression (gated `slow`) |
 | `gpu` | Requires GPU |
-| `slow` | Long-running test (>5 min, e.g. AlphaFold multimer) |
+| `slow` | Long-running test (>5 min, e.g. AlphaFold) |
 | `container` | Requires Apptainer container |
 | `workspace` | Requires BV-BRC workspace access |
+| `cwl` | CWL validation tests |
+| `docker` | Requires Docker daemon |
 
 ## Troubleshooting
 
-### Tests skip with "SIF not found"
+### "SIF not found"
 
-Check the container path exists and is readable:
 ```bash
 ls -la $PREDICT_STRUCTURE_SIF
 ```
 
-### OpenFold fails with "Unable to JIT load the evoformer_attn op"
+### OpenFold "Unable to JIT load the evoformer_attn op"
 
 H200 GPUs don't support the DeepSpeed evo_attention kernel. Ensure
 `/local_databases/openfold/runner.yml` exists with:
+
 ```yaml
 model_update:
   custom:
@@ -419,127 +355,58 @@ model_update:
         eval:
           use_deepspeed_evo_attention: false
 ```
+
 The adapter auto-resolves this file when present.
 
 ### AlphaFold grabs all 8 GPUs
 
-JAX default behavior. Always pass `--gpu-id <N>` (or `CUDA_VISIBLE_DEVICES=<N>`)
-to pin to a specific device. The test framework injects this into the container
-via `--env`.
-
-### Container extraction fails with "unpackSIF failed / set_attributes"
-
-Large SIF files with files owned by non-root UIDs hit fakeroot uid/gid
-mapping limits. Workaround: use a writable overlay instead of rebuilding:
-```bash
-apptainer overlay create --size 8192 overlay.img
-apptainer exec --overlay overlay.img base.sif bash -c 'pip install ...'
-```
+JAX default behavior. Always pass `--gpu-id <N>` (or `CUDA_VISIBLE_DEVICES`)
+to pin to a specific device.
 
 ### Workspace tests error instead of skip
 
-The fixture uses `pytest.skip` when `~/.patric_token` is missing. If you see
-errors instead of skips, check that the fixture is being called (`-rs` flag
-shows skip reasons).
+The fixture uses `pytest.skip` when `~/.patric_token` is missing. If
+you see errors instead of skips, run with `-rs` to inspect the skip
+reason.
 
-### Boltz fails with "Missing MSA's in input"
+### Boltz "Missing MSA's in input"
 
-Protein chains need an explicit `msa` field. Our converter sets `msa: empty`
-when no MSA file is provided (single-sequence mode). If testing native Boltz
+Protein chains need an explicit `msa` field. The Boltz adapter sets
+`msa: empty` for single-sequence mode. If testing native Boltz
 directly, either provide an MSA file or use `msa: empty` in the YAML.
 
-## Container Build
+### Tests pass but no real prediction ran
 
-The folding container is built in stages using apptainer definition files
-from the `runtime_build` repository. Set `RUNTIME_BUILD` to its
-`gpu-builds/cuda-12.2-cudnn-8.9.6/` directory (layout identical across
-checkouts):
+The BV-BRC AppScript framework returns exit 0 even when the Perl
+`die`s. The Phase 3 service-script tests defend against this by
+asserting `model_1.pdb` exists post-run. If you see a service-script
+test pass in <1 second, that's the symptom. Check the `_finalize_output`
+contract in the helper.
 
-```bash
-export RUNTIME_BUILD=<path-to-runtime_build>/gpu-builds/cuda-12.2-cudnn-8.9.6
-```
+## Adding new tests
 
-Stages:
+### Phase 1 (native tool tests)
 
-1. `base-build.def` -- CUDA + cuDNN + miniforge
-2. `reqts-boltz.def` -- Boltz 2
-3. `reqts-chai.def` -- Chai 1
-4. `reqts-alphafold.def` -- AlphaFold 2
-5. `reqts-openfold.def` -- OpenFold 3
-6. `reqts-esmfold.def` -- ESMFold
-7. `reqts-predict-structure.def` -- predict-structure CLI (from GitHub)
-8. `reqts-bvbrc-service.def` -- BV-BRC AppService layer (final production SIF)
+Call tool binaries directly. Prepare input in the tool's native format
+(YAML for Boltz, FASTA for Chai/ESMFold, JSON for OpenFold), then use
+`ApptainerRunner.exec()`. Verify output files.
 
-### Build Flags
+### Phase 2 (CLI integration tests)
 
-Two flags are required when the build user is **not** in `/etc/subuid` /
-`/etc/subgid`:
+Use the test matrix in `tests/acceptance/matrix.py` and
+`ApptainerRunner.predict()`:
 
-```bash
---fakeroot                      # required for %post script
-APPTAINER_TMPDIR=<big-scratch>  # /tmp is often a small tmpfs (e.g. 50GB) and
-                                # can't hold a 30GB+ SIF extraction
-```
+1. Add a `ToolTestCase` to the matrix.
+2. Mark expected failures with `xfail_reason`.
+3. Use `validators.assert_valid_output()` to check normalized output.
 
-Pick `APPTAINER_TMPDIR` to point at a filesystem with at least ~1.5x the
-base SIF size free.
+For tier-aware tests, parametrize over `(tool, tier)` using
+`ALL_TIERS` + `tier_supported_for_tool` + `msa_args_for` from
+`matrix.py` (see `TestTierCoverage` for a template).
 
-### Build Command Template
+### Phase 3 (service script tests)
 
-```bash
-APPTAINER_TMPDIR=$APPTAINER_TMPDIR apptainer build --fakeroot \
-  --build-arg base=<previous_stage>.sif \
-  <output>.sif \
-  $RUNTIME_BUILD/reqts-<tool>.def
-```
-
-For the BV-BRC service layer (final stage), add `app_repo`:
-
-```bash
-APPTAINER_TMPDIR=$APPTAINER_TMPDIR apptainer build --fakeroot \
-  --build-arg base=<containers-dir>/base-gpu.YYYY-MM-DD.NNN.sif \
-  --build-arg app_repo=https://github.com/CEPI-dxkb/PredictStructureApp.git \
-  <containers-dir>/folding_YYMMDD.N.sif \
-  $RUNTIME_BUILD/reqts-bvbrc-service.def
-```
-
-### Example Build (folding_260422.1.sif)
-
-Built from `base-gpu.2026-04-22.002.sif` via `reqts-bvbrc-service.def`:
-
-```bash
-APPTAINER_TMPDIR=$APPTAINER_TMPDIR apptainer build --fakeroot \
-  --build-arg base=<containers-dir>/base-gpu.2026-04-22.002.sif \
-  --build-arg app_repo=https://github.com/CEPI-dxkb/PredictStructureApp.git \
-  <containers-dir>/folding_260422.1.sif \
-  $RUNTIME_BUILD/reqts-bvbrc-service.def
-```
-
-Note: This installs predict-structure from GitHub **main** branch. To pick up
-fixes from the `acceptance-testing` branch, modify `reqts-predict-structure.def`
-and `reqts-bvbrc-service.def` to use:
-
-```
-pip install "predict-structure[cwl] @ git+https://github.com/CEPI-dxkb/PredictStructureApp.git@acceptance-testing"
-```
-
-Or install from a local path during build by bind-mounting the repo.
-
-### Known Build Issue: /etc/subuid
-
-Without a `/etc/subuid` entry for the build user, apptainer falls back to
-"root-mapped namespace" and cannot handle files owned by non-root UIDs in
-the base SIF, producing errors like:
-
-```
-INFO:    User not listed in /etc/subuid, trying root-mapped namespace
-set_attributes: failed to change uid and gids on ...because Invalid argument
-ERROR:   unpackSIF failed: root filesystem extraction failed
-FATAL:   While performing build: packer failed to pack
-```
-
-Workarounds:
-- Have sysadmin add user to `/etc/subuid` and `/etc/subgid`
-- Use `--fakeroot` explicitly (does not fully resolve, but helps in some cases)
-- Use a writable overlay: `apptainer overlay create --size 50000 overlay.img`
-  then `apptainer exec --overlay overlay.img base.sif <install commands>`
+Add params + expected JSON via `scripts/generate_service_params.py`
+(it writes both the input and the Q/A `.expected.json`). External
+testing frameworks consume the Q/A files via `scripts/run_qa_case.py`
+-- see `test_data/service_params/README.md` for the full format spec.

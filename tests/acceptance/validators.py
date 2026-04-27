@@ -1,7 +1,7 @@
 """Output validation for acceptance tests.
 
-Python replacement for validate_output.sh -- validates the normalized
-prediction output directory structure.
+Validates the normalized prediction output directory structure
+(see docs/OUTPUT_NORMALIZATION.md for the canonical layout).
 """
 
 from __future__ import annotations
