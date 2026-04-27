@@ -33,13 +33,36 @@ Most of the gaps + the T1–T5 tier ladder have been implemented on the
 
 ### Validation status (as of `tiered-fixture-ladder` HEAD)
 
-- `tier1 and not slow` -- 17 pass / 4 graceful skip (rocrate / cwltool gating) in ~8 min
-- `tier2` (full, all 9 cases) -- 9 pass in 5m12s; surfaced + fixed two real bugs:
-  - service-script tests passed silently when the BV-BRC framework caught a Perl `die` (returned exit 0). Tests now also assert `model_1.pdb` exists post-run.
-  - `download_workspace_file` always tried the workspace API first, failing on container-local fixture paths. Now tries local file first.
-  - ColabFold-API MSA extraction left a trailing NUL byte that broke Boltz's a3m parser. `_colabfold_api_msa.py` now strips it.
+Full T1-T5 sweep on `folding_260425.1.sif` (H200 NVL): **53 tests
+passing, 0 failed, 0 skipped, ~25 min total wall-clock**.
 
-T3 / T4 / T5 not yet validated end-to-end -- track in the PR test plan.
+| Tier | Tests | Wall-clock |
+|---|---|---|
+| `tier1 and not slow` | 21 | 5m54s |
+| `tier2` | 9 | 4m57s |
+| `tier3` | 6 | 4m07s |
+| `tier4` | 9 | 4m55s |
+| `tier5` | 8 | 4m57s |
+
+`folding_prod.sif` was validated through T2 only; later tier runs used
+`folding_260425.1.sif` (which ships `rocrate 0.15.0`, flipping the 4
+RO-Crate skips on `folding_prod.sif` to passes).
+
+Real bugs surfaced + fixed during validation:
+
+1. service-script tests passed silently when the BV-BRC framework
+   caught a Perl `die` (returned exit 0). Tests now also assert
+   `model_1.pdb` exists post-run.
+2. `download_workspace_file` always tried the workspace API first,
+   failing on container-local fixture paths. Now tries local file first.
+3. ColabFold-API MSA extraction left a trailing NUL byte that broke
+   Boltz's a3m parser. `_colabfold_api_msa.py` now strips it.
+4. `_has_rocrate_in_container` used bare `python` (PATRIC runtime),
+   masking that rocrate WAS installed in the predict-structure env.
+   Now uses `/opt/conda-predict/bin/python` explicitly.
+5. `results.json` manifest listed `ro-crate-metadata.json` with stale
+   size/sha256 (the crate is rewritten *after* the manifest in the
+   `_finalize_output` order). Now excluded like `results.json` itself.
 
 ## Inventory
 

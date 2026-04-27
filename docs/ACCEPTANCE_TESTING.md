@@ -178,14 +178,32 @@ pytest tests/acceptance/ -m tier4 --sif ... --timeout 3600
 pytest tests/acceptance/ -m tier5 --sif ... --timeout 7200
 ```
 
-Observed wall-clock on `folding_prod.sif` (H200 NVL, single GPU):
+Observed wall-clock on `folding_260425.1.sif` (H200 NVL, single GPU,
+default sampling settings -- num_samples=1, num_recycles=3,
+sampling_steps=200):
 
 | Tier slice | Tests | Wall-clock |
 |---|---|---|
-| `tier1 and not slow` | 21 (17 pass, 4 graceful skip) | ~8 min |
-| `tier2` (full) | 9 (all pass) | ~5 min |
+| `tier1 and not slow` | 21 | 5m54s |
+| `tier2` (full) | 9 | 4m57s |
+| `tier3` | 6 | 4m07s |
+| `tier4` | 9 | 4m55s |
+| `tier5` | 8 | 4m57s |
+| **Full T1-T5 sweep** | **53** | **~25 min** |
 
-The `tier2` aggregate is dominated by the 4 service-script + tool runs at 214 aa with deep MSA: ESMFold ~46s, Boltz ~1m12s, Chai ~1m12s, OpenFold ~1m53s. Use these as ballpark expectations when scheduling CI.
+Per-tool service-script runs (the bulk of each tier's time):
+
+| Tier | Fixture | ESMFold | Boltz | Chai | OpenFold |
+|---|---|---|---|---|---|
+| T1 | crambin (46 aa) | 38s | (slow only) | (slow only) | (slow only) |
+| T2 | 1AKE (214 aa + MSA) | 44s | 1m03s | 1m12s | 1m49s |
+| T3 | crambin + DNA (text_input) | n/a | 1m07s | 1m09s | 1m45s |
+| T4 | multimer (2 chains × 25 aa) | 38s | 1m02s | 1m23s | 1m45s |
+| T5 | enolase (434 aa + deep MSA) | n/a | 1m13s | 1m31s | 2m05s |
+
+ESMFold + AlphaFold are excluded from T3/T5 service-script tests by
+design (ESMFold has no service-script multi-entity surface; AlphaFold
+builds its own MSAs from databases).
 
 Combine with phase markers to scope further:
 
