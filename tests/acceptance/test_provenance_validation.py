@@ -52,10 +52,22 @@ def esmfold_run(container, tmp_path: Path) -> Path:
     return out
 
 
+PREDICT_PYTHON = "/opt/conda-predict/bin/python"
+
+
 def _has_rocrate_in_container(container) -> bool:
-    """Check if `rocrate` is installed in the SIF's predict-structure env."""
+    """Check if `rocrate` is installed in the SIF's predict-structure env.
+
+    Important: must use ``/opt/conda-predict/bin/python`` explicitly, not
+    bare ``python``. Inside the SIF, bare ``python`` resolves to the
+    PATRIC runtime interpreter (``/opt/patric-common/runtime/bin/python``)
+    which is for the Perl AppService -- it does NOT have access to the
+    predict-structure conda env where rocrate is installed. Using the
+    wrong Python gives a false-negative skip and silently hides whether
+    the SIF actually ships rocrate.
+    """
     result = container.exec(
-        ["python", "-c", "import rocrate"],
+        [PREDICT_PYTHON, "-c", "import rocrate"],
         gpu=False,
         timeout=10,
     )
@@ -100,7 +112,7 @@ class TestRoCrateContent:
             pytest.skip("crate not produced (rocrate skip path)")
         # Use the SIF's python so we can use `from rocrate.rocrate import ROCrate`
         result = container.exec(
-            ["python", "-c",
+            [PREDICT_PYTHON, "-c",
              "from rocrate.rocrate import ROCrate; "
              "c = ROCrate('/out'); "
              "print('entities:', len(list(c.contextual_entities)))"],
