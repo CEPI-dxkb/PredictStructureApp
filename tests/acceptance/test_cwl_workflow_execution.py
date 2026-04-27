@@ -13,6 +13,7 @@ Skipped if `cwltool` or the SIF is not available.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import textwrap
@@ -53,6 +54,39 @@ def cwltool_env():
     return sif
 
 
+def _cwltool_env() -> dict[str, str]:
+    """Env for cwltool subprocess.
+
+    cwltool launches singularity with `--contain --cleanenv`, which:
+      - strips the inherited environment (drops HF_HOME, TORCH_HOME, etc.)
+      - confines mounts (no /local_databases by default)
+
+    We inject /local_databases via SINGULARITY_BINDPATH and re-export the
+    cache env vars that the predict-structure CLI relies on for HF /
+    PyTorch caches. Without this, ESMFold tries to download weights into
+    a non-writable cache and exits 1.
+    """
+    env = os.environ.copy()
+    extra_binds = "/local_databases:/local_databases"
+    existing = env.get("SINGULARITY_BINDPATH", "")
+    env["SINGULARITY_BINDPATH"] = (
+        f"{existing},{extra_binds}" if existing else extra_binds
+    )
+    # Tell singularity to re-inject these env vars even with --cleanenv.
+    cache_vars = {
+        "HF_HOME": "/local_databases/cache",
+        "HF_DATASETS_CACHE": "/local_databases/cache",
+        "TRANSFORMERS_CACHE": "/local_databases/cache",
+        "TORCH_HOME": "/local_databases/cache",
+        "XDG_CACHE_HOME": "/local_databases/cache/tmp",
+        "TRITON_CACHE_DIR": "/local_databases/cache/tmp",
+        "NUMBA_CACHE_DIR": "/local_databases/cache/tmp",
+    }
+    for k, v in cache_vars.items():
+        env[f"SINGULARITYENV_{k}"] = v
+    return env
+
+
 def _write_job(tmp_path: Path, fasta: Path, output_dir_name: str) -> Path:
     """Write a minimal CWL job file for predict-structure.cwl."""
     job_path = tmp_path / "job.yml"
@@ -83,7 +117,11 @@ class TestSingleToolWorkflow:
         job = _write_job(tmp_path, fasta, "predictions")
 
         # cwltool with --singularity uses the SIF declared in the CWL's
-        # DockerRequirement.dockerImageId.
+        # DockerRequirement.dockerImageId. cwltool runs singularity with
+        # --contain --cleanenv, so we need to inject /local_databases
+        # via SINGULARITY_BINDPATH (model weights + HF cache live there)
+        # and re-export the cache env vars cwltool drops.
+        env = _cwltool_env()
         result = subprocess.run(
             [
                 "cwltool",
@@ -95,6 +133,7 @@ class TestSingleToolWorkflow:
             capture_output=True,
             text=True,
             timeout=600,
+            env=env,
         )
         assert result.returncode == 0, (
             f"cwltool execution failed (rc={result.returncode})\n"
@@ -133,6 +172,7 @@ class TestSingleToolWorkflow:
              "--outdir", str(out_dir),
              str(cwl_tool), str(job)],
             capture_output=True, text=True, timeout=600,
+            env=_cwltool_env(),
         )
         assert result.returncode == 0, result.stderr[-1500:]
         assert_valid_results_json(out_dir / "predictions")
