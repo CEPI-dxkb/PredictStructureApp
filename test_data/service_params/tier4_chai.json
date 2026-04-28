@@ -1,6 +1,6 @@
 {
   "tool": "chai",
-  "output_path": "/output",
+  "output_path": "${WS_HOME}/AppTests/tier4_chai",
   "output_file": "tier4_chai_test",
   "num_recycles": 3,
   "output_format": "pdb",

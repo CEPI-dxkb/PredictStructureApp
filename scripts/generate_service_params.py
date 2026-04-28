@@ -44,9 +44,14 @@ T3_DNA_SEQ = "ATGCGTACGTAGCTAGCTAGCGT"
 
 
 def _common(tool: str, output_file: str, **extras) -> dict:
+    # output_path uses the ${WS_HOME} placeholder so the committed
+    # JSON isn't tied to a specific workspace user. Substituted at
+    # invocation time by scripts/instantiate_params.py (manual flow)
+    # or scripts/run_qa_case.py (Q/A flow); the pytest service-script
+    # tests expand it via tests/acceptance/ws_utils.expand_ws_placeholders.
     base = {
         "tool": tool,
-        "output_path": "/output",
+        "output_path": f"${{WS_HOME}}/AppTests/{output_file.replace('_test', '')}",
         "output_file": output_file,
         "num_recycles": 3,
         "output_format": "pdb",

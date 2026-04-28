@@ -64,6 +64,50 @@ relevant param files here so test coverage stays in sync. Both the
 acceptance tests (tests/acceptance/test_phase3_service_script.py) and
 BV-BRC test harness read these files.
 
+## Workspace-path templating (`${WS_HOME}` / `${WS_USER}`)
+
+Auto-generated tier params files use bash-style placeholders for
+workspace paths so the committed JSON isn't tied to a specific
+workspace user:
+
+```jsonc
+{
+  "tool": "boltz",
+  "output_path": "${WS_HOME}/AppTests/tier1_boltz",
+  ...
+}
+```
+
+Supported placeholders:
+
+| Placeholder | Expands to | Example |
+|---|---|---|
+| `${WS_USER}` | `<user>@<domain>` from the .patric_token | `awilke@bvbrc` |
+| `${WS_HOME}` | `/<user>@<domain>/home` | `/awilke@bvbrc/home` |
+
+### Three ways to expand
+
+1. **`scripts/run_qa_case.py`** auto-expands when running the Q/A
+   runner; no extra step.
+2. **Pytest service-script tests** (`test_phase3_service_script.py`)
+   auto-expand via `_load_service_params`.
+3. **Manual flow** (running the Perl service script directly):
+   ```bash
+   python scripts/instantiate_params.py \
+     test_data/service_params/tier1_boltz.json \
+     --out /tmp/params.json
+
+   apptainer exec ... folding_prod.sif \
+     perl <App-PredictStructure.pl> ... /tmp/params.json
+   ```
+
+Token resolution order (all three paths share it): `--token <path>`
+flag, `$PATRIC_TOKEN_PATH`, then `~/.patric_token`.
+
+If no token is available, the placeholders pass through untouched -- the
+local prediction still completes; only the final workspace upload fails
+("Error creating directory: $(WS_HOME)/... is not a valid object path").
+
 ---
 
 ## Q/A format for external testing frameworks

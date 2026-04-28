@@ -1,6 +1,6 @@
 {
   "tool": "esmfold",
-  "output_path": "/output",
+  "output_path": "${WS_HOME}/AppTests/tier4_esmfold",
   "output_file": "tier4_esmfold_test",
   "num_recycles": 3,
   "output_format": "pdb",

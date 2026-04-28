@@ -184,11 +184,70 @@ Main execution function:
 
 =cut
 
+sub _expand_ws_placeholders {
+    # Replace ${WS_HOME} / ${WS_USER} in `$text` using the workspace user
+    # parsed from the auth token. Keeps params files portable across users.
+    #
+    # Token sources, in order:
+    #   1. $KB_AUTH_TOKEN env var
+    #   2. $P3_TOKEN env var
+    #   3. $PATRIC_TOKEN_PATH file
+    #   4. ~/.patric_token
+    my ($text) = @_;
+    return $text unless defined $text and $text =~ /\$\{WS_/;
+
+    my $token = $ENV{KB_AUTH_TOKEN} // $ENV{P3_TOKEN} // "";
+    if (!$token) {
+        my @paths = (
+            $ENV{PATRIC_TOKEN_PATH},
+            ($ENV{HOME} ? "$ENV{HOME}/.patric_token" : undef),
+        );
+        for my $p (@paths) {
+            next unless $p and -f $p;
+            local $/;
+            open(my $fh, "<", $p) or next;
+            $token = <$fh>;
+            close $fh;
+            chomp $token if defined $token;
+            last if $token;
+        }
+    }
+
+    my $user;
+    for my $part (split /\|/, $token) {
+        if ($part =~ /^un=(.+)$/) {
+            $user = $1;
+            last;
+        }
+    }
+    unless ($user) {
+        warn "Cannot expand \${WS_*} placeholders -- no auth token found ",
+             "(checked KB_AUTH_TOKEN, P3_TOKEN, PATRIC_TOKEN_PATH, ~/.patric_token)\n";
+        return $text;
+    }
+    my $home = "/$user/home";
+    $text =~ s/\$\{WS_HOME\}/$home/g;
+    $text =~ s/\$\{WS_USER\}/$user/g;
+    return $text;
+}
+
+
 sub run_app {
     my ($app, $app_def, $raw_params, $params) = @_;
 
     print "Starting PredictStructure service\n";
     print STDERR "Parameters: " . Dumper($params) . "\n" if $ENV{P3_DEBUG};
+
+    # Expand ${WS_HOME} / ${WS_USER} placeholders in workspace-bound
+    # params so committed params files don't have to bake in a
+    # specific user. Same expansion happens client-side in
+    # scripts/instantiate_params.py and the pytest fixtures; doing it
+    # here too means manual `perl App-PredictStructure.pl ... params.json`
+    # invocations work without preprocessing.
+    for my $key (qw(output_path input_file msa_file)) {
+        $params->{$key} = _expand_ws_placeholders($params->{$key})
+            if defined $params->{$key};
+    }
 
     # Create working directories
     my $work_dir = $ENV{P3_WORKDIR} // $ENV{TMPDIR} // "/tmp";

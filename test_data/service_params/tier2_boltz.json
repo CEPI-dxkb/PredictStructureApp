@@ -1,6 +1,6 @@
 {
   "tool": "boltz",
-  "output_path": "/output",
+  "output_path": "${WS_HOME}/AppTests/tier2_boltz",
   "output_file": "tier2_boltz_test",
   "num_recycles": 3,
   "output_format": "pdb",

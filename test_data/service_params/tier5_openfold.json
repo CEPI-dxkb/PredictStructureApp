@@ -1,6 +1,6 @@
 {
   "tool": "openfold",
-  "output_path": "/output",
+  "output_path": "${WS_HOME}/AppTests/tier5_openfold",
   "output_file": "tier5_openfold_test",
   "num_recycles": 3,
   "output_format": "pdb",

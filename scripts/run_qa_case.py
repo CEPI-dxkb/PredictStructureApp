@@ -27,6 +27,7 @@ import time
 from pathlib import Path
 
 from _qa_predicates import evaluate
+from instantiate_params import expand_ws_placeholders
 
 REPO = Path(__file__).resolve().parent.parent
 DEFAULT_SIF = "/scout/containers/folding_260425.1.sif"
@@ -89,7 +90,18 @@ def run_case(case_path: Path, sif: Path, schema_dir: Path,
     with tempfile.TemporaryDirectory(prefix="qa-case-") as tmp:
         tmp_path = Path(tmp)
         params_dst = tmp_path / "params.json"
-        shutil.copy(params_src, params_dst)
+        # Expand ${WS_HOME} / ${WS_USER} placeholders if a token is
+        # available. Without a token the placeholders pass through
+        # untouched -- the workspace upload step will then fail, but
+        # the prediction itself still completes.
+        params_text = params_src.read_text()
+        token_path = Path(os.environ.get("PATRIC_TOKEN_PATH",
+                                         os.path.expanduser("~/.patric_token")))
+        if "${WS_" in params_text and token_path.is_file():
+            params_text = expand_ws_placeholders(
+                params_text, token_path.read_text().strip()
+            )
+        params_dst.write_text(params_text)
         local_output = tmp_path / "output"
         local_output.mkdir()
 

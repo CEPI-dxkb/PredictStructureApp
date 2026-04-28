@@ -10,9 +10,12 @@ Tests the Perl service script end-to-end inside the container:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
+
+from tests.acceptance.ws_utils import expand_ws_placeholders
 
 pytestmark = [pytest.mark.phase3, pytest.mark.gpu, pytest.mark.container]
 
@@ -55,10 +58,22 @@ SERVICE_PARAMS_DIR = TEST_DATA_HOST / "service_params"
 
 
 def _load_service_params(filename: str, tmp_path: Path) -> Path:
-    """Copy a canonical service-params file into tmp_path for binding."""
+    """Copy a canonical service-params file into tmp_path for binding.
+
+    Expands ``${WS_HOME}`` / ``${WS_USER}`` placeholders if a workspace
+    token is available -- otherwise leaves them in place (the workspace
+    upload step will then fail, which is fine for tests that only
+    verify local prediction output).
+    """
     src = SERVICE_PARAMS_DIR / filename
+    text = src.read_text()
+    token_path = Path(os.environ.get(
+        "PATRIC_TOKEN_PATH", os.path.expanduser("~/.patric_token")
+    ))
+    if "${WS_" in text and token_path.is_file():
+        text = expand_ws_placeholders(text, token_path.read_text().strip())
     dst = tmp_path / "params.json"
-    dst.write_text(src.read_text())
+    dst.write_text(text)
     return dst
 
 

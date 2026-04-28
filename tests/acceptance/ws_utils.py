@@ -110,6 +110,27 @@ def upload_test_input(
     return ws_path
 
 
+def expand_ws_placeholders(text: str, token_text: str) -> str:
+    """Expand ``${WS_HOME}`` / ``${WS_USER}`` placeholders in a string.
+
+    Used by the Phase 3 service-script params files so the canonical
+    ``output_path`` doesn't have to hard-code a particular workspace
+    user. Generator emits e.g.::
+
+        "output_path": "${WS_HOME}/AppTests/tier1_boltz_test"
+
+    At test-time / run-time the placeholder is replaced with the real
+    workspace path derived from the token.
+
+    Supported placeholders:
+      ${WS_USER}  ->  ``<user>@<domain>``  (e.g. ``awilke@bvbrc``)
+      ${WS_HOME}  ->  ``/<user>@<domain>/home``
+    """
+    user = parse_ws_user(token_text)
+    home = ws_home(token_text)
+    return text.replace("${WS_HOME}", home).replace("${WS_USER}", user)
+
+
 def cleanup_ws(container, token: str, path: str) -> None:
     """Recursively delete a workspace path, unless PREDICT_STRUCTURE_KEEP_WORKSPACE=1.
 
