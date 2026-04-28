@@ -67,6 +67,8 @@ Plus several cross-cutting suites:
 | `/opt/patric-common/runtime` + `/opt/patric-common/deployment` | BV-BRC Perl runtime (Phase 3) |
 
 For container build instructions see [`docs/CONTAINER_BUILD.md`](CONTAINER_BUILD.md).
+For invoking the CWL workflows directly (cwltool / GoWe) see
+[`docs/CWL_WORKFLOWS.md`](CWL_WORKFLOWS.md).
 
 ## Configuration
 

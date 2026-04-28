@@ -184,4 +184,5 @@ image production-ready."
 - `scripts/run_qa_case.py` -- external Q/A runner for Phase 3
 - `docs/ACCEPTANCE_TESTING.md` -- how to run the suite
 - `docs/CONTAINER_BUILD.md` -- how to build the SIFs
+- `docs/CWL_WORKFLOWS.md` -- how to invoke the workflows via cwltool / GoWe
 - `docs/OUTPUT_NORMALIZATION.md` -- the unified output layout spec
