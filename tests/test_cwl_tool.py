@@ -123,11 +123,14 @@ class TestUnifiedCWLStructure:
         assert "auto" in symbols
 
     def test_exposes_provenance_outputs(self, cwl_doc):
-        """predict-structure.cwl exposes results.json + ro-crate + report outputs."""
+        """predict-structure.cwl exposes results.json + ro-crate outputs.
+
+        Reports are produced by a separate workflow step (protein-compare),
+        not by predict-structure itself, so there is no `reports` output here.
+        """
         outputs = cwl_doc["outputs"]
-        for name in ("results", "ro_crate", "reports"):
+        for name in ("results", "ro_crate"):
             assert name in outputs, f"Missing CWL output: {name}"
-        assert outputs["reports"]["type"] == "Directory?"
         assert outputs["results"]["outputBinding"]["glob"].endswith("results.json")
         assert outputs["ro_crate"]["outputBinding"]["glob"].endswith(
             "ro-crate-metadata.json"

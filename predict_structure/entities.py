@@ -86,15 +86,22 @@ class Entity:
 
     Attributes:
         entity_type: Type of entity (protein, DNA, RNA, ligand, etc.).
-        value: File path (for FASTA entities) or inline value (CCD code, SMILES).
+        value: Sequence string (for FASTA entities) or inline value (CCD, SMILES).
         name: Optional descriptive name (from FASTA header or user label).
         chain_id: Chain identifier assigned during conversion.
+        source_path: Original user-supplied file path for file-backed entities;
+            None for inline entities. Used by input staging to preserve the
+            original input alongside the prediction outputs.
+        format: Source format (``fasta`` / ``a3m`` / ``ccd`` / ``smiles`` /
+            ``glycan-iupac``). Drives staged-file metadata.
     """
 
     entity_type: EntityType
     value: str
     name: str = ""
     chain_id: str = ""
+    source_path: Path | None = None
+    format: str | None = None
 
 
 @dataclass
@@ -106,7 +113,15 @@ class EntityList:
 
     entities: list[Entity] = field(default_factory=list)
 
-    def add(self, entity_type: EntityType, value: str, name: str = "") -> None:
+    def add(
+        self,
+        entity_type: EntityType,
+        value: str,
+        name: str = "",
+        *,
+        source_path: Path | None = None,
+        format: str | None = None,
+    ) -> None:
         """Add an entity and assign the next available chain ID."""
         chain_id = _CHAIN_IDS[len(self.entities) % len(_CHAIN_IDS)]
         self.entities.append(Entity(
@@ -114,6 +129,8 @@ class EntityList:
             value=value,
             name=name or chain_id,
             chain_id=chain_id,
+            source_path=source_path,
+            format=format,
         ))
 
     @property
@@ -211,6 +228,8 @@ def parse_fasta_entities(
             entity_type=etype,
             value=seq,
             name=record.id,
+            source_path=fasta_path,
+            format="fasta",
         ))
     return entities
 

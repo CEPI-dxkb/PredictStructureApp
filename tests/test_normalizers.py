@@ -16,6 +16,9 @@ class TestWriteConfidenceJson:
             per_residue_plddt=[91.2, 88.5, 85.1, 84.0],
         )
         assert path.name == "confidence.json"
+        assert path.parent.name == "predictions", (
+            "confidence.json now lives under predictions/ in the unified layout"
+        )
         data = json.loads(path.read_text())
         assert data["plddt_mean"] == 87.3
         assert data["ptm"] == 0.92
@@ -62,18 +65,36 @@ class TestWriteMetadataJson:
         from predict_structure.normalizers import write_metadata_json
 
         path = write_metadata_json(
-            tmp_output, tool="boltz",
-            params={"num_samples": 5},
-            runtime_seconds=1823.4,
+            tmp_output,
+            tool="boltz",
             version="0.1.0",
+            tool_version="2.1.0",
+            status="success",
+            started_at="2026-05-04T14:00:00+00:00",
+            completed_at="2026-05-04T14:30:23.4+00:00",
+            runtime_seconds=1823.4,
+            command=["predict-structure", "boltz", "--protein", "x.fa"],
+            container_image="folding_prod.sif",
+            backend="subprocess",
+            params={"num_samples": 5},
+            inputs=[],
         )
         assert path.name == "metadata.json"
+        assert path.parent.name == "metadata"
         data = json.loads(path.read_text())
+        assert data["schema_version"] == "1.1"
         assert data["tool"] == "boltz"
         assert data["params"]["num_samples"] == 5
         assert data["runtime_seconds"] == 1823.4
         assert data["version"] == "0.1.0"
-        assert "timestamp" in data
+        assert data["tool_version"] == "2.1.0"
+        assert data["status"] == "success"
+        assert data["started_at"] == "2026-05-04T14:00:00+00:00"
+        assert data["completed_at"] == "2026-05-04T14:30:23.4+00:00"
+        assert data["command"] == ["predict-structure", "boltz", "--protein", "x.fa"]
+        assert data["container_image"] == "folding_prod.sif"
+        assert data["backend"] == "subprocess"
+        assert data["inputs"] == []
 
 
 class TestNormalizeBoltzOutput:
@@ -110,12 +131,15 @@ class TestNormalizeBoltzOutput:
 
         normalize_boltz_output(raw, tmp_output)
 
-        assert (tmp_output / "model_1.cif").exists()
-        assert (tmp_output / "model_1.pdb").exists()
-        assert (tmp_output / "confidence.json").exists()
+        # Canonical files live under predictions/
+        assert (tmp_output / "predictions" / "model_1.cif").exists()
+        assert (tmp_output / "predictions" / "model_1.pdb").exists()
+        assert (tmp_output / "predictions" / "confidence.json").exists()
         assert (tmp_output / "raw").exists()
+        # Best PDB also promoted to top level
+        assert (tmp_output / "model_1.pdb").exists()
 
-        data = json.loads((tmp_output / "confidence.json").read_text())
+        data = json.loads((tmp_output / "predictions" / "confidence.json").read_text())
         # Should be scaled to 0-100
         assert data["per_residue_plddt"][0] == 91.0
         assert data["ptm"] == 0.92
@@ -149,8 +173,9 @@ class TestNormalizeChaiOutput:
 
         normalize_chai_output(raw, tmp_output)
 
-        assert (tmp_output / "model_1.pdb").exists()
-        data = json.loads((tmp_output / "confidence.json").read_text())
+        assert (tmp_output / "predictions" / "model_1.pdb").exists()
+        assert (tmp_output / "model_1.pdb").exists()  # top-level copy
+        data = json.loads((tmp_output / "predictions" / "confidence.json").read_text())
         assert data["per_residue_plddt"][0] == 75.0  # from PDB B-factors
         assert data["ptm"] == 0.88
 
@@ -173,7 +198,7 @@ class TestNormalizeESMFoldOutput:
 
         normalize_esmfold_output(raw, tmp_output)
 
-        data = json.loads((tmp_output / "confidence.json").read_text())
+        data = json.loads((tmp_output / "predictions" / "confidence.json").read_text())
         # 0.85 * 100 = 85.0, 0.72 * 100 = 72.0
         assert data["per_residue_plddt"][0] == 85.0
         assert data["per_residue_plddt"][1] == 72.0
@@ -224,12 +249,13 @@ class TestNormalizeOpenFoldOutput:
 
         normalize_openfold_output(raw, tmp_output)
 
-        assert (tmp_output / "model_1.cif").exists()
-        assert (tmp_output / "model_1.pdb").exists()
-        assert (tmp_output / "confidence.json").exists()
+        assert (tmp_output / "predictions" / "model_1.cif").exists()
+        assert (tmp_output / "predictions" / "model_1.pdb").exists()
+        assert (tmp_output / "predictions" / "confidence.json").exists()
         assert (tmp_output / "raw").exists()
+        assert (tmp_output / "model_1.pdb").exists()  # promoted
 
-        data = json.loads((tmp_output / "confidence.json").read_text())
+        data = json.loads((tmp_output / "predictions" / "confidence.json").read_text())
         assert data["plddt_mean"] == 78.5
         assert data["ptm"] == 0.88
         assert data["per_residue_plddt"] == [85.0, 72.0]
@@ -268,7 +294,7 @@ class TestNormalizeOpenFoldOutput:
 
         normalize_openfold_output(raw, tmp_output)
 
-        data = json.loads((tmp_output / "confidence.json").read_text())
+        data = json.loads((tmp_output / "predictions" / "confidence.json").read_text())
         assert data["plddt_mean"] == 90.0
         assert data["ptm"] == 0.95
 
@@ -282,51 +308,112 @@ class TestNormalizeOpenFoldOutput:
             normalize_openfold_output(raw, tmp_output)
 
 
-class TestMoveReportsToSubdir:
-    def test_moves_existing_reports(self, tmp_path):
-        """report.html/.json/.pdf at top level are moved into report/."""
-        from predict_structure.normalizers import move_reports_to_subdir
+class TestStageInputs:
+    def test_file_input_descriptor(self, tmp_path, tmp_output):
+        """File-backed Entity becomes one descriptor with source/staged/checksum."""
+        from predict_structure.entities import EntityList, EntityType
+        from predict_structure.normalizers import stage_inputs
 
-        out = tmp_path / "out"
-        out.mkdir()
-        (out / "report.html").write_text("<html></html>")
-        (out / "report.json").write_text("{}")
-        (out / "report.pdf").write_bytes(b"%PDF-1.4\n")
-        (out / "model_1.pdb").write_text("ATOM")
+        fasta = tmp_path / "demo.fasta"
+        fasta.write_text(">chain_A\nMKTLV\n")
 
-        dest = move_reports_to_subdir(out)
-        assert dest == out / "report"
-        assert (out / "report" / "report.html").exists()
-        assert (out / "report" / "report.json").exists()
-        assert (out / "report" / "report.pdf").exists()
-        # Top level no longer has them
-        assert not (out / "report.html").exists()
-        assert not (out / "report.json").exists()
-        # Non-report files untouched
-        assert (out / "model_1.pdb").exists()
+        el = EntityList()
+        el.add(
+            EntityType.PROTEIN, "MKTLV", name="chain_A",
+            source_path=fasta, format="fasta",
+        )
 
-    def test_no_reports_is_noop(self, tmp_path):
-        from predict_structure.normalizers import move_reports_to_subdir
+        descriptors = stage_inputs(el, None, tmp_output)
+        assert len(descriptors) == 1
+        d = descriptors[0]
+        assert d["kind"] == "protein"
+        assert d["name"] == "demo"
+        assert d["source"] == str(fasta)
+        assert d["staged"] == "inputs/demo.fasta"
+        assert d["checksum"].startswith("sha256$")
+        assert d["size"] > 0
+        assert d["length"] == 5
+        assert d["format"] == "fasta"
+        # File copied
+        assert (tmp_output / "inputs" / "demo.fasta").is_file()
 
-        out = tmp_path / "out"
-        out.mkdir()
-        (out / "model_1.pdb").write_text("ATOM")
+    def test_inline_entity_descriptor(self, tmp_output):
+        """Ligand CCD code becomes a value-only descriptor with no file fields."""
+        from predict_structure.entities import EntityList, EntityType
+        from predict_structure.normalizers import stage_inputs
 
-        dest = move_reports_to_subdir(out)
-        assert dest is None
-        assert not (out / "report").exists()
+        el = EntityList()
+        el.add(EntityType.LIGAND, "ATP", name="ATP", format="ccd")
 
-    def test_partial_reports(self, tmp_path):
-        """Only html present -- moves it, still creates report/ dir."""
-        from predict_structure.normalizers import move_reports_to_subdir
+        descriptors = stage_inputs(el, None, tmp_output)
+        assert len(descriptors) == 1
+        d = descriptors[0]
+        assert d["kind"] == "ligand"
+        assert d["value"] == "ATP"
+        assert d["format"] == "ccd"
+        assert "source" not in d
+        assert "staged" not in d
+        assert "checksum" not in d
 
-        out = tmp_path / "out"
-        out.mkdir()
-        (out / "report.html").write_text("<html></html>")
+    def test_msa_descriptor(self, tmp_path, tmp_output):
+        """MSA file gets staged with depth annotation when a3m."""
+        from predict_structure.entities import EntityList
+        from predict_structure.normalizers import stage_inputs
 
-        dest = move_reports_to_subdir(out)
-        assert dest == out / "report"
-        assert (out / "report" / "report.html").exists()
+        msa = tmp_path / "demo.a3m"
+        msa.write_text(">seq1\nMKTLV\n>seq2\nMKTLA\n>seq3\nMKTLG\n")
+
+        descriptors = stage_inputs(EntityList(), msa, tmp_output)
+        assert len(descriptors) == 1
+        d = descriptors[0]
+        assert d["kind"] == "msa"
+        assert d["staged"] == "inputs/demo.a3m"
+        assert d["format"] == "a3m"
+        assert d["depth"] == 3
+        assert (tmp_output / "inputs" / "demo.a3m").is_file()
+
+    def test_multi_chain_fasta_groups_into_one(self, tmp_path, tmp_output):
+        """Multi-chain FASTA → one descriptor with sequences[] breakdown."""
+        from predict_structure.entities import EntityList, EntityType
+        from predict_structure.normalizers import stage_inputs
+
+        fasta = tmp_path / "complex.fasta"
+        fasta.write_text(">chain_A\nMKTLV\n>chain_B\nGGSST\n")
+
+        el = EntityList()
+        for name, seq in [("chain_A", "MKTLV"), ("chain_B", "GGSST")]:
+            el.add(
+                EntityType.PROTEIN, seq, name=name,
+                source_path=fasta, format="fasta",
+            )
+
+        descriptors = stage_inputs(el, None, tmp_output)
+        # One descriptor for the file, two sequences inside
+        file_descs = [d for d in descriptors if "staged" in d]
+        assert len(file_descs) == 1
+        d = file_descs[0]
+        assert "sequences" in d
+        assert len(d["sequences"]) == 2
+        assert {s["name"] for s in d["sequences"]} == {"chain_A", "chain_B"}
+
+
+class TestMetadataLayout:
+    def test_metadata_lands_in_metadata_subdir(self, tmp_output):
+        """write_metadata_json places the file under metadata/, not at top."""
+        from predict_structure.normalizers import write_metadata_json
+
+        path = write_metadata_json(
+            tmp_output,
+            tool="boltz",
+            version="0.2.0",
+            runtime_seconds=10.5,
+            command=[],
+            params={"num_samples": 1},
+        )
+        assert path == tmp_output / "metadata" / "metadata.json"
+        assert not (tmp_output / "metadata.json").exists(), (
+            "metadata.json should NOT be at top level"
+        )
 
 
 class TestNormalizeAlphaFoldOutput:
@@ -353,9 +440,10 @@ class TestNormalizeAlphaFoldOutput:
 
         normalize_alphafold_output(raw, tmp_output)
 
-        assert (tmp_output / "model_1.pdb").exists()
-        assert (tmp_output / "model_1.cif").exists()
-        data = json.loads((tmp_output / "confidence.json").read_text())
+        assert (tmp_output / "predictions" / "model_1.pdb").exists()
+        assert (tmp_output / "predictions" / "model_1.cif").exists()
+        assert (tmp_output / "model_1.pdb").exists()  # promoted to top level
+        data = json.loads((tmp_output / "predictions" / "confidence.json").read_text())
         # AF2 mean pLDDT from ranking_debug.json for top model
         assert data["plddt_mean"] == 78.5
         assert data["ptm"] is None

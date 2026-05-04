@@ -1,18 +1,22 @@
 """Output normalization for structure prediction tools.
 
-Transforms raw, tool-specific output directories into a standardized layout:
+Transforms raw, tool-specific output directories into the unified layout:
     output_dir/
-    ├── model_1.pdb
-    ├── model_1.cif
-    ├── confidence.json   # {plddt_mean, ptm, per_residue_plddt[]}
-    ├── metadata.json     # {tool, params, runtime, version}
-    └── raw/              # Original tool output (unmodified)
+    ├── model_1.pdb              ← top-level copy of best model
+    ├── report.html              ← top-level copy of HTML report (Perl/CWL)
+    ├── results.json             ← v2.0 outputs map + UI summary
+    ├── inputs/                  ← staged copies of user inputs
+    ├── predictions/             ← model_1.pdb/.cif, confidence.json, pae.json, …
+    ├── reports/                 ← report.html/.json/.pdf (and images/)
+    ├── metadata/                ← metadata.json + ro-crate-metadata.json
+    └── raw/                     ← opaque tool-native payload
 
 All pLDDT values are normalized to 0-100 scale.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import shutil
@@ -22,7 +26,8 @@ from pathlib import Path
 import numpy as np
 from Bio.PDB import PDBParser
 
-from predict_structure.converters import mmcif_to_pdb, pdb_to_mmcif
+from predict_structure.converters import a3m_depth, mmcif_to_pdb, pdb_to_mmcif
+from predict_structure.entities import EntityList, EntityType
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +53,9 @@ def write_confidence_json(
             each residue's atoms.
 
     Returns:
-        Path to confidence.json.
+        Path to confidence.json (lands at ``output_dir/predictions/confidence.json``).
     """
-    path = output_dir / "confidence.json"
+    path = predictions_dir(output_dir) / "confidence.json"
     data = {
         "plddt_mean": round(plddt_mean, 2),
         "ptm": round(ptm, 4) if ptm is not None else None,
@@ -67,35 +72,242 @@ def write_confidence_json(
     return path
 
 
+METADATA_SUBDIR = "metadata"
+INPUTS_SUBDIR = "inputs"
+PREDICTIONS_SUBDIR = "predictions"
+REPORTS_SUBDIR = "reports"
+
+METADATA_SCHEMA_VERSION = "1.1"
+
+
+def metadata_dir(output_dir: Path) -> Path:
+    """Return ``output_dir/metadata/``, creating it if missing."""
+    d = output_dir / METADATA_SUBDIR
+    d.mkdir(exist_ok=True)
+    return d
+
+
+def predictions_dir(output_dir: Path) -> Path:
+    """Return ``output_dir/predictions/``, creating it if missing."""
+    d = output_dir / PREDICTIONS_SUBDIR
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def promote_best_model(output_dir: Path) -> Path | None:
+    """Copy ``predictions/model_1.pdb`` to ``<output_dir>/model_1.pdb``.
+
+    The top-level copy is the user-facing convenience: a UI grabs
+    ``model_1.pdb`` directly without descending into ``predictions/``.
+    Returns the top-level path, or None if no rank-1 PDB exists yet.
+    """
+    src = output_dir / PREDICTIONS_SUBDIR / "model_1.pdb"
+    if not src.is_file():
+        return None
+    dst = output_dir / "model_1.pdb"
+    shutil.copy2(str(src), str(dst))
+    return dst
+
+
+def _sha256_of(path: Path, buf_size: int = 64 * 1024) -> str:
+    """Stream the sha256 of a file (raw hex, no prefix)."""
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        while chunk := fh.read(buf_size):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def write_metadata_json(
     output_dir: Path,
+    *,
     tool: str,
-    params: dict,
-    runtime_seconds: float,
     version: str,
+    tool_version: str | None = None,
+    status: str = "success",
+    started_at: str | None = None,
+    completed_at: str | None = None,
+    runtime_seconds: float,
+    command: list[str],
+    container_image: str | None = None,
+    backend: str | None = None,
+    params: dict,
+    inputs: list[dict] | None = None,
 ) -> Path:
-    """Write prediction provenance metadata.
+    """Write the canonical run-trace metadata.
+
+    Lands at ``output_dir/metadata/metadata.json``. This is the single
+    source of truth for tool/version/command/container/backend/params/
+    inputs — both ``results.json`` (UI summary) and
+    ``ro-crate-metadata.json`` (formal provenance) derive from it.
 
     Args:
         output_dir: Target directory.
         tool: Tool name.
-        params: Unified parameters used.
-        runtime_seconds: Wall-clock time for the prediction.
         version: predict-structure package version.
+        tool_version: Underlying model/tool version (best-effort).
+        status: ``success`` / ``partial`` / ``failed``.
+        started_at: ISO 8601 UTC start timestamp.
+        completed_at: ISO 8601 UTC completion timestamp; defaults to now.
+        runtime_seconds: Wall-clock time for the prediction.
+        command: Exact CLI argv for reproduction.
+        container_image: Container image / SIF path; None if native.
+        backend: Execution backend name (``subprocess`` / ``docker`` / ``cwl``).
+        params: Unified parameter dict.
+        inputs: Descriptors built by ``_stage_inputs``.
 
     Returns:
         Path to metadata.json.
     """
-    path = output_dir / "metadata.json"
+    completed = completed_at or datetime.now(timezone.utc).isoformat()
     data = {
+        "schema_version": METADATA_SCHEMA_VERSION,
         "tool": tool,
-        "params": params,
-        "runtime_seconds": round(runtime_seconds, 1),
         "version": version,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "tool_version": tool_version,
+        "status": status,
+        "started_at": started_at,
+        "completed_at": completed,
+        "runtime_seconds": round(runtime_seconds, 1),
+        "command": list(command),
+        "container_image": container_image,
+        "backend": backend,
+        "params": params,
+        "inputs": list(inputs) if inputs else [],
     }
+    path = metadata_dir(output_dir) / "metadata.json"
     path.write_text(json.dumps(data, indent=2))
     return path
+
+
+# ---------------------------------------------------------------------------
+# Input staging
+# ---------------------------------------------------------------------------
+
+
+# Maps EntityType → kind string used in metadata.inputs[].kind
+_ENTITY_KIND = {
+    EntityType.PROTEIN: "protein",
+    EntityType.DNA: "dna",
+    EntityType.RNA: "rna",
+    EntityType.LIGAND: "ligand",
+    EntityType.SMILES: "smiles",
+    EntityType.GLYCAN: "glycan",
+}
+
+
+def stage_inputs(
+    entity_list: EntityList | None,
+    msa_path: Path | None,
+    output_dir: Path,
+) -> list[dict]:
+    """Copy user-supplied inputs into ``output_dir/inputs/`` and describe them.
+
+    Returns a list of input descriptors suitable for ``metadata.inputs[]``.
+    File-backed entities are grouped by source path: a single FASTA with
+    multiple chains becomes one descriptor with a ``sequences[]`` breakdown.
+    Inline entities (CCD codes, SMILES strings, glycans) become one
+    descriptor each carrying ``value`` instead of file fields.
+
+    The MSA file (if provided) is also copied into ``inputs/`` and
+    annotated with ``depth`` (a3m row count) when applicable.
+
+    Args:
+        entity_list: The EntityList passed to the adapter (may be None
+            for tools that bypass entity construction).
+        msa_path: Optional pre-computed MSA file.
+        output_dir: Prediction output directory.
+
+    Returns:
+        List of descriptor dicts.
+    """
+    descriptors: list[dict] = []
+    if entity_list is None and msa_path is None:
+        return descriptors
+
+    inputs_subdir = output_dir / INPUTS_SUBDIR
+    inputs_subdir.mkdir(exist_ok=True)
+
+    # Group file-backed entities by source path so a multi-chain FASTA
+    # produces one descriptor with sequences[].
+    by_source: dict[Path, list] = {}
+    inline: list = []
+    if entity_list is not None:
+        for ent in entity_list:
+            if ent.source_path is not None:
+                by_source.setdefault(ent.source_path, []).append(ent)
+            else:
+                inline.append(ent)
+
+    for source, ents in by_source.items():
+        descriptors.append(_describe_file_input(source, ents, inputs_subdir))
+
+    for ent in inline:
+        descriptors.append({
+            "kind": _ENTITY_KIND.get(ent.entity_type, "ligand"),
+            "name": ent.name or None,
+            "value": ent.value,
+            "format": ent.format,
+        })
+
+    if msa_path is not None:
+        descriptors.append(_describe_msa_input(msa_path, inputs_subdir))
+
+    return descriptors
+
+
+def _describe_file_input(source: Path, ents: list, inputs_subdir: Path) -> dict:
+    staged = inputs_subdir / source.name
+    if not staged.exists() or staged.resolve() != source.resolve():
+        shutil.copy2(source, staged)
+
+    kinds = {_ENTITY_KIND.get(e.entity_type, "protein") for e in ents}
+    primary_kind = next(iter(kinds)) if len(kinds) == 1 else "mixed"
+
+    desc = {
+        "kind": primary_kind,
+        "name": source.stem,
+        "source": str(source),
+        "staged": f"{INPUTS_SUBDIR}/{source.name}",
+        "checksum": f"sha256${_sha256_of(staged)}",
+        "size": staged.stat().st_size,
+        "format": ents[0].format if ents and ents[0].format else None,
+    }
+    if len(ents) == 1 and ents[0].entity_type in (
+        EntityType.PROTEIN, EntityType.DNA, EntityType.RNA,
+    ):
+        desc["length"] = len(ents[0].value)
+    if len(ents) > 1:
+        desc["sequences"] = [
+            {
+                "name": e.name,
+                "length": len(e.value),
+                "kind": _ENTITY_KIND.get(e.entity_type, "protein"),
+            }
+            for e in ents
+        ]
+    return desc
+
+
+def _describe_msa_input(msa_path: Path, inputs_subdir: Path) -> dict:
+    staged = inputs_subdir / msa_path.name
+    if not staged.exists() or staged.resolve() != msa_path.resolve():
+        shutil.copy2(msa_path, staged)
+
+    suffix = msa_path.suffix.lower().lstrip(".")
+    fmt = suffix if suffix in ("a3m", "sto", "pqt") else suffix or None
+    desc = {
+        "kind": "msa",
+        "name": msa_path.stem,
+        "source": str(msa_path),
+        "staged": f"{INPUTS_SUBDIR}/{msa_path.name}",
+        "checksum": f"sha256${_sha256_of(staged)}",
+        "size": staged.stat().st_size,
+        "format": fmt,
+    }
+    if fmt == "a3m":
+        desc["depth"] = a3m_depth(msa_path)
+    return desc
 
 
 def _extract_bfactors(pdb_path: Path) -> tuple[list[float], list[float]]:
@@ -158,32 +370,6 @@ def _copy_raw(raw_dir: Path, output_dir: Path) -> None:
     shutil.copytree(str(raw_dir), str(dest))
 
 
-def move_reports_to_subdir(output_dir: Path) -> Path | None:
-    """Relocate protein_compare report files into output_dir/report/.
-
-    `protein_compare characterize -o <prefix>` writes `<prefix>.html`,
-    `<prefix>.json`, `<prefix>.pdf` at the top level. For a unified layout
-    we move any `report.{html,json,pdf}` into a `report/` subdir so the
-    top level stays uniformly machine-readable and `report.json` doesn't
-    collide with `results.json`.
-
-    No-op if no report files are present. Safe to call multiple times.
-
-    Returns:
-        Path to the `report/` directory if any reports were moved, else None.
-    """
-    report_names = ("report.html", "report.json", "report.pdf")
-    moved = False
-    dest = output_dir / "report"
-    for name in report_names:
-        src = output_dir / name
-        if src.is_file():
-            dest.mkdir(exist_ok=True)
-            shutil.move(str(src), str(dest / name))
-            moved = True
-    return dest if moved else None
-
-
 def normalize_boltz_output(raw_dir: Path, output_dir: Path) -> Path:
     """Normalize Boltz-2 output to standardized layout.
 
@@ -216,18 +402,20 @@ def normalize_boltz_output(raw_dir: Path, output_dir: Path) -> Path:
     pred_subdir = subdirs[0]
     name = pred_subdir.name
 
-    # Copy CIF → model_1.cif
+    pred = predictions_dir(output_dir)
+
+    # Copy CIF → predictions/model_1.cif
     cif_files = list(pred_subdir.glob(f"{name}_model_0.cif"))
     if not cif_files:
         cif_files = list(pred_subdir.glob("*.cif"))
     if not cif_files:
         raise FileNotFoundError(f"No CIF files in {pred_subdir}")
     cif_src = cif_files[0]
-    cif_dst = output_dir / "model_1.cif"
+    cif_dst = pred / "model_1.cif"
     shutil.copy2(str(cif_src), str(cif_dst))
 
     # Convert CIF → PDB
-    mmcif_to_pdb(cif_dst, output_dir / "model_1.pdb")
+    mmcif_to_pdb(cif_dst, pred / "model_1.pdb")
 
     # Extract confidence from JSON + per-residue pLDDT from NPZ
     conf_files = list(pred_subdir.glob(f"confidence_{name}_model_0.json"))
@@ -265,7 +453,7 @@ def normalize_boltz_output(raw_dir: Path, output_dir: Path) -> Path:
                 plddt_mean = cplddt * 100 if cplddt <= 1.0 else cplddt
 
     if plddt_array or ptm is not None:
-        _, per_atom = _extract_bfactors(output_dir / "model_1.pdb")
+        _, per_atom = _extract_bfactors(pred / "model_1.pdb")
         # Apply the same 0-1 -> 0-100 heuristic as per-residue so both
         # arrays share the same scale.
         if per_atom and max(per_atom) <= 1.0:
@@ -276,6 +464,7 @@ def normalize_boltz_output(raw_dir: Path, output_dir: Path) -> Path:
         logger.warning("No confidence data found in %s", pred_subdir)
 
     _copy_raw(raw_dir, output_dir)
+    promote_best_model(output_dir)
     return output_dir
 
 
@@ -287,17 +476,18 @@ def normalize_chai_output(raw_dir: Path, output_dir: Path) -> Path:
         raw_dir/scores.model_idx_0.npz
     """
     output_dir.mkdir(parents=True, exist_ok=True)
+    pred = predictions_dir(output_dir)
 
     # Find best model CIF
     cif_files = sorted(raw_dir.glob("pred.model_idx_*.cif"))
     if not cif_files:
         raise FileNotFoundError(f"No pred.model_idx_*.cif files in {raw_dir}")
     cif_src = cif_files[0]  # model_idx_0 = best
-    cif_dst = output_dir / "model_1.cif"
+    cif_dst = pred / "model_1.cif"
     shutil.copy2(str(cif_src), str(cif_dst))
 
     # Convert CIF → PDB
-    pdb_dst = output_dir / "model_1.pdb"
+    pdb_dst = pred / "model_1.pdb"
     mmcif_to_pdb(cif_dst, pdb_dst)
 
     # Extract confidence from NPZ + PDB B-factors
@@ -315,6 +505,7 @@ def normalize_chai_output(raw_dir: Path, output_dir: Path) -> Path:
                           per_atom_plddt=per_atom)
 
     _copy_raw(raw_dir, output_dir)
+    promote_best_model(output_dir)
     return output_dir
 
 
@@ -368,12 +559,14 @@ def normalize_alphafold_output(raw_dir: Path, output_dir: Path) -> Path:
     if best_pdb.name.startswith("unrelaxed"):
         logger.warning("Using unrelaxed model (relaxation failed): %s", best_pdb.name)
 
-    # Copy PDB → model_1.pdb
-    pdb_dst = output_dir / "model_1.pdb"
+    pred = predictions_dir(output_dir)
+
+    # Copy PDB → predictions/model_1.pdb
+    pdb_dst = pred / "model_1.pdb"
     shutil.copy2(str(best_pdb), str(pdb_dst))
 
     # Convert PDB → CIF
-    pdb_to_mmcif(pdb_dst, output_dir / "model_1.cif")
+    pdb_to_mmcif(pdb_dst, pred / "model_1.cif")
 
     # AF2 stores per-residue pLDDT (0-100) in B-factors, duplicated across atoms.
     per_residue, per_atom = _extract_bfactors(pdb_dst)
@@ -392,6 +585,7 @@ def normalize_alphafold_output(raw_dir: Path, output_dir: Path) -> Path:
     write_confidence_json(output_dir, plddt_mean, ptm, per_residue,
                           per_atom_plddt=per_atom)
     _copy_raw(raw_dir, output_dir)
+    promote_best_model(output_dir)
     return output_dir
 
 
@@ -402,6 +596,7 @@ def normalize_esmfold_output(raw_dir: Path, output_dir: Path) -> Path:
         raw_dir/{header}.pdb  (B-factors = pLDDT at 0-1 scale!)
     """
     output_dir.mkdir(parents=True, exist_ok=True)
+    pred = predictions_dir(output_dir)
 
     # Find the first PDB file
     pdb_files = sorted(raw_dir.glob("*.pdb"))
@@ -409,12 +604,12 @@ def normalize_esmfold_output(raw_dir: Path, output_dir: Path) -> Path:
         raise FileNotFoundError(f"No PDB files found in {raw_dir}")
     pdb_src = pdb_files[0]
 
-    # Copy PDB → model_1.pdb
-    pdb_dst = output_dir / "model_1.pdb"
+    # Copy PDB → predictions/model_1.pdb
+    pdb_dst = pred / "model_1.pdb"
     shutil.copy2(str(pdb_src), str(pdb_dst))
 
     # Convert PDB → CIF
-    pdb_to_mmcif(pdb_dst, output_dir / "model_1.cif")
+    pdb_to_mmcif(pdb_dst, pred / "model_1.cif")
 
     # ESMFold writes pLDDT as PDB B-factors, sometimes on 0-1 and sometimes
     # on 0-100 scale depending on version. Detect from CA values and scale.
@@ -428,6 +623,7 @@ def normalize_esmfold_output(raw_dir: Path, output_dir: Path) -> Path:
     write_confidence_json(output_dir, plddt_mean, None, per_residue,
                           per_atom_plddt=per_atom)
     _copy_raw(raw_dir, output_dir)
+    promote_best_model(output_dir)
     return output_dir
 
 
@@ -473,12 +669,14 @@ def normalize_openfold_output(raw_dir: Path, output_dir: Path) -> Path:
                 best_score = score
                 best_cif = cif
 
-    # Copy best CIF → model_1.cif
-    cif_dst = output_dir / "model_1.cif"
+    pred = predictions_dir(output_dir)
+
+    # Copy best CIF → predictions/model_1.cif
+    cif_dst = pred / "model_1.cif"
     shutil.copy2(str(best_cif), str(cif_dst))
 
     # Convert CIF → PDB
-    mmcif_to_pdb(cif_dst, output_dir / "model_1.pdb")
+    mmcif_to_pdb(cif_dst, pred / "model_1.pdb")
 
     # Extract confidence from aggregated JSON
     stem = best_cif.name.replace("_model.cif", "")
@@ -499,11 +697,12 @@ def normalize_openfold_output(raw_dir: Path, output_dir: Path) -> Path:
     # OpenFold 3's confidences.json has per-ATOM pLDDT by design (AF3 atomization
     # convention -- see docs/OUTPUT_NORMALIZATION.md). Use CA B-factors for the
     # per-residue convention consumers expect.
-    per_residue, per_atom = _extract_bfactors(output_dir / "model_1.pdb")
+    per_residue, per_atom = _extract_bfactors(pred / "model_1.pdb")
     if per_residue and not plddt_mean:
         plddt_mean = sum(per_residue) / len(per_residue)
 
     write_confidence_json(output_dir, plddt_mean, ptm, per_residue,
                           per_atom_plddt=per_atom)
     _copy_raw(raw_dir, output_dir)
+    promote_best_model(output_dir)
     return output_dir

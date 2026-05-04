@@ -77,6 +77,31 @@ def fasta_to_boltz_yaml(
     return output_path
 
 
+def _read_a3m_sequences(a3m_path: Path) -> list[str]:
+    """Parse an A3M file and return its concatenated sequences (one per record)."""
+    sequences = []
+    with open(a3m_path) as f:
+        current_seq: list[str] = []
+        for line in f:
+            line = line.strip()
+            if line.startswith("#"):
+                continue
+            if line.startswith(">"):
+                if current_seq:
+                    sequences.append("".join(current_seq))
+                current_seq = []
+            elif line:
+                current_seq.append(line)
+        if current_seq:
+            sequences.append("".join(current_seq))
+    return sequences
+
+
+def a3m_depth(a3m_path: Path) -> int:
+    """Return the number of sequences (rows) in an A3M alignment."""
+    return len(_read_a3m_sequences(a3m_path))
+
+
 def a3m_to_parquet(a3m_path: Path, output_path: Path) -> Path:
     """Convert an A3M multiple sequence alignment to Chai-1's Parquet format.
 
@@ -112,22 +137,7 @@ def a3m_to_parquet(a3m_path: Path, output_path: Path) -> Path:
             "Install with: pip install predict-structure[chai]"
         )
 
-    sequences = []
-    with open(a3m_path) as f:
-        current_seq: list[str] = []
-        for line in f:
-            line = line.strip()
-            if line.startswith("#"):
-                continue
-            if line.startswith(">"):
-                if current_seq:
-                    sequences.append("".join(current_seq))
-                current_seq = []
-            elif line:
-                current_seq.append(line)
-        if current_seq:
-            sequences.append("".join(current_seq))
-
+    sequences = _read_a3m_sequences(a3m_path)
     if not sequences:
         raise ValueError(f"No sequences found in {a3m_path}")
 

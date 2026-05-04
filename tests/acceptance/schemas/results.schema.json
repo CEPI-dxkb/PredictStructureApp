@@ -1,68 +1,33 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "PredictStructure results.json",
-  "description": "Denormalized summary + file manifest for a prediction run. Written post-normalization; re-reads metadata.json and confidence.json for canonical fields.",
+  "description": "v2.0 outputs map + UI-summary header. Run trace lives in metadata/metadata.json; this file is the entry point UIs and pipelines read to discover artifacts.",
   "type": "object",
-  "required": ["schema_version", "tool", "version", "status", "timestamp", "outputs"],
+  "required": ["schema_version", "state", "outputs"],
   "properties": {
     "schema_version": {
       "type": "string",
-      "pattern": "^[0-9]+\\.[0-9]+$",
-      "description": "Schema version (semver-lite: major.minor)."
+      "const": "2.0"
+    },
+    "state": {
+      "type": "string",
+      "enum": ["COMPLETED", "PARTIAL", "FAILED"],
+      "description": "Outcome of the run."
     },
     "tool": {
       "type": "string",
-      "description": "Prediction tool name (e.g. boltz, chai, esmfold, openfold, alphafold)."
+      "description": "Convenience header — full trace is in metadata/metadata.json.tool."
     },
-    "version": {
-      "type": "string",
-      "description": "predict-structure package version."
-    },
-    "tool_version": {
-      "oneOf": [{"type": "string"}, {"type": "null"}],
-      "description": "Underlying model/tool version (best-effort)."
-    },
-    "status": {
-      "type": "string",
-      "enum": ["success", "partial", "failed"]
-    },
-    "timestamp": {
+    "completed_at": {
       "type": "string",
       "format": "date-time"
     },
     "runtime_seconds": {
       "oneOf": [{"type": "number", "minimum": 0}, {"type": "null"}]
     },
-    "inputs": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["kind", "source"],
-        "properties": {
-          "kind": {"type": "string", "enum": ["protein", "dna", "rna", "ligand", "smiles", "glycan", "msa"]},
-          "source": {"type": "string"},
-          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-          "length": {"type": "integer", "minimum": 0},
-          "name": {"type": "string"}
-        },
-        "additionalProperties": true
-      }
-    },
-    "command": {
-      "type": "array",
-      "items": {"type": "string"},
-      "description": "Exact CLI argv, joinable with spaces for reproduction."
-    },
-    "container_image": {
-      "oneOf": [{"type": "string"}, {"type": "null"}],
-      "description": "Container image path or digest; null for native runs."
-    },
-    "backend": {
-      "oneOf": [{"type": "string"}, {"type": "null"}]
-    },
     "metrics": {
       "type": "object",
-      "description": "Scalar summary metrics. Arrays stay in confidence.json.",
+      "description": "Scalar summary metrics. Per-residue/per-atom arrays stay in predictions/confidence.json.",
       "properties": {
         "plddt_mean": {"oneOf": [{"type": "number", "minimum": 0, "maximum": 100}, {"type": "null"}]},
         "ptm": {"oneOf": [{"type": "number", "minimum": 0, "maximum": 1}, {"type": "null"}]},
@@ -72,18 +37,13 @@
       "additionalProperties": true
     },
     "outputs": {
-      "type": "array",
-      "description": "Manifest of every artifact in the output directory (raw/ treated as one opaque dir entry).",
-      "items": {
-        "type": "object",
-        "required": ["path", "role"],
-        "properties": {
-          "path": {"type": "string", "description": "POSIX-relative path from output_dir."},
-          "size": {"oneOf": [{"type": "integer", "minimum": 0}, {"type": "null"}]},
-          "sha256": {"oneOf": [{"type": "string", "pattern": "^[0-9a-f]{64}$"}, {"type": "null"}]},
-          "role": {"type": "string", "enum": ["structure", "confidence", "metadata", "summary", "provenance", "report", "raw_dir", "auxiliary"]}
-        },
-        "additionalProperties": false
+      "type": "object",
+      "description": "Named output-port dictionary. Each value is a CWL File or Directory entry. Keys are stable port names (best_model, report, predictions, reports, inputs, metadata, raw).",
+      "additionalProperties": {
+        "oneOf": [
+          {"$ref": "cwl-file.schema.json"},
+          {"$ref": "cwl-directory.schema.json"}
+        ]
       }
     }
   },
