@@ -39,7 +39,7 @@ from predict_structure.entities import (
     is_boltz_yaml,
     parse_fasta_entities,
 )
-from predict_structure.normalizers import move_reports_to_subdir, write_metadata_json
+from predict_structure.normalizers import stage_inputs, write_metadata_json
 from predict_structure.results import write_results_json, write_ro_crate
 
 
@@ -211,40 +211,55 @@ def _build_entity_list(
         path = Path(fasta_path)
         # Boltz YAML pass-through: single .yaml file passed as --protein
         if is_boltz_yaml(path):
-            entities.add(EntityType.PROTEIN, str(path), name=path.stem)
+            entities.add(
+                EntityType.PROTEIN, str(path), name=path.stem,
+                source_path=path, format="boltz-yaml",
+            )
             continue
         for ent in parse_fasta_entities(
             path, explicit_type=EntityType.PROTEIN, max_sequences=max_seq,
         ):
-            entities.add(ent.entity_type, ent.value, name=ent.name)
+            entities.add(
+                ent.entity_type, ent.value, name=ent.name,
+                source_path=ent.source_path, format=ent.format,
+            )
 
     for fasta_path in dna:
         for ent in parse_fasta_entities(
             Path(fasta_path), explicit_type=EntityType.DNA, max_sequences=max_seq,
         ):
-            entities.add(ent.entity_type, ent.value, name=ent.name)
+            entities.add(
+                ent.entity_type, ent.value, name=ent.name,
+                source_path=ent.source_path, format=ent.format,
+            )
 
     for fasta_path in rna:
         for ent in parse_fasta_entities(
             Path(fasta_path), explicit_type=EntityType.RNA, max_sequences=max_seq,
         ):
-            entities.add(ent.entity_type, ent.value, name=ent.name)
+            entities.add(
+                ent.entity_type, ent.value, name=ent.name,
+                source_path=ent.source_path, format=ent.format,
+            )
 
     # Auto-detect sequence type (no explicit_type — uses detect_sequence_type)
     for fasta_path in sequence_files:
         for ent in parse_fasta_entities(
             Path(fasta_path), explicit_type=None, max_sequences=max_seq,
         ):
-            entities.add(ent.entity_type, ent.value, name=ent.name)
+            entities.add(
+                ent.entity_type, ent.value, name=ent.name,
+                source_path=ent.source_path, format=ent.format,
+            )
 
     for code in ligand:
-        entities.add(EntityType.LIGAND, code, name=code)
+        entities.add(EntityType.LIGAND, code, name=code, format="ccd")
 
     for smi in smiles:
-        entities.add(EntityType.SMILES, smi, name="smiles")
+        entities.add(EntityType.SMILES, smi, name="smiles", format="smiles")
 
     for gly in glycan:
-        entities.add(EntityType.GLYCAN, gly, name="glycan")
+        entities.add(EntityType.GLYCAN, gly, name="glycan", format="glycan-iupac")
 
     if not entities:
         raise click.UsageError(
@@ -354,34 +369,48 @@ def _finalize_output(
     tool_name: str,
     shared: dict,
     elapsed: float,
+    *,
+    entity_list: EntityList | None = None,
+    started_at: str | None = None,
 ) -> None:
-    """Post-normalization: metadata.json, relocate reports, results.json, ro-crate.
+    """Post-normalization: stage inputs, write metadata.json + results.json + ro-crate.
 
     Runs in this exact order so later writers can read earlier ones:
-      1. write_metadata_json         -- canonical run metadata
-      2. move_reports_to_subdir      -- relocate report.* into report/
-      3. write_results_json          -- summary + file manifest
+      1. stage_inputs                -- copy user inputs into output_dir/inputs/
+      2. write_metadata_json         -- canonical run trace (incl. inputs[])
+      3. write_results_json          -- v2.0 outputs map + UI summary
       4. write_ro_crate              -- best-effort Process Run Crate
 
-    ``write_results_json`` requires ``confidence.json`` + ``metadata.json``
-    to be present after normalization. If either is missing we let the
-    exception propagate -- it signals a normalizer contract violation and
-    should fail loudly, matching the standalone `finalize-results` path.
+    ``write_results_json`` requires ``metadata.json`` to be present. If
+    missing we let the exception propagate -- it signals a normalizer
+    contract violation and should fail loudly, matching the standalone
+    `finalize-results` path.
     """
     import os
+    from datetime import datetime, timezone
 
+    msa_path = Path(shared["msa"]) if shared.get("msa") else None
+    inputs_descriptors = stage_inputs(entity_list, msa_path, output_path)
+
+    completed_at = datetime.now(timezone.utc).isoformat()
     write_metadata_json(
-        output_path, tool_name, _build_params_dict(shared), elapsed, __version__,
-    )
-    move_reports_to_subdir(output_path)
-    results_path = write_results_json(
         output_path,
+        tool=tool_name,
+        version=__version__,
+        tool_version=None,
+        status="success",
+        started_at=started_at,
+        completed_at=completed_at,
+        runtime_seconds=elapsed,
         command=sys.argv,
-        backend=shared["backend"],
         container_image=os.environ.get("PREDICT_STRUCTURE_IMAGE"),
+        backend=shared["backend"],
+        params=_build_params_dict(shared),
+        inputs=inputs_descriptors,
     )
+    write_results_json(output_path)
     if shared.get("emit_rocrate", True):
-        write_ro_crate(output_path, results_path)
+        write_ro_crate(output_path)
 
 
 def _docker_volumes_and_rewrite(
@@ -512,6 +541,8 @@ def run_prediction(
             click.echo("\n".join(str(l) for l in debug_lines))
             return
 
+        from datetime import datetime, timezone
+        started_at = datetime.now(timezone.utc).isoformat()
         start = time.time()
         rc = execution_backend.run_unified(
             job, tool_name=tool_name, output_dir=str(output_path),
@@ -538,7 +569,10 @@ def run_prediction(
                 err=True,
             )
             sys.exit(1)
-        _finalize_output(output_path, tool_name, shared, elapsed)
+        _finalize_output(
+            output_path, tool_name, shared, elapsed,
+            entity_list=entity_list, started_at=started_at,
+        )
         click.echo(f"Prediction complete: {output_path}")
         return
 
@@ -611,6 +645,8 @@ def run_prediction(
         click.echo("\n".join(str(l) for l in debug_lines))
         return
 
+    from datetime import datetime, timezone
+    started_at = datetime.now(timezone.utc).isoformat()
     start = time.time()
     rc = execution_backend.run(cmd, **run_kwargs)
     elapsed = time.time() - start
@@ -677,19 +713,28 @@ def _run_job_file(job_path: Path, base_output_dir: Path | None) -> None:
         entities = EntityList()
         for fasta_path in job.get("protein", []):
             for ent in parse_fasta_entities(Path(fasta_path), explicit_type=EntityType.PROTEIN):
-                entities.add(ent.entity_type, ent.value, name=ent.name)
+                entities.add(
+                    ent.entity_type, ent.value, name=ent.name,
+                    source_path=ent.source_path, format=ent.format,
+                )
         for fasta_path in job.get("dna", []):
             for ent in parse_fasta_entities(Path(fasta_path), explicit_type=EntityType.DNA):
-                entities.add(ent.entity_type, ent.value, name=ent.name)
+                entities.add(
+                    ent.entity_type, ent.value, name=ent.name,
+                    source_path=ent.source_path, format=ent.format,
+                )
         for fasta_path in job.get("rna", []):
             for ent in parse_fasta_entities(Path(fasta_path), explicit_type=EntityType.RNA):
-                entities.add(ent.entity_type, ent.value, name=ent.name)
+                entities.add(
+                    ent.entity_type, ent.value, name=ent.name,
+                    source_path=ent.source_path, format=ent.format,
+                )
         for code in job.get("ligands", []):
-            entities.add(EntityType.LIGAND, code, name=code)
+            entities.add(EntityType.LIGAND, code, name=code, format="ccd")
         for smi in job.get("smiles", []):
-            entities.add(EntityType.SMILES, smi, name="smiles")
+            entities.add(EntityType.SMILES, smi, name="smiles", format="smiles")
         for gly in job.get("glycans", []):
-            entities.add(EntityType.GLYCAN, gly, name="glycan")
+            entities.add(EntityType.GLYCAN, gly, name="glycan", format="glycan-iupac")
 
         if not entities:
             click.echo(f"Warning: job {idx} has no entities, skipping", err=True)
@@ -1083,30 +1128,73 @@ def preflight(tool, protein, msa, use_msa_server, device):
 def finalize_results(output_dir, emit_rocrate):
     """(Re)generate results.json + ro-crate-metadata.json in an existing output dir.
 
-    Relocates any top-level report.html/.json/.pdf into report/ first, then
-    writes results.json (summary + file manifest with sha256), and optionally
-    ro-crate-metadata.json (Process Run Crate provenance).
+    Reads the canonical ``metadata/metadata.json`` (which already carries
+    inputs, command, container, backend) and rebuilds the v2.0 outputs map
+    in ``results.json`` + the derived ``metadata/ro-crate-metadata.json``.
 
     Used by the BV-BRC service script after running protein_compare so the
     manifest includes the freshly generated report files.
     """
-    import os
     out = Path(output_dir)
-    move_reports_to_subdir(out)
     try:
-        results_path = write_results_json(
-            out,
-            command=sys.argv,
-            backend=os.environ.get("PREDICT_STRUCTURE_BACKEND"),
-            container_image=os.environ.get("PREDICT_STRUCTURE_IMAGE"),
-        )
+        results_path = write_results_json(out)
     except FileNotFoundError as exc:
         raise click.ClickException(str(exc))
     click.echo(f"Wrote {results_path}")
     if emit_rocrate:
-        crate_path = write_ro_crate(out, results_path)
+        crate_path = write_ro_crate(out)
         if crate_path is not None:
             click.echo(f"Wrote {crate_path}")
+
+
+@main.command("rewrite-locations")
+@click.argument("output_dir", type=click.Path(exists=True, file_okay=False, dir_okay=True))
+@click.option(
+    "--base", required=True,
+    help="Base location (e.g. ws:///user@bvbrc/home/job123) to prepend to each "
+         "relative POSIX path. Trailing slash is normalized.",
+)
+def rewrite_locations(output_dir, base):
+    """Rewrite ``location`` fields in results.json + metadata.json from
+    relative POSIX paths to absolute URLs (typically ``ws://...`` after
+    BV-BRC workspace upload).
+
+    Walks ``results.json``'s ``outputs`` map recursively (CWL File +
+    Directory entries) and ``metadata.json``'s ``inputs[].staged`` field.
+    Locations that are already absolute (contain ``://``) are left alone.
+    """
+    out = Path(output_dir)
+    base_url = base.rstrip("/")
+
+    def _rewrite(loc: str) -> str:
+        if "://" in loc:
+            return loc
+        return f"{base_url}/{loc.lstrip('/')}"
+
+    def _walk_outputs(node):
+        if isinstance(node, dict):
+            if "location" in node and isinstance(node["location"], str):
+                node["location"] = _rewrite(node["location"])
+            for child in node.get("listing", []) or []:
+                _walk_outputs(child)
+
+    results_path = out / "results.json"
+    if results_path.is_file():
+        results = json.loads(results_path.read_text())
+        for entry in (results.get("outputs") or {}).values():
+            _walk_outputs(entry)
+        results_path.write_text(json.dumps(results, indent=2))
+        click.echo(f"Rewrote locations in {results_path}")
+
+    metadata_path = out / "metadata" / "metadata.json"
+    if metadata_path.is_file():
+        metadata = json.loads(metadata_path.read_text())
+        for inp in metadata.get("inputs") or []:
+            staged = inp.get("staged")
+            if staged and "://" not in staged:
+                inp["location"] = _rewrite(staged)
+        metadata_path.write_text(json.dumps(metadata, indent=2))
+        click.echo(f"Rewrote locations in {metadata_path}")
 
 
 @main.command("aggregate-results")

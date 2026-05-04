@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://predict-structure.bv-brc.org/schemas/cwl-file.schema.json",
+  "title": "CWL-style File entry",
+  "description": "Subset of the CWL File object as emitted in results.json outputs. Local-filesystem fields (path, dirname) are intentionally omitted; location is the canonical pointer.",
+  "type": "object",
+  "required": ["class", "basename"],
+  "properties": {
+    "class": {"const": "File"},
+    "basename": {"type": "string"},
+    "nameroot": {"type": "string"},
+    "nameext": {"type": "string"},
+    "checksum": {
+      "type": "string",
+      "pattern": "^sha256\\$[0-9a-f]{64}$"
+    },
+    "size": {"type": "integer", "minimum": 0},
+    "location": {
+      "type": "string",
+      "description": "Canonical location of this file. Relative POSIX path on disk; rewritten to ws://<user>@bvbrc/... post-upload."
+    }
+  },
+  "additionalProperties": true
+}

@@ -192,16 +192,25 @@ make test-server
 - **Boltz YAML** (.yaml): Passed directly to Boltz for full feature support (ligands, constraints)
 - **MSA files** (.a3m, .sto, .pqt): Optional alignment files, auto-converted per tool
 
-### Output (Normalized)
+### Output (Normalized — v2.0)
 Every prediction produces a standardized output directory:
 ```
 output/
-├── model_1.pdb          # Structure (always PDB)
-├── model_1.cif          # Structure (always mmCIF)
-├── confidence.json      # {plddt_mean, ptm, per_residue_plddt[]}
-├── metadata.json        # {tool, params, runtime, version}
-└── raw/                 # Original tool output (unmodified)
+├── model_1.pdb          # User-facing copy of best model
+├── report.html          # User-facing copy of HTML report (Perl/CWL)
+├── results.json         # v2.0 outputs map + UI summary header
+├── inputs/              # Staged copies of user inputs (FASTA, MSA, …)
+├── predictions/         # model_1.pdb/.cif, confidence.json, pae.json …
+├── reports/             # report.html/.json/.pdf (and images/ if present)
+├── metadata/            # metadata.json (canonical run trace)
+│                        # ro-crate-metadata.json (formal RO-Crate provenance)
+└── raw/                 # Original tool output, opaque
 ```
+- `metadata/metadata.json` is the **single source of truth** for run
+  trace (tool, version, command, container, backend, params, inputs[]).
+- `results.json` is a slim CWL-style outputs map for UIs/pipelines.
+- `metadata/ro-crate-metadata.json` is **derived** (RO-Crate 1.1
+  Process Run Crate); never overwrites `results.json`.
 
 ## Resource Requirements
 

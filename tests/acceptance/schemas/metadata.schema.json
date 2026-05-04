@@ -1,31 +1,112 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "PredictStructure metadata.json",
-  "description": "Execution metadata from structure prediction.",
+  "description": "Canonical run metadata for a structure prediction. Single source of truth for tool, version, command, container, backend, params, and inputs. Both results.json (UI summary) and ro-crate-metadata.json (formal provenance) derive from this file.",
   "type": "object",
   "required": ["tool"],
   "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Schema version (semver-lite: major.minor)."
+    },
     "tool": {
       "type": "string",
       "enum": ["boltz", "openfold", "chai", "alphafold", "esmfold"],
       "description": "Tool that produced the prediction."
+    },
+    "version": {
+      "type": "string",
+      "description": "predict-structure package version."
+    },
+    "tool_version": {
+      "oneOf": [{"type": "string"}, {"type": "null"}],
+      "description": "Underlying model/tool version (best-effort)."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "partial", "failed"]
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp when the prediction began."
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp when the prediction finished."
+    },
+    "timestamp": {
+      "type": "string",
+      "description": "Legacy alias for completed_at (kept for v1.0 readers)."
     },
     "runtime_seconds": {
       "type": "number",
       "minimum": 0,
       "description": "Wall-clock runtime in seconds."
     },
-    "version": {
-      "type": "string",
-      "description": "Tool or predict-structure version."
+    "command": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Exact CLI argv, joinable with spaces for reproduction."
     },
-    "timestamp": {
-      "type": "string",
-      "description": "ISO 8601 timestamp of prediction."
+    "container_image": {
+      "oneOf": [{"type": "string"}, {"type": "null"}],
+      "description": "Container image path or digest; null for native runs."
+    },
+    "backend": {
+      "oneOf": [{"type": "string"}, {"type": "null"}]
     },
     "params": {
       "type": "object",
-      "description": "Parameters used for the prediction."
+      "description": "Unified parameters used for the prediction."
+    },
+    "inputs": {
+      "type": "array",
+      "description": "Descriptors for every user-supplied input. File-backed entities have source/staged/checksum; inline entities (CCD/SMILES/glycan) have value.",
+      "items": {
+        "type": "object",
+        "required": ["kind"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["protein", "dna", "rna", "msa", "ligand", "smiles", "glycan", "mixed"]
+          },
+          "name": {"type": "string"},
+          "source": {
+            "oneOf": [{"type": "string"}, {"type": "null"}],
+            "description": "Original location the user supplied (workspace URL, local path); null for inline-uploaded text inputs."
+          },
+          "staged": {
+            "type": "string",
+            "description": "POSIX-relative path inside output_dir where the audit copy lives (e.g. inputs/demo.fasta)."
+          },
+          "checksum": {
+            "type": "string",
+            "pattern": "^sha256\\$[0-9a-f]{64}$"
+          },
+          "size": {"type": "integer", "minimum": 0},
+          "length": {"type": "integer", "minimum": 0, "description": "Sequence length (residue/nucleotide count)."},
+          "depth": {"type": "integer", "minimum": 0, "description": "MSA row count (a3m_depth)."},
+          "format": {"type": "string", "description": "fasta / a3m / sto / pqt / ccd / smiles / glycan-iupac / boltz-yaml"},
+          "value": {"type": "string", "description": "Inline value (CCD code, SMILES, glycan IUPAC). Mutually exclusive with file fields."},
+          "sequences": {
+            "type": "array",
+            "description": "For multi-record FASTAs: per-sequence breakdown.",
+            "items": {
+              "type": "object",
+              "required": ["name", "length", "kind"],
+              "properties": {
+                "name": {"type": "string"},
+                "length": {"type": "integer", "minimum": 0},
+                "kind": {"type": "string", "enum": ["protein", "dna", "rna"]}
+              }
+            }
+          }
+        },
+        "additionalProperties": true
+      }
     }
   },
   "additionalProperties": true

@@ -3,9 +3,12 @@ class: Workflow
 
 label: "Protein Structure Prediction Workflow"
 doc: |
-  Three-step workflow: predict structure with predict-structure,
-  extract the first PDB file, and generate a characterization
-  report with protein-compare.
+  Four-step workflow: predict structure with predict-structure, extract
+  the rank-1 PDB, generate a characterization report with
+  protein-compare, and merge everything into one unified Directory whose
+  layout matches the BV-BRC workspace upload (top-level model_1.pdb +
+  report.html + results.json, plus inputs/, predictions/, reports/,
+  metadata/, raw/ subdirs).
 
 requirements:
   InlineJavascriptRequirement: {}
@@ -223,22 +226,23 @@ steps:
       structure: extract/structure
       output_name: report_name
       format: report_format
-    out: [report, report_json]
+    out: [report, report_pdf, report_json]
+
+  merge:
+    run: ../tools/merge-output.cwl
+    in:
+      predictions: predict/predictions
+      report_html: report/report
+      report_json: report/report_json
+      report_pdf: report/report_pdf
+    out: [merged]
 
 outputs:
   predictions:
     type: Directory
-    outputSource: predict/predictions
-    doc: "Full predictions directory"
-  structure:
-    type: File
-    outputSource: extract/structure
-    doc: "Extracted PDB structure file"
-  characterization_report:
-    type: File
-    outputSource: report/report
-    doc: "HTML characterization report"
-  characterization_json:
-    type: File
-    outputSource: report/report_json
-    doc: "JSON characterization data"
+    outputSource: merge/merged
+    doc: |
+      Single unified Directory matching the BV-BRC workspace layout —
+      top-level model_1.pdb / report.html / results.json + predictions/,
+      reports/, inputs/, metadata/, raw/ subdirs. Use results.json
+      (outputs.{best_model,report,…}) to discover individual files.

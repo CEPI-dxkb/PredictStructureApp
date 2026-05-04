@@ -562,49 +562,37 @@ outputs:
     type: Directory
     outputBinding:
       glob: $(inputs.output_dir)
-    doc: "Directory containing all prediction outputs"
+    doc: "Directory containing all prediction outputs (the unified layout)"
 
-  structure_files:
-    type: File[]?
+  best_model:
+    type: File?
     outputBinding:
-      glob: |
-        ${
-          if (inputs.output_format === "mmcif") {
-            return inputs.output_dir + "/**/*.cif";
-          }
-          return inputs.output_dir + "/**/*.pdb";
-        }
-    doc: "Predicted structure files (PDB or mmCIF)"
+      glob: "$(inputs.output_dir)/model_1.pdb"
+    doc: "Top-level rank-1 PDB (user-facing copy; canonical lives in predictions/)"
+
+  summary:
+    type: File?
+    outputBinding:
+      glob: "$(inputs.output_dir)/results.json"
+    doc: "results.json v2.0 outputs map + UI summary header"
 
   metadata:
     type: File?
     outputBinding:
-      glob: "$(inputs.output_dir)/metadata.json"
-    doc: "Prediction metadata (tool, parameters, runtime, version)"
-
-  confidence:
-    type: File?
-    outputBinding:
-      glob: "$(inputs.output_dir)/confidence.json"
-    doc: "Confidence scores (pLDDT, pTM, per-residue)"
+      glob: "$(inputs.output_dir)/metadata/metadata.json"
+    doc: "Canonical run trace (tool, command, container, backend, params, inputs)"
 
   results:
     type: File?
     outputBinding:
       glob: "$(inputs.output_dir)/results.json"
-    doc: "Summary + file manifest (sha256, size) for downstream pipelines"
+    doc: "Alias for summary — kept for back-compat with workflow consumers"
 
   ro_crate:
     type: File?
     outputBinding:
-      glob: "$(inputs.output_dir)/ro-crate-metadata.json"
+      glob: "$(inputs.output_dir)/metadata/ro-crate-metadata.json"
     doc: "RO-Crate 1.1 Process Run Crate provenance (best-effort)"
-
-  reports:
-    type: Directory?
-    outputBinding:
-      glob: "$(inputs.output_dir)/report"
-    doc: "Characterization reports (report.html/json/pdf) from protein_compare"
 
 stdout: predict-structure.log
 stderr: predict-structure.err

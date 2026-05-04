@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://predict-structure.bv-brc.org/schemas/cwl-directory.schema.json",
+  "title": "CWL-style Directory entry",
+  "description": "Subset of the CWL Directory object as emitted in results.json outputs. Listing is recursive: each entry is itself a File or Directory.",
+  "type": "object",
+  "required": ["class", "basename"],
+  "properties": {
+    "class": {"const": "Directory"},
+    "basename": {"type": "string"},
+    "location": {"type": "string"},
+    "opaque": {
+      "type": "boolean",
+      "description": "When true, listing is intentionally omitted (e.g. raw/ tool-native payload)."
+    },
+    "listing": {
+      "type": "array",
+      "description": "Recursive contents — File or Directory entries.",
+      "items": {
+        "oneOf": [
+          {"$ref": "cwl-file.schema.json"},
+          {"$ref": "cwl-directory.schema.json"}
+        ]
+      }
+    }
+  },
+  "additionalProperties": true
+}

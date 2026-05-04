@@ -1,0 +1,58 @@
+# Smoke-test job for the unified protein-structure-prediction workflow.
+# Uses ESMFold (CPU-capable, fastest) to exercise the new output layout.
+tool: esmfold
+
+# --- entity inputs (all required by GoWe even when empty) ---
+protein:
+  - class: File
+    path: simple_protein.fasta
+dna: []
+rna: []
+ligand: []
+smiles: []
+glycan: []
+
+# --- shared options ---
+output_dir: output
+num_samples: 1
+num_recycles: 3
+seed: 42
+msa: null
+device: cpu
+output_format: pdb
+
+# --- Boltz / Chai shared (unused by ESMFold; left explicit/null) ---
+sampling_steps: null
+use_msa_server: null
+msa_server_url: null
+
+# --- Boltz only ---
+use_potentials: null
+
+# --- Chai only ---
+no_esm_embeddings: null
+use_templates_server: null
+constraint_path: null
+template_hits_path: null
+num_trunk_samples: null
+recycle_msa_subsample: null
+no_low_memory: null
+
+# --- AlphaFold (unused by ESMFold) ---
+af2_model_preset: null
+af2_db_preset: null
+af2_max_template_date: null
+
+# --- ESMFold ---
+fp16: false
+chunk_size: null
+max_tokens_per_batch: null
+
+# --- OpenFold 3 (unused by ESMFold) ---
+num_diffusion_samples: null
+num_model_seeds: null
+use_templates: null
+
+# --- Report step ---
+report_name: report
+report_format: all

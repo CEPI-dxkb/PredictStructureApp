@@ -342,9 +342,9 @@ sub run_app {
     # 3b. Finalize results.json + ro-crate-metadata.json
     # -----------------------------------------------------------------
     # Delegate to the Python CLI so sha256/manifest logic stays in one
-    # place. This also relocates report.html/.json/.pdf into report/ for
-    # the unified layout. Non-fatal if it fails -- prediction artifacts
-    # still upload.
+    # place. The CLI re-walks the output dir (including freshly written
+    # reports/) and refreshes results.json + ro-crate-metadata.json.
+    # Non-fatal if it fails -- prediction artifacts still upload.
     my $bin = find_predict_structure_binary();
     my $fin_rc = system($bin, "finalize-results", $output_dir);
     if ($fin_rc != 0) {
@@ -378,6 +378,17 @@ sub run_app {
         my $task_id = $app->{task_id} // "unknown";
         my $run_folder = "${output_base}_${timestamp}_${task_id}";
         $output_folder = "$output_folder/$run_folder";
+    }
+
+    # 4a. Rewrite location URLs in results.json + metadata.json from
+    # relative paths to ws:// URLs that match the upload destination.
+    # Done BEFORE upload so the published results.json carries the
+    # workspace URLs from the start.
+    my $ws_base = "ws://$output_folder";
+    my $rw_rc = system($bin, "rewrite-locations", $output_dir, "--base", $ws_base);
+    if ($rw_rc != 0) {
+        print STDERR "Warning: rewrite-locations failed (rc="
+            . ($rw_rc >> 8) . "); locations will remain relative\n";
     }
 
     print "Uploading results to workspace: $output_folder\n";
@@ -543,10 +554,12 @@ sub run_report {
     }
 
     # protein_compare characterize uses -o as a filename PREFIX and writes
-    # <prefix>.html / <prefix>.json / <prefix>.pdf (not a directory). Use
-    # "<output_dir>/report" so the files land as report.html / report.json
-    # / report.pdf alongside the prediction artifacts.
-    my $report_prefix = "$output_dir/report";
+    # <prefix>.html / <prefix>.json / <prefix>.pdf (not a directory). Land
+    # them under reports/ in the unified layout; we copy report.html to the
+    # top level afterward as the user-facing entry point.
+    my $reports_dir = "$output_dir/reports";
+    make_path($reports_dir);
+    my $report_prefix = "$reports_dir/report";
 
     # Use the predict-structure conda env's python (has protein_compare),
     # not whatever 'python' is first on PATH (PATRIC runtime python lacks it).
@@ -588,8 +601,17 @@ sub run_report {
     my $rc = system(@cmd);
     if ($rc != 0) {
         print STDERR "Warning: report generation failed (rc=" . ($rc >> 8) . "), continuing with upload\n";
-    } else {
-        print "Report generated successfully\n";
+        return;
+    }
+    print "Report generated successfully\n";
+
+    # Copy reports/report.html to the top level as the user-facing entry
+    # point. The full report set (html/json/pdf, plus any future images)
+    # remains under reports/.
+    my $report_html = "$reports_dir/report.html";
+    if (-f $report_html) {
+        copy($report_html, "$output_dir/report.html")
+            or print STDERR "Warning: failed to promote report.html: $!\n";
     }
 }
 
