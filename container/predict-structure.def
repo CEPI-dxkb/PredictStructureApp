@@ -12,7 +12,7 @@ From: /disks/tmp/all-2026-0224b.sif
 
 %post
     # Install predict-structure CLI with all optional deps into miniforge base env
-    /opt/miniforge/bin/pip install --no-cache-dir "/app/predict-structure[boltz,chai,cwl]"
+    /opt/miniforge/bin/pip install --no-cache-dir "/app/predict-structure"
 
     # Symlink into /usr/local/bin for easy access
     ln -sf /opt/miniforge/bin/predict-structure /usr/local/bin/predict-structure
@@ -29,7 +29,7 @@ From: /disks/tmp/all-2026-0224b.sif
     export TORCH_HOME=/cache/torch
 
 %runscript
-    exec predict-structure "$@"
+    exec "$@"
 
 %help
     Unified protein structure prediction container.

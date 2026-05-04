@@ -3,16 +3,16 @@ class: CommandLineTool
 
 label: "Unified Protein Structure Prediction"
 doc: |
-  Dispatches to Boltz-2, Chai-1, AlphaFold 2, or ESMFold via the
-  predict-structure CLI.  Runs inside per-tool Docker containers.
+  Dispatches to Boltz-2, OpenFold 3, Chai-1, AlphaFold 2, or ESMFold via the
+  predict-structure CLI inside a single all-in-one container.
 
   Tool selection is a CWL enum input that maps to a CLI subcommand.
-  The correct Docker image is resolved automatically based on the
-  chosen tool, maintaining the delegation pattern (one container per
-  prediction tool).
+  Entity inputs (protein, DNA, RNA, ligand, SMILES) use repeatable
+  flags, matching the CLI's explicit entity model.
 
-  Tool-specific inputs use valueFrom expressions so they are only
-  emitted on the command line when the selected tool accepts them.
+  When run with cwltool --singularity, the DockerRequirement image
+  is automatically converted to a SIF.  Pre-built SIF files can be
+  used via CWL_SINGULARITY_CACHE or --singularity-cache.
 
   Defaults
   --------
@@ -28,32 +28,36 @@ doc: |
 requirements:
   InlineJavascriptRequirement: {}
   DockerRequirement:
-    dockerPull: |
-      ${
-        var images = {
-          "boltz":     "dxkb/boltz-bvbrc:latest-gpu",
-          "chai":      "dxkb/chai-bvbrc:latest-gpu",
-          "alphafold": "wilke/alphafold",
-          "esmfold":   "dxkb/esmfold-bvbrc:latest-gpu"
-        };
-        return images[inputs.tool];
-      }
+    dockerPull: folding_prod.sif
+    dockerImageId: /scout/containers/folding_prod.sif
   ResourceRequirement:
     coresMin: 8
-    ramMin: |
-      ${
-        var mem = {
-          "boltz":     65536,
-          "chai":      65536,
-          "alphafold": 65536,
-          "esmfold":   32768
-        };
-        return mem[inputs.tool];
-      }
+    ramMin: 65536
     ramMax: 98304
   InitialWorkDirRequirement:
-    listing:
-      - $(inputs.input_file)
+    listing: |
+      ${
+        var files = [];
+        if (inputs.protein) {
+          inputs.protein.forEach(function(f) { files.push(f); });
+        }
+        if (inputs.dna) {
+          inputs.dna.forEach(function(f) { files.push(f); });
+        }
+        if (inputs.rna) {
+          inputs.rna.forEach(function(f) { files.push(f); });
+        }
+        if (inputs.msa) {
+          files.push(inputs.msa);
+        }
+        if (inputs.constraint_path) {
+          files.push(inputs.constraint_path);
+        }
+        if (inputs.template_hits_path) {
+          files.push(inputs.template_hits_path);
+        }
+        return files;
+      }
   NetworkAccess:
     networkAccess: true
 
@@ -62,6 +66,23 @@ hints:
     cudaVersionMin: "11.8"
     cudaDeviceCountMin: 1
     cudaDeviceCountMax: 1
+  gowe:Execution:
+    executor: worker
+    gpu: true
+  gowe:ResourceData:
+    datasets:
+      - id: boltz
+        path: /local_databases/boltz
+        size: 50GB
+        mode: cache
+      - id: chai
+        path: /local_databases/chai
+        size: 30GB
+        mode: cache
+      - id: openfold
+        path: /local_databases/openfold
+        size: 10GB
+        mode: cache
 
 baseCommand: [predict-structure]
 
@@ -82,16 +103,72 @@ inputs:
   tool:
     type:
       type: enum
-      symbols: [boltz, chai, alphafold, esmfold]
+      symbols: [boltz, openfold, chai, alphafold, esmfold, auto]
     inputBinding:
-      position: 1
+      position: -100
     doc: "Prediction tool to use (maps to CLI subcommand)"
 
-  input_file:
-    type: File
-    inputBinding:
-      position: 2
-    doc: "Input FASTA file (or Boltz YAML) containing protein sequences"
+  # --- Entity inputs (repeatable flags) -----------------------------
+
+  protein:
+    type:
+      - "null"
+      - type: array
+        items: File
+        inputBinding:
+          prefix: --protein
+          position: 2
+    doc: "Protein FASTA file(s) — repeatable for multi-chain"
+
+  dna:
+    type:
+      - "null"
+      - type: array
+        items: File
+        inputBinding:
+          prefix: --dna
+          position: 2
+    doc: "DNA FASTA file(s) — repeatable"
+
+  rna:
+    type:
+      - "null"
+      - type: array
+        items: File
+        inputBinding:
+          prefix: --rna
+          position: 2
+    doc: "RNA FASTA file(s) — repeatable"
+
+  ligand:
+    type:
+      - "null"
+      - type: array
+        items: string
+        inputBinding:
+          prefix: --ligand
+          position: 2
+    doc: "Ligand CCD code(s) — repeatable"
+
+  smiles:
+    type:
+      - "null"
+      - type: array
+        items: string
+        inputBinding:
+          prefix: --smiles
+          position: 2
+    doc: "SMILES string(s) — repeatable"
+
+  glycan:
+    type:
+      - "null"
+      - type: array
+        items: string
+        inputBinding:
+          prefix: --glycan
+          position: 2
+    doc: "Glycan specification(s) — repeatable"
 
   # --- Global options -----------------------------------------------
 
@@ -108,6 +185,7 @@ inputs:
     default: 1
     inputBinding:
       prefix: --num-samples
+      position: 2
     doc: "Number of structure samples to generate (Boltz, Chai) [default: 1]"
 
   num_recycles:
@@ -115,18 +193,21 @@ inputs:
     default: 3
     inputBinding:
       prefix: --num-recycles
+      position: 2
     doc: "Number of recycling iterations [default: 3]"
 
   seed:
     type: int?
     inputBinding:
       prefix: --seed
+      position: 2
     doc: "Random seed for reproducibility [default: none]"
 
   msa:
     type: File?
     inputBinding:
       prefix: --msa
+      position: 2
     doc: "Pre-computed MSA file (.a3m, .sto, .pqt)"
 
   output_format:
@@ -137,6 +218,7 @@ inputs:
     default: pdb
     inputBinding:
       prefix: --output-format
+      position: 2
     doc: "Output structure format [default: pdb]"
 
   # --- Execution options --------------------------------------------
@@ -149,6 +231,7 @@ inputs:
     default: gpu
     inputBinding:
       prefix: --device
+      position: 2
     doc: "Compute device [default: gpu]"
 
   # --- Boltz-2 / Chai-1 options ------------------------------------
@@ -158,6 +241,7 @@ inputs:
     default: 200
     inputBinding:
       prefix: --sampling-steps
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "boltz" || inputs.tool === "chai") {
@@ -172,6 +256,7 @@ inputs:
     default: false
     inputBinding:
       prefix: --use-msa-server
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "boltz" || inputs.tool === "chai") {
@@ -185,6 +270,7 @@ inputs:
     type: string?
     inputBinding:
       prefix: --msa-server-url
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "boltz" || inputs.tool === "chai") {
@@ -201,6 +287,7 @@ inputs:
     default: false
     inputBinding:
       prefix: --use-potentials
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "boltz") {
@@ -210,26 +297,134 @@ inputs:
         }
     doc: "Enable inference-time potentials (Boltz only) [default: false]"
 
+  # --- Chai-1 only ------------------------------------------------
+
+  no_esm_embeddings:
+    type: boolean?
+    default: false
+    inputBinding:
+      prefix: --no-esm-embeddings
+      position: 2
+      valueFrom: |
+        ${
+          if (inputs.tool === "chai") {
+            return self;
+          }
+          return null;
+        }
+    doc: "Disable ESM2 language model embeddings (Chai only) [default: false]"
+
+  use_templates_server:
+    type: boolean?
+    default: false
+    inputBinding:
+      prefix: --use-templates-server
+      position: 2
+      valueFrom: |
+        ${
+          if (inputs.tool === "chai") {
+            return self;
+          }
+          return null;
+        }
+    doc: "Use PDB template server (Chai only) [default: false]"
+
+  constraint_path:
+    type: File?
+    inputBinding:
+      prefix: --constraint-path
+      position: 2
+      valueFrom: |
+        ${
+          if (inputs.tool === "chai") {
+            return self;
+          }
+          return null;
+        }
+    doc: "Constraint JSON file (Chai only)"
+
+  template_hits_path:
+    type: File?
+    inputBinding:
+      prefix: --template-hits-path
+      position: 2
+      valueFrom: |
+        ${
+          if (inputs.tool === "chai") {
+            return self;
+          }
+          return null;
+        }
+    doc: "Pre-computed template hits file (Chai only)"
+
+  num_trunk_samples:
+    type: int?
+    default: 1
+    inputBinding:
+      prefix: --num-trunk-samples
+      position: 2
+      valueFrom: |
+        ${
+          if (inputs.tool === "chai") {
+            return self;
+          }
+          return null;
+        }
+    doc: "Trunk samples per prediction (Chai only) [default: 1]"
+
+  recycle_msa_subsample:
+    type: int?
+    default: 0
+    inputBinding:
+      prefix: --recycle-msa-subsample
+      position: 2
+      valueFrom: |
+        ${
+          if (inputs.tool === "chai") {
+            return self;
+          }
+          return null;
+        }
+    doc: "MSA subsample per recycle (Chai only) [default: 0 = all]"
+
+  no_low_memory:
+    type: boolean?
+    default: false
+    inputBinding:
+      prefix: --no-low-memory
+      position: 2
+      valueFrom: |
+        ${
+          if (inputs.tool === "chai") {
+            return self;
+          }
+          return null;
+        }
+    doc: "Disable low-memory mode (Chai only) [default: false]"
+
   # --- AlphaFold 2 options -----------------------------------------
 
   af2_data_dir:
     type: Directory?
     inputBinding:
       prefix: --af2-data-dir
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "alphafold") {
-            return self;
+            if (self) { return self; }
+            return "/local_databases/alphafold/databases";
           }
           return null;
         }
-    doc: "AlphaFold2 database directory (~2TB) [default: /databases]"
+    doc: "AlphaFold2 database directory [default: /local_databases/alphafold/databases]"
 
   af2_model_preset:
     type: string?
     default: "monomer"
     inputBinding:
       prefix: --af2-model-preset
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "alphafold") {
@@ -244,6 +439,7 @@ inputs:
     default: "reduced_dbs"
     inputBinding:
       prefix: --af2-db-preset
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "alphafold") {
@@ -258,6 +454,7 @@ inputs:
     default: "2022-01-01"
     inputBinding:
       prefix: --af2-max-template-date
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "alphafold") {
@@ -274,6 +471,7 @@ inputs:
     default: false
     inputBinding:
       prefix: --fp16
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "esmfold") {
@@ -287,6 +485,7 @@ inputs:
     type: int?
     inputBinding:
       prefix: --chunk-size
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "esmfold") {
@@ -300,6 +499,7 @@ inputs:
     type: int?
     inputBinding:
       prefix: --max-tokens-per-batch
+      position: 2
       valueFrom: |
         ${
           if (inputs.tool === "esmfold") {
@@ -308,6 +508,50 @@ inputs:
           return null;
         }
     doc: "Maximum tokens per batch (ESMFold only)"
+
+  # --- OpenFold 3 options -------------------------------------------
+
+  num_diffusion_samples:
+    type: int?
+    inputBinding:
+      prefix: --num-diffusion-samples
+      position: 2
+      valueFrom: |
+        ${
+          if (inputs.tool === "openfold") {
+            return self;
+          }
+          return null;
+        }
+    doc: "Number of diffusion samples (OpenFold only)"
+
+  num_model_seeds:
+    type: int?
+    inputBinding:
+      prefix: --num-model-seeds
+      position: 2
+      valueFrom: |
+        ${
+          if (inputs.tool === "openfold") {
+            return self;
+          }
+          return null;
+        }
+    doc: "Number of independent model seeds (OpenFold only)"
+
+  use_templates:
+    type: boolean?
+    inputBinding:
+      prefix: --use-templates
+      position: 2
+      valueFrom: |
+        ${
+          if (inputs.tool === "openfold") {
+            return self;
+          }
+          return null;
+        }
+    doc: "Use template structures (OpenFold only) [default: true]"
 
 # ===================================================================
 #  Outputs
@@ -343,6 +587,24 @@ outputs:
     outputBinding:
       glob: "$(inputs.output_dir)/confidence.json"
     doc: "Confidence scores (pLDDT, pTM, per-residue)"
+
+  results:
+    type: File?
+    outputBinding:
+      glob: "$(inputs.output_dir)/results.json"
+    doc: "Summary + file manifest (sha256, size) for downstream pipelines"
+
+  ro_crate:
+    type: File?
+    outputBinding:
+      glob: "$(inputs.output_dir)/ro-crate-metadata.json"
+    doc: "RO-Crate 1.1 Process Run Crate provenance (best-effort)"
+
+  reports:
+    type: Directory?
+    outputBinding:
+      glob: "$(inputs.output_dir)/report"
+    doc: "Characterization reports (report.html/json/pdf) from protein_compare"
 
 stdout: predict-structure.log
 stderr: predict-structure.err

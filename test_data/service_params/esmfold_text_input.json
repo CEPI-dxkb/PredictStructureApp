@@ -1,0 +1,16 @@
+{
+    "tool": "esmfold",
+    "text_input": [
+        {
+            "type": "protein",
+            "sequence": "TTCCPSIVARSNFNVCRLPGTPEALCATYTGCIIIPGATCPGDYAN"
+        }
+    ],
+    "output_path": "/output",
+    "output_file": "esmfold_text_test",
+    "num_recycles": 4,
+    "output_format": "pdb",
+    "msa_mode": "none",
+    "seed": 42,
+    "fp16": true
+}

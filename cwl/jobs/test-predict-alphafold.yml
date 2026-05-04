@@ -1,0 +1,13 @@
+# AlphaFold with required af2 params
+tool: alphafold
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+output_dir: output
+device: gpu
+af2_data_dir:
+  class: Directory
+  path: /local_databases/alphafold/databases
+af2_model_preset: monomer
+af2_db_preset: reduced_dbs
+af2_max_template_date: "2022-01-01"

@@ -1,0 +1,8 @@
+# Boltz basic — shared params only
+tool: boltz
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+output_dir: output
+num_samples: 3
+device: gpu

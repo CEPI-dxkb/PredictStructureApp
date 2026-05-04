@@ -45,9 +45,29 @@ class SubprocessBackend:
         Returns:
             Exit code (0 = success).
         """
-        run_env = None
+        # Start from a clean copy of the environment.  Remove PYTHONPATH
+        # so that per-tool conda envs (e.g. /opt/conda-boltz) are not
+        # polluted by the predict-structure deps overlay.
+        run_env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+
+        # Inject tool-specific data directory env vars from config,
+        # unless already set by the caller or host environment.
+        tool_name = kwargs.get("tool_name")
+        if tool_name:
+            from predict_structure.config import get_data_dir
+
+            data_dir = str(get_data_dir(tool_name))
+            _DATA_ENV_VARS = {
+                "boltz": "BOLTZ_CACHE",
+                "chai": "CHAI_DOWNLOADS_DIR",
+            }
+            var = _DATA_ENV_VARS.get(tool_name)
+            if var and var not in run_env:
+                run_env[var] = data_dir
+                logger.info("Set %s=%s", var, data_dir)
+
         if env:
-            run_env = {**os.environ, **env}
+            run_env.update(env)
 
         logger.info("Running: %s", " ".join(command))
         result = subprocess.run(

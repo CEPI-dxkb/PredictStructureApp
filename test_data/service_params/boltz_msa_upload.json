@@ -1,0 +1,12 @@
+{
+    "tool": "boltz",
+    "input_file": "/data/simple_protein.fasta",
+    "output_path": "/output",
+    "output_file": "boltz_msa_test",
+    "num_samples": 1,
+    "num_recycles": 3,
+    "output_format": "pdb",
+    "msa_mode": "upload",
+    "msa_file": "/data/msa/crambin.a3m",
+    "seed": 42
+}

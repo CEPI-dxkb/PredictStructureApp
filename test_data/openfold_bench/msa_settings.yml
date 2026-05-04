@@ -1,0 +1,3 @@
+msa_file_format: a3m
+cleanup_msa_dir: false
+msa_output_directory: /work/msas

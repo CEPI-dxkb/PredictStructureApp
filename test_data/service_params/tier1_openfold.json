@@ -1,0 +1,11 @@
+{
+  "tool": "openfold",
+  "output_path": "${WS_HOME}/AppTests/tier1_openfold",
+  "output_file": "tier1_openfold_test",
+  "num_recycles": 3,
+  "output_format": "pdb",
+  "msa_mode": "upload",
+  "seed": 42,
+  "input_file": "/data/simple_protein.fasta",
+  "msa_file": "/data/msa/crambin.a3m"
+}

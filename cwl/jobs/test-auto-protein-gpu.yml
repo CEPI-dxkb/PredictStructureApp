@@ -1,0 +1,7 @@
+# Auto mode — protein-only, GPU, no MSA
+tool: auto
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+output_dir: output
+device: gpu

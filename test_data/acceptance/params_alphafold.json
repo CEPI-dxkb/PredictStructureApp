@@ -1,0 +1,13 @@
+{
+    "tool": "alphafold",
+    "input_file": "/data/simple_protein.fasta",
+    "output_path": "/data/output",
+    "num_recycles": 3,
+    "output_format": "pdb",
+    "msa_mode": "none",
+    "seed": 42,
+    "af2_data_dir": "/local_databases/alphafold/databases",
+    "af2_model_preset": "monomer",
+    "af2_db_preset": "reduced_dbs",
+    "af2_max_template_date": "2022-01-01"
+}

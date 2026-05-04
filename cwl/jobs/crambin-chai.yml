@@ -1,9 +1,8 @@
-tool: chai
-input_file:
+input_fasta:
   class: File
-  path: ../../test_data/simple_protein.fasta
-output_dir: output
-num_samples: 1
-sampling_steps: 200
-device: gpu
-use_msa_server: false
+  path: ../../test_data/crambin-chai.fasta
+output_directory: output
+num_diffn_samples: 1
+num_trunk_recycles: 3
+num_diffn_timesteps: 200
+device: cuda

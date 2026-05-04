@@ -19,7 +19,7 @@ from predict_structure.config import (
 class TestConfigLoader:
     def test_loads_all_tools(self):
         tools = get_tools()
-        assert set(tools) == {"boltz", "chai", "alphafold", "esmfold"}
+        assert set(tools) == {"boltz", "chai", "alphafold", "esmfold", "openfold"}
 
     def test_each_tool_has_image(self):
         for tool in get_tools():

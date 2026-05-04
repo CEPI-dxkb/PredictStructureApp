@@ -112,10 +112,15 @@ RUN conda create -p /opt/conda-chai --yes --quiet python=3.10 && \
 
 RUN conda create -p /opt/conda-esmfold --yes --quiet python=3.11 && \
     /opt/conda-esmfold/bin/pip install --no-cache-dir \
+<<<<<<< HEAD
         'torch>=2.2' --index-url https://download.pytorch.org/whl/cu121
 RUN /opt/conda-esmfold/bin/pip install --no-cache-dir \
         transformers accelerate biopython && \
     conda clean --all --force-pkgs-dirs --yes
+=======
+        'torch>=2.6' transformers accelerate biopython && \
+    conda clean -afy
+>>>>>>> a78758515ac60874b67a342d4423e6e5a9125faa
 
 # ─── AlphaFold 2 (matches reqts-alphafold.def) ───────────────────────
 
@@ -147,6 +152,13 @@ RUN git clone --depth 1 https://github.com/wilke/alphafold.git /app/alphafold &&
         -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html && \
     conda clean --all --force-pkgs-dirs --yes && \
     /opt/conda-alphafold/bin/pip cache purge
+
+# --- OpenFold 3 ---
+# Model weights are pre-downloaded to /local_databases/openfold on the host
+# and bind-mounted at runtime (same pattern as Boltz/Chai/AlphaFold).
+RUN conda create -y -p /opt/conda-openfold python=3.11 && \
+    /opt/conda-openfold/bin/pip install --no-cache-dir openfold3 && \
+    conda clean -afy
 
 # ─── predict-structure CLI ────────────────────────────────────────────
 
@@ -188,10 +200,15 @@ ENV TF_FORCE_GPU_ALLOW_GROWTH=true
 ENV CUDA_MODULE_LOADING=EAGER
 ENV PYTHONPATH=/app/alphafold:$PYTHONPATH
 ENV PATH=/opt/conda-alphafold/bin:/opt/hhsuite/bin:$PATH
+# Cache dirs for tools that download models at runtime
+#ENV BOLTZ_CACHE=/cache
+#ENV CHAI_DOWNLOADS_DIR=/cache
+#ENV HF_HOME=/cache/huggingface
+#ENV TORCH_HOME=/cache/torch
+ENV OPENFOLD3_CACHE_DIR=/local_databases/openfold
 
 # ─── Entrypoint ───────────────────────────────────────────────────────
 
 WORKDIR /data
 
-ENTRYPOINT ["predict-structure"]
-CMD ["--help"]
+CMD ["predict-structure", "--help"]

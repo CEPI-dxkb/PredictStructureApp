@@ -1,0 +1,8 @@
+# Auto mode — protein, GPU, use_msa_server (should select Boltz)
+tool: auto
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+output_dir: output
+device: gpu
+use_msa_server: true

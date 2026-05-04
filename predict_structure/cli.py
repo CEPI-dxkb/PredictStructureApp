@@ -1,40 +1,61 @@
 """Unified CLI entry point for protein structure prediction.
 
 Usage:
-    predict-structure <tool> <input> [OPTIONS]
+    predict-structure <tool> --protein input.fasta [OPTIONS]
+    predict-structure --job jobs.yaml -o output/
 
 Examples:
-    predict-structure boltz input.fasta -o output/ --num-samples 5 --use-potentials
-    predict-structure esmfold input.fasta -o output/ --num-recycles 4 --fp16
-    predict-structure chai input.fasta -o output/ --msa alignment.a3m
-    predict-structure alphafold input.fasta -o output/ --af2-data-dir /data
+    predict-structure boltz --protein input.fasta -o output/ --num-samples 5 --use-potentials
+    predict-structure esmfold --protein input.fasta -o output/ --num-recycles 4 --fp16
+    predict-structure chai --protein input.fasta -o output/ --msa alignment.a3m
+    predict-structure alphafold --protein input.fasta -o output/ --af2-data-dir /data
+    predict-structure boltz --protein input.fasta --ligand ATP -o output/
+    predict-structure --job jobs.yaml -o output/
 """
 
 from __future__ import annotations
 
 import functools
+import json
+import logging
 import shutil
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import click
+import yaml
 from click_option_group import optgroup
+
+logger = logging.getLogger(__name__)
 
 from predict_structure import __version__
 from predict_structure.adapters import get_adapter
 from predict_structure.backends import get_backend
-from predict_structure.normalizers import write_metadata_json
+from predict_structure.entities import (
+    EntityList,
+    EntityType,
+    is_boltz_yaml,
+    parse_fasta_entities,
+)
+from predict_structure.normalizers import move_reports_to_subdir, write_metadata_json
+from predict_structure.results import write_results_json, write_ro_crate
 
 
 # ---------------------------------------------------------------------------
 # Tool auto-discovery
 # ---------------------------------------------------------------------------
 
-from predict_structure.config import get_command, get_tools
+from predict_structure.config import get_command, get_data_dir, get_data_root, get_tools
 
-# Default AlphaFold database directory (checked during discovery)
-AF2_DEFAULT_DATA_DIR = Path("/databases")
+# Default AlphaFold database directory — resolved from config/env.
+# Guard against config FileNotFoundError at import time so Click can
+# still start and report configuration issues gracefully.
+try:
+    AF2_DEFAULT_DATA_DIR = get_data_dir("alphafold")
+except (FileNotFoundError, KeyError):
+    AF2_DEFAULT_DATA_DIR = Path("/databases")
 
 
 def _is_tool_available(tool: str) -> bool:
@@ -58,17 +79,67 @@ def _is_tool_available(tool: str) -> bool:
     return shutil.which(exe) is not None
 
 
+def _auto_select_tool(
+    entity_list: EntityList,
+    device: str = "gpu",
+    *,
+    has_msa: bool = False,
+    use_msa_server: bool = False,
+) -> str:
+    """Auto-select the best available prediction tool based on entity types.
+
+    Selection rules:
+      - Non-protein entities exclude AlphaFold and ESMFold.
+      - ``device=cpu`` prefers ESMFold (others are impractical on CPU).
+      - Boltz and Chai require an MSA source (``--msa`` file or
+        ``--use-msa-server``).  Without one they are skipped.
+      - Otherwise pick first available in accuracy-priority order:
+        Boltz > Chai > AlphaFold > ESMFold.
+
+    Raises:
+        click.UsageError: If no suitable tool is found.
+    """
+    has_non_protein = entity_list.entity_types - {EntityType.PROTEIN}
+    msa_available = has_msa or use_msa_server
+
+    # CPU → strongly prefer ESMFold (if protein-only)
+    if device == "cpu" and not has_non_protein:
+        if _is_tool_available("esmfold"):
+            return "esmfold"
+
+    # Accuracy-priority order
+    for tool in ("boltz", "openfold", "chai", "alphafold", "esmfold"):
+        # Skip tools that don't support the entity types
+        if tool in ("alphafold", "esmfold") and has_non_protein:
+            continue
+
+        # Boltz/Chai benefit from MSAs for protein sequences, but
+        # DNA/RNA/ligand-only inputs don't need MSAs at all.
+        has_protein = EntityType.PROTEIN in entity_list.entity_types
+        if tool in ("boltz", "chai") and has_protein and not msa_available:
+            continue
+
+        if tool == "alphafold":
+            if _is_tool_available(tool) and AF2_DEFAULT_DATA_DIR.is_dir():
+                return tool
+        elif _is_tool_available(tool):
+            return tool
+
+    raise click.UsageError(
+        "No prediction tool found on PATH. "
+        "Install one of: boltz, run_openfold, chai-lab, run_alphafold.py, esm-fold-hf"
+    )
+
+
+# Keep for backward compat with tests that mock discover_tool
 def discover_tool(input_file: Path, device: str = "gpu") -> str:
-    """Auto-discover the best available prediction tool.
+    """Auto-discover the best available prediction tool (legacy interface).
 
     Selection rules:
       - ``.yaml`` / ``.yml`` input forces Boltz (only tool supporting YAML).
       - ``device=cpu`` prefers ESMFold (others are impractical on CPU).
       - Otherwise pick first available in accuracy-priority order:
         Boltz > Chai > AlphaFold > ESMFold.
-
-    AlphaFold is only considered available when both an executable **and**
-    the default database directory (``/databases``) are found.
 
     Raises:
         click.UsageError: If no suitable tool is found.
@@ -90,36 +161,140 @@ def discover_tool(input_file: Path, device: str = "gpu") -> str:
         # Fall through to general priority
 
     # Accuracy-priority order
-    for tool in ("boltz", "chai", "alphafold", "esmfold"):
+    for tool in ("boltz", "openfold", "chai", "alphafold", "esmfold"):
         if tool == "alphafold":
-            # AlphaFold also requires its database directory
-            if _is_tool_available(tool) or AF2_DEFAULT_DATA_DIR.is_dir():
-                # Need both executable AND data
-                has_exe = any(
-                    shutil.which(e) for e in _TOOL_EXECUTABLES.get(tool, [])
-                ) or any(Path(p).exists() for p in _TOOL_PATHS.get(tool, []))
-                if has_exe and AF2_DEFAULT_DATA_DIR.is_dir():
-                    return tool
+            if _is_tool_available(tool) and AF2_DEFAULT_DATA_DIR.is_dir():
+                return tool
         elif _is_tool_available(tool):
             return tool
 
     raise click.UsageError(
         "No prediction tool found on PATH. "
-        "Install one of: boltz, chai-lab, run_alphafold.py, esm-fold-hf"
+        "Install one of: boltz, run_openfold, chai-lab, run_alphafold.py, esm-fold-hf"
     )
+
+
+# ---------------------------------------------------------------------------
+# Entity list construction from CLI flags
+# ---------------------------------------------------------------------------
+
+def _build_entity_list(
+    protein: tuple[str, ...],
+    dna: tuple[str, ...],
+    rna: tuple[str, ...],
+    ligand: tuple[str, ...],
+    smiles: tuple[str, ...],
+    glycan: tuple[str, ...],
+    *,
+    sequence_files: tuple[str, ...] = (),
+    force: bool = False,
+) -> EntityList:
+    """Build an EntityList from CLI option tuples.
+
+    FASTA files (--protein, --dna, --rna) are parsed and each sequence
+    becomes a separate entity. Inline values (--ligand, --smiles, --glycan)
+    become one entity each.
+
+    Also handles Boltz YAML pass-through: if a single --protein path points
+    to a .yaml/.yml file, it's treated as a YAML entity for Boltz.
+
+    Raises:
+        click.UsageError: If no entities are provided.
+    """
+    from predict_structure.entities import MAX_SEQUENCES, MAX_TOTAL_RESIDUES
+
+    max_seq = None if force else MAX_SEQUENCES
+    max_res = None if force else MAX_TOTAL_RESIDUES
+    entities = EntityList()
+
+    for fasta_path in protein:
+        path = Path(fasta_path)
+        # Boltz YAML pass-through: single .yaml file passed as --protein
+        if is_boltz_yaml(path):
+            entities.add(EntityType.PROTEIN, str(path), name=path.stem)
+            continue
+        for ent in parse_fasta_entities(
+            path, explicit_type=EntityType.PROTEIN, max_sequences=max_seq,
+        ):
+            entities.add(ent.entity_type, ent.value, name=ent.name)
+
+    for fasta_path in dna:
+        for ent in parse_fasta_entities(
+            Path(fasta_path), explicit_type=EntityType.DNA, max_sequences=max_seq,
+        ):
+            entities.add(ent.entity_type, ent.value, name=ent.name)
+
+    for fasta_path in rna:
+        for ent in parse_fasta_entities(
+            Path(fasta_path), explicit_type=EntityType.RNA, max_sequences=max_seq,
+        ):
+            entities.add(ent.entity_type, ent.value, name=ent.name)
+
+    # Auto-detect sequence type (no explicit_type — uses detect_sequence_type)
+    for fasta_path in sequence_files:
+        for ent in parse_fasta_entities(
+            Path(fasta_path), explicit_type=None, max_sequences=max_seq,
+        ):
+            entities.add(ent.entity_type, ent.value, name=ent.name)
+
+    for code in ligand:
+        entities.add(EntityType.LIGAND, code, name=code)
+
+    for smi in smiles:
+        entities.add(EntityType.SMILES, smi, name="smiles")
+
+    for gly in glycan:
+        entities.add(EntityType.GLYCAN, gly, name="glycan")
+
+    if not entities:
+        raise click.UsageError(
+            "No input entities provided. Use --protein, --dna, --rna, "
+            "--sequence, --ligand, --smiles, or --glycan to specify input."
+        )
+
+    # Validate total size
+    try:
+        entities.validate_size(max_residues=max_res)
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
+
+    return entities
 
 
 # ---------------------------------------------------------------------------
 # Shared options applied to every tool subcommand
 # ---------------------------------------------------------------------------
 
+def entity_options(func):
+    """Decorator that applies entity input options."""
+    @optgroup.group("Entity input")
+    @optgroup.option("--protein", multiple=True, type=click.Path(exists=True),
+                     help="Protein FASTA file (repeatable for multi-chain)")
+    @optgroup.option("--dna", multiple=True, type=click.Path(exists=True),
+                     help="DNA FASTA file (repeatable)")
+    @optgroup.option("--rna", multiple=True, type=click.Path(exists=True),
+                     help="RNA FASTA file (repeatable)")
+    @optgroup.option("--sequence", "sequence_files", multiple=True, type=click.Path(exists=True),
+                     help="FASTA file with auto-detected sequence type (repeatable)")
+    @optgroup.option("--ligand", multiple=True, type=str,
+                     help="Ligand CCD code (repeatable)")
+    @optgroup.option("--smiles", multiple=True, type=str,
+                     help="SMILES string (repeatable)")
+    @optgroup.option("--glycan", multiple=True, type=str,
+                     help="Glycan specification (repeatable)")
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+    return wrapper
+
+
 def shared_options(func):
     """Decorator that applies options common to all prediction tools.
 
-    Help order (top to bottom): Global options, [Tool options], Execution options.
+    Help order (top to bottom): Entity input, Global options, [Tool options], Execution options.
     Click decorators stack bottom-up, so Execution is applied last (via backend_options).
     """
-    @click.argument("input_file", type=click.Path(exists=True))
+    @entity_options
     @optgroup.group("Global options")
     @optgroup.option("-o", "--output-dir", type=click.Path(), required=True, help="Output directory")
     @optgroup.option("--num-samples", "-n", type=int, default=1, help="Number of structure samples")
@@ -127,7 +302,13 @@ def shared_options(func):
     @optgroup.option("--seed", type=int, default=None, help="Random seed")
     @optgroup.option("--msa", type=click.Path(), default=None, help="MSA file (.a3m, .sto, .pqt)")
     @optgroup.option("--output-format", type=click.Choice(["pdb", "mmcif"]), default="pdb")
+    @optgroup.option(
+        "--emit-rocrate/--no-emit-rocrate",
+        default=True,
+        help="Emit ro-crate-metadata.json provenance alongside results.json [default: emit]",
+    )
     @click.option("--debug", is_flag=True, default=False, help="Print the command instead of executing it")
+    @click.option("--force", is_flag=True, default=False, help="Bypass input size limits")
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
@@ -139,12 +320,13 @@ def backend_options(func):
     @optgroup.group("Execution options")
     @optgroup.option(
         "--backend",
-        type=click.Choice(["docker", "subprocess", "cwl"]),
+        type=click.Choice(["docker", "subprocess", "cwl", "apptainer"]),
         default="subprocess",
         help="Execution backend",
     )
     @optgroup.option("--device", type=click.Choice(["gpu", "cpu"]), default="gpu", help="Compute device")
     @optgroup.option("--image", default=None, help="Override Docker image (docker backend only)")
+    @optgroup.option("--sif", default=None, help="Apptainer SIF image path (apptainer/cwl backend)")
     @optgroup.option("--cwl-runner", default=None, help="CWL runner command (default: cwltool)")
     @optgroup.option("--cwl-tool", default=None, help="Path to CWL tool definition")
     @functools.wraps(func)
@@ -156,6 +338,51 @@ def backend_options(func):
 # ---------------------------------------------------------------------------
 # Shared prediction logic
 # ---------------------------------------------------------------------------
+
+def _build_params_dict(shared: dict) -> dict:
+    """Extract the canonical per-run params saved in metadata.json."""
+    return {
+        "num_samples": shared["num_samples"],
+        "num_recycles": shared["num_recycles"],
+        "seed": shared.get("seed"),
+        "device": shared["device"],
+    }
+
+
+def _finalize_output(
+    output_path: Path,
+    tool_name: str,
+    shared: dict,
+    elapsed: float,
+) -> None:
+    """Post-normalization: metadata.json, relocate reports, results.json, ro-crate.
+
+    Runs in this exact order so later writers can read earlier ones:
+      1. write_metadata_json         -- canonical run metadata
+      2. move_reports_to_subdir      -- relocate report.* into report/
+      3. write_results_json          -- summary + file manifest
+      4. write_ro_crate              -- best-effort Process Run Crate
+
+    ``write_results_json`` requires ``confidence.json`` + ``metadata.json``
+    to be present after normalization. If either is missing we let the
+    exception propagate -- it signals a normalizer contract violation and
+    should fail loudly, matching the standalone `finalize-results` path.
+    """
+    import os
+
+    write_metadata_json(
+        output_path, tool_name, _build_params_dict(shared), elapsed, __version__,
+    )
+    move_reports_to_subdir(output_path)
+    results_path = write_results_json(
+        output_path,
+        command=sys.argv,
+        backend=shared["backend"],
+        container_image=os.environ.get("PREDICT_STRUCTURE_IMAGE"),
+    )
+    if shared.get("emit_rocrate", True):
+        write_ro_crate(output_path, results_path)
+
 
 def _docker_volumes_and_rewrite(
     cmd: list[str],
@@ -205,14 +432,28 @@ def _docker_volumes_and_rewrite(
     return volumes, rewritten
 
 
-def run_prediction(tool_name: str, extra_kwargs: dict, **shared):
+def run_prediction(
+    tool_name: str,
+    extra_kwargs: dict,
+    *,
+    entity_list: EntityList,
+    entity_inputs: dict | None = None,
+    **shared,
+):
     """Core prediction logic shared by all tool subcommands.
 
     Args:
         tool_name: Adapter key (boltz, chai, alphafold, esmfold).
         extra_kwargs: Tool-specific keyword arguments for build_command.
-        **shared: Shared CLI options (input_file, output_dir, backend, etc.).
+        entity_list: Entities to predict.
+        entity_inputs: Raw CLI entity options for CWL backend
+            (e.g. ``{"protein": ("/path/to/file.fasta",), ...}``).
+        **shared: Shared CLI options (output_dir, backend, etc.).
     """
+    logger.info("Tool: %s", tool_name)
+    logger.info("Entities: %s", [(e.entity_type.value, e.name) for e in entity_list])
+    logger.info("Backend: %s | Device: %s", shared.get("backend"), shared.get("device"))
+
     output_path = Path(shared["output_dir"])
     output_path.mkdir(parents=True, exist_ok=True)
     raw_dir = output_path / "raw_output"
@@ -220,24 +461,97 @@ def run_prediction(tool_name: str, extra_kwargs: dict, **shared):
 
     # 1. Resolve adapter and backend
     adapter = get_adapter(tool_name)
+    logger.info("Supported entities: %s", sorted(e.value for e in adapter.supported_entities))
     backend = shared["backend"]
     backend_kwargs = {}
     if backend == "docker" and shared.get("image"):
         backend_kwargs["default_image"] = shared["image"]
+    if backend == "apptainer" and shared.get("sif"):
+        backend_kwargs["sif_path"] = shared["sif"]
     if backend == "cwl":
         if shared.get("cwl_runner"):
             backend_kwargs["runner"] = shared["cwl_runner"]
         if shared.get("cwl_tool"):
             backend_kwargs["cwl_tool"] = shared["cwl_tool"]
+        # Auto-enable Singularity when a SIF is configured
+        from predict_structure.config import get_shared_sif
+        if shared.get("sif") or get_shared_sif():
+            backend_kwargs["use_singularity"] = True
     execution_backend = get_backend(backend, **backend_kwargs)
 
-    # 2. Prepare input (FASTA → tool-native format, MSA conversion)
-    msa_path = Path(shared["msa"]) if shared.get("msa") else None
-    prepared = adapter.prepare_input(
-        Path(shared["input_file"]), output_path, msa_path=msa_path
-    )
+    # 2. Validate entity types against adapter capabilities
+    adapter.validate_entities(entity_list)
+    adapter.validate_sequences(entity_list)
+    logger.info("Entity validation passed")
 
-    # 3. Build tool-specific command
+    # -----------------------------------------------------------------
+    # CWL unified path: bypass adapter.build_command() and build the
+    # CWL job directly from entity inputs and CLI options.
+    # Only activated when --cwl-tool explicitly specifies the unified
+    # predict-structure.cwl tool.  Default --backend cwl uses per-tool
+    # CWL definitions via the standard adapter path below.
+    # -----------------------------------------------------------------
+    if backend == "cwl" and entity_inputs is not None and shared.get("cwl_tool"):
+        job = execution_backend.build_unified_job(
+            tool_name,
+            entity_inputs,
+            output_dir=str(raw_dir),
+            num_samples=shared["num_samples"],
+            num_recycles=shared["num_recycles"],
+            seed=shared.get("seed"),
+            device=shared["device"],
+            msa=shared.get("msa"),
+            output_format=shared.get("output_format", "pdb"),
+            **extra_kwargs,
+        )
+
+        if shared.get("debug"):
+            debug_lines = execution_backend.format_unified_command(
+                job, tool_name=tool_name, output_dir=str(output_path),
+            )
+            click.echo("\n".join(str(l) for l in debug_lines))
+            return
+
+        start = time.time()
+        rc = execution_backend.run_unified(
+            job, tool_name=tool_name, output_dir=str(output_path),
+        )
+        elapsed = time.time() - start
+
+        if rc != 0:
+            has_output = any(raw_dir.glob("**/*.pdb")) or any(raw_dir.glob("**/*.cif"))
+            if has_output:
+                logger.warning(
+                    "Tool exited with code %d but produced output — "
+                    "attempting normalization", rc
+                )
+            else:
+                click.echo(f"Prediction failed with exit code {rc}", err=True)
+                sys.exit(rc)
+
+        try:
+            adapter.normalize_output(raw_dir, output_path)
+        except FileNotFoundError as exc:
+            click.echo(
+                f"Prediction produced no output to normalize: {exc}\n"
+                f"Check raw output in {raw_dir}",
+                err=True,
+            )
+            sys.exit(1)
+        _finalize_output(output_path, tool_name, shared, elapsed)
+        click.echo(f"Prediction complete: {output_path}")
+        return
+
+    # -----------------------------------------------------------------
+    # Standard path: subprocess / docker / apptainer / legacy CWL
+    # -----------------------------------------------------------------
+
+    # 3. Prepare input (entity list → tool-native format, MSA conversion)
+    msa_path = Path(shared["msa"]) if shared.get("msa") else None
+    prepared = adapter.prepare_input(entity_list, output_path, msa_path=msa_path)
+    logger.info("Prepared input: %s", prepared)
+
+    # 4. Build tool-specific command
     cmd = adapter.build_command(
         prepared,
         raw_dir,
@@ -248,10 +562,10 @@ def run_prediction(tool_name: str, extra_kwargs: dict, **shared):
         **extra_kwargs,
     )
 
-    # 4. For docker backend: build volume mounts and rewrite host paths
+    # 5. For docker backend: build volume mounts and rewrite host paths
     run_kwargs: dict = {
         "tool_name": adapter.tool_name,
-        "gpu": adapter.requires_gpu and shared["device"] != "cpu",
+        "gpu": shared["device"] != "cpu",
     }
 
     if backend == "docker":
@@ -264,10 +578,34 @@ def run_prediction(tool_name: str, extra_kwargs: dict, **shared):
         )
         run_kwargs["volumes"] = volumes
 
-    if backend == "cwl":
-        run_kwargs["output_dir"] = str(output_path)
+    if backend == "apptainer":
+        from predict_structure.config import get_data_dir, get_data_root
+        binds = {}
+        # Bind data root so tools can access/write model weights and caches
+        data_root = get_data_root()
+        if data_root.exists():
+            binds[str(data_root)] = str(data_root)
+        # Bind tool-specific data dir if it's outside data_root (absolute path)
+        try:
+            tool_data = get_data_dir(tool_name)
+            if tool_data.exists() and not str(tool_data).startswith(str(data_root)):
+                binds[str(tool_data)] = str(tool_data)
+        except (FileNotFoundError, KeyError):
+            pass
+        # Bind the output directory so the container can read/write it
+        output_resolved = str(output_path.resolve())
+        binds[output_resolved] = output_resolved
+        run_kwargs["binds"] = binds
 
-    # 5. Execute prediction (or print command in debug mode)
+    cwl_output_subdir = raw_dir
+    if backend == "cwl":
+        run_kwargs["output_dir"] = str(raw_dir)
+        # CWL outputs go into raw_dir/<output_dir_name>/
+        cwl_output_subdir = raw_dir / "output"
+
+    logger.info("Command: %s", " ".join(cmd))
+
+    # 6. Execute prediction (or print command in debug mode)
     if shared.get("debug"):
         debug_lines = execution_backend.format_command(cmd, **run_kwargs)
         click.echo("\n".join(str(l) for l in debug_lines))
@@ -278,36 +616,160 @@ def run_prediction(tool_name: str, extra_kwargs: dict, **shared):
     elapsed = time.time() - start
 
     if rc != 0:
-        click.echo(f"Prediction failed with exit code {rc}", err=True)
-        sys.exit(rc)
+        # Check if the tool produced output despite the error (e.g. AF2
+        # relaxation failure after successful prediction).
+        has_output = any(raw_dir.glob("**/*.pdb")) or any(raw_dir.glob("**/*.cif"))
+        if has_output:
+            logger.warning(
+                "Tool exited with code %d but produced output — "
+                "attempting normalization", rc
+            )
+        else:
+            click.echo(f"Prediction failed with exit code {rc}", err=True)
+            sys.exit(rc)
 
-    # 6. Normalize output
-    adapter.normalize_output(raw_dir, output_path)
+    # 7. Normalize output
+    # CWL places tool output inside raw_dir/output/ (the CWL output_dir name)
+    normalize_dir = cwl_output_subdir if backend == "cwl" else raw_dir
+    try:
+        adapter.normalize_output(normalize_dir, output_path)
+    except FileNotFoundError as exc:
+        click.echo(
+            f"Prediction produced no output to normalize: {exc}\n"
+            f"Check raw output in {raw_dir}",
+            err=True,
+        )
+        sys.exit(1)
 
-    params_dict = {
-        "num_samples": shared["num_samples"],
-        "num_recycles": shared["num_recycles"],
-        "seed": shared.get("seed"),
-        "device": shared["device"],
-    }
-    write_metadata_json(output_path, tool_name, params_dict, elapsed, __version__)
+    _finalize_output(output_path, tool_name, shared, elapsed)
 
     click.echo(f"Prediction complete: {output_path}")
+
+
+# ---------------------------------------------------------------------------
+# Job file execution
+# ---------------------------------------------------------------------------
+
+def _run_job_file(job_path: Path, base_output_dir: Path | None) -> None:
+    """Execute a batch of predictions from a YAML job spec.
+
+    Each entry in the YAML list defines one prediction with entity inputs,
+    optional tool selection, and tool-specific options.
+
+    Args:
+        job_path: Path to YAML job spec file.
+        base_output_dir: Base output directory; each job gets a subdirectory.
+    """
+    if base_output_dir is None:
+        raise click.UsageError("--output-dir / -o is required with --job")
+
+    data = yaml.safe_load(job_path.read_text())
+    if not isinstance(data, list):
+        raise click.UsageError(f"Job file must be a YAML list, got {type(data).__name__}")
+
+    base_output_dir = Path(base_output_dir)
+    base_output_dir.mkdir(parents=True, exist_ok=True)
+
+    for idx, job in enumerate(data):
+        job_dir = base_output_dir / f"job_{idx:03d}"
+
+        # Build entity list from job entry
+        entities = EntityList()
+        for fasta_path in job.get("protein", []):
+            for ent in parse_fasta_entities(Path(fasta_path), explicit_type=EntityType.PROTEIN):
+                entities.add(ent.entity_type, ent.value, name=ent.name)
+        for fasta_path in job.get("dna", []):
+            for ent in parse_fasta_entities(Path(fasta_path), explicit_type=EntityType.DNA):
+                entities.add(ent.entity_type, ent.value, name=ent.name)
+        for fasta_path in job.get("rna", []):
+            for ent in parse_fasta_entities(Path(fasta_path), explicit_type=EntityType.RNA):
+                entities.add(ent.entity_type, ent.value, name=ent.name)
+        for code in job.get("ligands", []):
+            entities.add(EntityType.LIGAND, code, name=code)
+        for smi in job.get("smiles", []):
+            entities.add(EntityType.SMILES, smi, name="smiles")
+        for gly in job.get("glycans", []):
+            entities.add(EntityType.GLYCAN, gly, name="glycan")
+
+        if not entities:
+            click.echo(f"Warning: job {idx} has no entities, skipping", err=True)
+            continue
+
+        # Select tool
+        options = job.get("options", {})
+        tool_name = job.get("tool")
+        if tool_name is None:
+            tool_name = _auto_select_tool(entities, device=options.get("device", "gpu"))
+
+        click.echo(f"Job {idx:03d}: {tool_name} → {job_dir}")
+
+        shared = {
+            "output_dir": str(job_dir),
+            "num_samples": options.get("num_samples", 1),
+            "num_recycles": options.get("num_recycles", 3),
+            "seed": options.get("seed"),
+            "msa": options.get("msa"),
+            "output_format": options.get("output_format", "pdb"),
+            "backend": options.get("backend", "subprocess"),
+            "device": options.get("device", "gpu"),
+            "image": options.get("image"),
+            "sif": options.get("sif"),
+            "cwl_runner": options.get("cwl_runner"),
+            "cwl_tool": options.get("cwl_tool"),
+            "debug": options.get("debug", False),
+            "emit_rocrate": options.get("emit_rocrate", True),
+        }
+
+        entity_inputs = {
+            "protein": job.get("protein", []),
+            "dna": job.get("dna", []),
+            "rna": job.get("rna", []),
+            "ligand": job.get("ligands", []),
+            "smiles": job.get("smiles", []),
+            "glycan": job.get("glycans", []),
+            "sequence": job.get("sequence", []),
+        }
+
+        extra = {k: v for k, v in options.items() if k not in shared}
+        run_prediction(tool_name, extra, entity_list=entities,
+                       entity_inputs=entity_inputs, **shared)
 
 
 # ---------------------------------------------------------------------------
 # CLI group
 # ---------------------------------------------------------------------------
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.version_option(__version__)
-def main():
-    """Predict protein structure using Boltz-2, Chai-1, AlphaFold 2, or ESMFold.
+@click.option("--job", type=click.Path(exists=True), default=None,
+              help="YAML job spec for batch predictions")
+@click.option("-o", "--output-dir", "job_output_dir", type=click.Path(), default=None,
+              help="Output directory (used with --job)")
+@click.option("-v", "--verbose", is_flag=True, default=False,
+              help="Enable verbose logging (DEBUG level)")
+@click.pass_context
+def main(ctx, job, job_output_dir, verbose):
+    """Predict protein structure using Boltz-2, OpenFold 3, Chai-1, AlphaFold 2, or ESMFold.
 
     Each subcommand dispatches to the appropriate prediction tool with
     automatic parameter mapping, input format conversion, and output
     normalization.
+
+    Use --job for batch predictions from a YAML spec file.
     """
+    level = logging.DEBUG if verbose else logging.WARNING
+    logging.basicConfig(
+        level=level,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+
+    if job is not None:
+        if ctx.invoked_subcommand is not None:
+            raise click.UsageError("--job is exclusive with subcommands")
+        _run_job_file(Path(job), Path(job_output_dir) if job_output_dir else None)
+        ctx.exit()
+    elif ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
 
 
 # ---------------------------------------------------------------------------
@@ -322,15 +784,23 @@ def main():
 @optgroup.option("--msa-server-url", default=None, help="Custom MSA server URL (implies --use-msa-server)")
 @optgroup.option("--use-potentials", is_flag=True, default=False, help="Enable potential terms")
 @backend_options
-def boltz(input_file, sampling_steps, use_msa_server, msa_server_url, use_potentials, **shared):
+def boltz(protein, dna, rna, ligand, smiles, glycan,
+          sampling_steps, use_msa_server, msa_server_url, use_potentials, **shared):
     """Predict structure with Boltz-2 (diffusion-based, proteins/DNA/RNA/ligands)."""
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
     extra = {
         "sampling_steps": sampling_steps,
         "use_msa_server": use_msa_server or (msa_server_url is not None),
         "msa_server_url": msa_server_url,
         "boltz_use_potentials": use_potentials,
     }
-    run_prediction("boltz", extra, input_file=input_file, **shared)
+    entity_inputs = {
+        "protein": protein, "dna": dna, "rna": rna,
+        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+        "sequence": shared.get("sequence_files", ()),
+    }
+    run_prediction("boltz", extra, entity_list=entity_list,
+                   entity_inputs=entity_inputs, **shared)
 
 
 # ---------------------------------------------------------------------------
@@ -351,11 +821,13 @@ def boltz(input_file, sampling_steps, use_msa_server, msa_server_url, use_potent
 @optgroup.option("--recycle-msa-subsample", type=int, default=0, help="MSA subsample per recycle [default: 0 = all]")
 @optgroup.option("--no-low-memory", is_flag=True, default=False, help="Disable low-memory mode")
 @backend_options
-def chai(input_file, sampling_steps, use_msa_server, msa_server_url,
+def chai(protein, dna, rna, ligand, smiles, glycan,
+         sampling_steps, use_msa_server, msa_server_url,
          no_esm_embeddings, use_templates_server, constraint_path,
          template_hits_path, num_trunk_samples, recycle_msa_subsample,
          no_low_memory, **shared):
     """Predict structure with Chai-1 (diffusion-based protein prediction)."""
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
     extra = {
         "sampling_steps": sampling_steps,
         "use_msa_server": use_msa_server or (msa_server_url is not None),
@@ -368,7 +840,13 @@ def chai(input_file, sampling_steps, use_msa_server, msa_server_url,
         "recycle_msa_subsample": recycle_msa_subsample,
         "low_memory": False if no_low_memory else True,
     }
-    run_prediction("chai", extra, input_file=input_file, **shared)
+    entity_inputs = {
+        "protein": protein, "dna": dna, "rna": rna,
+        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+        "sequence": shared.get("sequence_files", ()),
+    }
+    run_prediction("chai", extra, entity_list=entity_list,
+                   entity_inputs=entity_inputs, **shared)
 
 
 # ---------------------------------------------------------------------------
@@ -378,20 +856,28 @@ def chai(input_file, sampling_steps, use_msa_server, msa_server_url,
 @main.command()
 @shared_options
 @optgroup.group("AlphaFold 2 options")
-@optgroup.option("--af2-data-dir", type=click.Path(), required=True, help="AlphaFold database directory (~2TB)")
+@optgroup.option("--af2-data-dir", type=click.Path(), default=None, help="AlphaFold database directory [default: from tools.yml]")
 @optgroup.option("--af2-model-preset", default="monomer", help="Model preset (monomer, monomer_casp14, multimer)")
 @optgroup.option("--af2-db-preset", default="reduced_dbs", help="DB preset (reduced_dbs, full_dbs)")
 @optgroup.option("--af2-max-template-date", default="2022-01-01", help="Max template date (YYYY-MM-DD)")
 @backend_options
-def alphafold(input_file, af2_data_dir, af2_model_preset, af2_db_preset, af2_max_template_date, **shared):
+def alphafold(protein, dna, rna, ligand, smiles, glycan,
+              af2_data_dir, af2_model_preset, af2_db_preset, af2_max_template_date, **shared):
     """Predict structure with AlphaFold 2 (MSA-based, high accuracy)."""
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
     extra = {
         "af2_data_dir": af2_data_dir,
         "af2_model_preset": af2_model_preset,
         "af2_db_preset": af2_db_preset,
         "af2_max_template_date": af2_max_template_date,
     }
-    run_prediction("alphafold", extra, input_file=input_file, **shared)
+    entity_inputs = {
+        "protein": protein, "dna": dna, "rna": rna,
+        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+        "sequence": shared.get("sequence_files", ()),
+    }
+    run_prediction("alphafold", extra, entity_list=entity_list,
+                   entity_inputs=entity_inputs, **shared)
 
 
 # ---------------------------------------------------------------------------
@@ -405,14 +891,59 @@ def alphafold(input_file, af2_data_dir, af2_model_preset, af2_db_preset, af2_max
 @optgroup.option("--chunk-size", type=int, default=None, help="Chunk size for long sequences")
 @optgroup.option("--max-tokens-per-batch", type=int, default=None, help="Max tokens per batch")
 @backend_options
-def esmfold(input_file, fp16, chunk_size, max_tokens_per_batch, **shared):
+def esmfold(protein, dna, rna, ligand, smiles, glycan,
+            fp16, chunk_size, max_tokens_per_batch, **shared):
     """Predict structure with ESMFold (single-sequence, no MSA needed, CPU-capable)."""
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
     extra = {
         "esm_fp16": fp16,
         "esm_chunk_size": chunk_size,
         "esm_max_tokens": max_tokens_per_batch,
     }
-    run_prediction("esmfold", extra, input_file=input_file, **shared)
+    entity_inputs = {
+        "protein": protein, "dna": dna, "rna": rna,
+        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+        "sequence": shared.get("sequence_files", ()),
+    }
+    run_prediction("esmfold", extra, entity_list=entity_list,
+                   entity_inputs=entity_inputs, **shared)
+
+
+# ---------------------------------------------------------------------------
+# openfold subcommand
+# ---------------------------------------------------------------------------
+
+@main.command()
+@shared_options
+@optgroup.group("OpenFold 3 options")
+@optgroup.option("--num-diffusion-samples", type=int, default=5, help="Diffusion samples per query [default: 5]")
+@optgroup.option("--num-model-seeds", type=int, default=1, help="Independent model seeds [default: 1]")
+@optgroup.option("--use-msa-server/--no-msa-server", default=False, help="Use ColabFold MSA server [default: False]")
+@optgroup.option("--use-templates/--no-templates", default=False, help="Use template structures [default: False]")
+@optgroup.option("--checkpoint", default=None, help="Model checkpoint name (e.g. openfold3_p2_v1)")
+@optgroup.option("--runner-yaml", type=click.Path(exists=True), default=None,
+                 help="Runner YAML for advanced config (e.g. disable DeepSpeed for H200)")
+@backend_options
+def openfold(protein, dna, rna, ligand, smiles, glycan,
+             num_diffusion_samples, num_model_seeds,
+             use_msa_server, use_templates, checkpoint, runner_yaml, **shared):
+    """Predict structure with OpenFold 3 (AF3-class, protein/DNA/RNA/ligands)."""
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
+    extra = {
+        "num_diffusion_samples": num_diffusion_samples,
+        "num_model_seeds": num_model_seeds,
+        "use_msa_server": use_msa_server,
+        "use_templates": use_templates,
+        "checkpoint": checkpoint,
+        "runner_yaml": runner_yaml,
+    }
+    entity_inputs = {
+        "protein": protein, "dna": dna, "rna": rna,
+        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+        "sequence": shared.get("sequence_files", ()),
+    }
+    run_prediction("openfold", extra, entity_list=entity_list,
+                   entity_inputs=entity_inputs, **shared)
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +955,7 @@ def esmfold(input_file, fp16, chunk_size, max_tokens_per_batch, **shared):
 # to provide tool-specific flags.
 _AUTO_DEFAULTS: dict[str, dict] = {
     "boltz": {},
+    "openfold": {},
     "chai": {},
     "alphafold": {
         "af2_data_dir": str(AF2_DEFAULT_DATA_DIR),
@@ -437,23 +969,170 @@ _AUTO_DEFAULTS: dict[str, dict] = {
 
 @main.command()
 @shared_options
+@click.option("--use-msa-server", is_flag=True, default=False,
+              help="Use remote MSA server (enables Boltz/Chai selection)")
 @backend_options
-def auto(input_file, **shared):
+def auto(protein, dna, rna, ligand, smiles, glycan, use_msa_server, **shared):
     """Auto-discover the best available tool and predict structure.
 
     Checks which prediction tools are installed and selects the best
-    one based on input format, device, and availability.
+    one based on entity types, device, and availability.
+
+    Boltz and Chai are only selected when an MSA source is available
+    (--msa file or --use-msa-server).  Without one, they are skipped
+    in favor of AlphaFold or ESMFold.
 
     \b
-    Priority order (GPU):  Boltz > Chai > AlphaFold > ESMFold
-    Priority order (CPU):  ESMFold > Boltz > Chai > AlphaFold
-    YAML input:            Boltz (only tool supporting YAML)
+    Priority order (GPU, MSA available):  Boltz > OpenFold > Chai > AlphaFold > ESMFold
+    Priority order (GPU, no MSA):         OpenFold > AlphaFold > ESMFold
+    Priority order (CPU):                 ESMFold > others
+    Non-protein entities:                 AlphaFold and ESMFold excluded
     """
-    tool_name = discover_tool(Path(input_file), device=shared.get("device", "gpu"))
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
+    tool_name = _auto_select_tool(
+        entity_list,
+        device=shared.get("device", "gpu"),
+        has_msa=shared.get("msa") is not None,
+        use_msa_server=use_msa_server,
+    )
     click.echo(f"Auto-selected: {tool_name}")
 
     extra = dict(_AUTO_DEFAULTS.get(tool_name, {}))
-    run_prediction(tool_name, extra, input_file=input_file, **shared)
+    if use_msa_server and tool_name in ("boltz", "chai"):
+        extra["use_msa_server"] = True
+    entity_inputs = {
+        "protein": protein, "dna": dna, "rna": rna,
+        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+        "sequence": shared.get("sequence_files", ()),
+    }
+    run_prediction(tool_name, extra, entity_list=entity_list,
+                   entity_inputs=entity_inputs, **shared)
+
+
+# ---------------------------------------------------------------------------
+# preflight subcommand
+# ---------------------------------------------------------------------------
+
+@main.command()
+@click.option("--tool", type=click.Choice(["auto", "boltz", "openfold", "chai", "alphafold", "esmfold"]),
+              default="auto", help="Prediction tool (or 'auto' to resolve)")
+@click.option("--protein", type=click.Path(), default=None,
+              help="Protein FASTA file (used for auto-resolution)")
+@click.option("--msa", type=click.Path(), default=None,
+              help="MSA file (influences auto tool selection)")
+@click.option("--use-msa-server", is_flag=True, default=False,
+              help="MSA server available (influences auto tool selection)")
+@click.option("--device", type=click.Choice(["gpu", "cpu"]), default="gpu",
+              help="Compute device")
+def preflight(tool, protein, msa, use_msa_server, device):
+    """Return resource requirements as JSON for BV-BRC preflight.
+
+    Resolves 'auto' to a concrete tool and returns CPU, memory, runtime,
+    and GPU requirements. Does NOT run any prediction.
+
+    \b
+    Example:
+        predict-structure preflight --tool esmfold --protein input.fasta
+        predict-structure preflight --tool auto --protein input.fasta --use-msa-server
+    """
+    # Resolve tool
+    if tool == "auto":
+        if protein:
+            entity_list = _build_entity_list(
+                protein=(protein,), dna=(), rna=(), ligand=(), smiles=(), glycan=(),
+            )
+        else:
+            # Default to a single-protein entity for preflight estimation
+            entity_list = EntityList()
+            entity_list.add(EntityType.PROTEIN, "X", name="preflight_dummy")
+        resolved = _auto_select_tool(
+            entity_list,
+            device=device,
+            has_msa=msa is not None,
+            use_msa_server=use_msa_server,
+        )
+    else:
+        resolved = tool
+
+    # Get resource requirements from the adapter
+    adapter = get_adapter(resolved)
+    resources = adapter.preflight()
+
+    # Build output with resolved tool and GPU info
+    output = {
+        "resolved_tool": resolved,
+        "needs_gpu": adapter.requires_gpu,
+    }
+    output.update(resources)
+
+    click.echo(json.dumps(output))
+
+
+# ---------------------------------------------------------------------------
+# Provenance post-processing subcommands
+# ---------------------------------------------------------------------------
+
+
+@main.command("finalize-results")
+@click.argument("output_dir", type=click.Path(exists=True, file_okay=False, dir_okay=True))
+@click.option(
+    "--emit-rocrate/--no-emit-rocrate",
+    default=True,
+    help="Emit ro-crate-metadata.json alongside results.json [default: emit]",
+)
+def finalize_results(output_dir, emit_rocrate):
+    """(Re)generate results.json + ro-crate-metadata.json in an existing output dir.
+
+    Relocates any top-level report.html/.json/.pdf into report/ first, then
+    writes results.json (summary + file manifest with sha256), and optionally
+    ro-crate-metadata.json (Process Run Crate provenance).
+
+    Used by the BV-BRC service script after running protein_compare so the
+    manifest includes the freshly generated report files.
+    """
+    import os
+    out = Path(output_dir)
+    move_reports_to_subdir(out)
+    try:
+        results_path = write_results_json(
+            out,
+            command=sys.argv,
+            backend=os.environ.get("PREDICT_STRUCTURE_BACKEND"),
+            container_image=os.environ.get("PREDICT_STRUCTURE_IMAGE"),
+        )
+    except FileNotFoundError as exc:
+        raise click.ClickException(str(exc))
+    click.echo(f"Wrote {results_path}")
+    if emit_rocrate:
+        crate_path = write_ro_crate(out, results_path)
+        if crate_path is not None:
+            click.echo(f"Wrote {crate_path}")
+
+
+@main.command("aggregate-results")
+@click.option(
+    "--in", "inputs", type=click.Path(exists=True), multiple=True, required=True,
+    help="Per-tool results.json files to aggregate",
+)
+@click.option(
+    "-o", "--output", type=click.Path(), required=True,
+    help="Path for the aggregated results.json",
+)
+def aggregate_results(inputs, output):
+    """Aggregate multiple per-tool results.json files into a combined summary.
+
+    Produces a top-level results.json with a "runs" array, where each entry
+    is a full per-tool results.json. Used by the multi-tool CWL workflow.
+    """
+    runs = [json.loads(Path(p).read_text()) for p in inputs]
+    aggregate = {
+        "schema_version": "1.0",
+        "kind": "multi-tool",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "runs": runs,
+    }
+    Path(output).write_text(json.dumps(aggregate, indent=2))
+    click.echo(f"Wrote {output}")
 
 
 if __name__ == "__main__":

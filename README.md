@@ -34,10 +34,9 @@ pip install -e .
 
 | Group | What it adds | Install |
 |-------|-------------|---------|
-| `boltz` | PyYAML (FASTA→YAML conversion) | `pip install -e ".[boltz]"` |
 | `chai` | PyArrow (A3M→Parquet MSA conversion) | `pip install -e ".[chai]"` |
 | `esmfold` | PyTorch, Transformers, Accelerate | `pip install -e ".[esmfold]"` |
-| `cwl` | cwltool, PyYAML | `pip install -e ".[cwl]"` |
+| `cwl` | cwltool | `pip install -e ".[cwl]"` |
 | `dev` | pytest, black, ruff, mypy | `pip install -e ".[dev]"` |
 | `all` | Everything above | `pip install -e ".[all]"` |
 
@@ -45,33 +44,240 @@ pip install -e .
 
 ## Usage
 
-### CLI
+### Entity flags
 
-Each prediction tool is a subcommand with its own options:
+Input is specified via explicit entity flags instead of a positional file argument. Each flag can be repeated to build multi-entity complexes.
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--protein` | file path | Protein FASTA file (repeatable for multi-chain) |
+| `--dna` | file path | DNA FASTA file (repeatable) |
+| `--rna` | file path | RNA FASTA file (repeatable) |
+| `--ligand` | string | Ligand CCD code, e.g. `ATP` (repeatable) |
+| `--smiles` | string | SMILES string (repeatable) |
+| `--glycan` | string | Glycan specification (repeatable) |
+
+A multi-sequence FASTA file passed to `--protein` is treated as a multi-chain complex (not a batch of separate predictions).
+
+### Basic examples
 
 ```bash
+# Protein structure prediction with Boltz-2
+predict-structure boltz --protein input.fasta -o output/
+
+# Protein with ESMFold (single-sequence, CPU-capable)
+predict-structure esmfold --protein input.fasta -o output/ --fp16
+
+# Chai-1 with MSA
+predict-structure chai --protein input.fasta -o output/ --msa alignment.a3m
+
+# AlphaFold 2 (requires database directory)
+predict-structure alphafold --protein input.fasta -o output/ --af2-data-dir /databases
+
 # Auto-discover best available tool
-predict-structure auto input.fasta -o output/
-
-# Boltz-2 (diffusion-based, proteins/DNA/RNA/ligands)
-predict-structure boltz input.fasta -o output/ --num-samples 5 --use-potentials
-
-# Chai-1 (diffusion-based protein prediction)
-predict-structure chai input.fasta -o output/ --use-msa-server
-
-# AlphaFold 2 (MSA-based, high accuracy)
-predict-structure alphafold input.fasta -o output/ --af2-data-dir /databases
-
-# ESMFold (single-sequence, no MSA, CPU-capable)
-predict-structure esmfold input.fasta -o output/ --fp16
+predict-structure auto --protein input.fasta -o output/
 
 # Debug mode — print the command without executing
-predict-structure boltz input.fasta -o output/ --debug
-
-# Per-tool help
-predict-structure boltz --help
-predict-structure auto --help
+predict-structure boltz --protein input.fasta -o output/ --debug
 ```
+
+### Multi-entity complexes
+
+Boltz and Chai support multi-entity predictions with proteins, DNA, RNA, and ligands:
+
+```bash
+# Protein-ligand complex
+predict-structure boltz --protein protein.fasta --ligand ATP -o output/
+
+# Protein-DNA complex
+predict-structure boltz --protein protein.fasta --dna dna.fasta -o output/
+
+# Protein with SMILES ligand
+predict-structure boltz --protein protein.fasta --smiles "CCO" -o output/
+
+# Multi-chain protein + ligand with Chai
+predict-structure chai --protein chainA.fasta --protein chainB.fasta --ligand ATP -o output/
+
+# Protein-RNA complex
+predict-structure boltz --protein protein.fasta --rna rna.fasta -o output/
+```
+
+> **Note:** AlphaFold and ESMFold only support protein entities. Passing `--dna`, `--ligand`, etc. to these tools will produce an error.
+
+### Entity support by tool
+
+| Entity | Boltz-2 | Chai-1 | AlphaFold 2 | ESMFold |
+|--------|---------|--------|-------------|---------|
+| Protein | yes | yes | yes | yes |
+| DNA | yes | yes | - | - |
+| RNA | yes | yes | - | - |
+| Ligand (CCD) | yes | yes | - | - |
+| SMILES | yes | - | - | - |
+| Glycan | - | - | - | - |
+
+### Boltz YAML pass-through
+
+For full Boltz-2 feature support (custom constraints, covalent bonds, etc.), pass a native Boltz YAML manifest via `--protein`:
+
+```bash
+predict-structure boltz --protein complex.yaml -o output/
+```
+
+The CLI detects Boltz YAML files automatically (`.yaml`/`.yml` with `version` and `sequences` keys) and passes them through without conversion.
+
+### Batch predictions with `--job`
+
+The `--job` option runs multiple independent predictions from a YAML spec file:
+
+```bash
+predict-structure --job jobs.yaml -o output/
+```
+
+Each job gets a numbered subdirectory (`job_000/`, `job_001/`, ...). The `--job` flag is exclusive with subcommands — you cannot combine `--job` with `boltz`, `chai`, etc.
+
+#### Job file format
+
+```yaml
+# jobs.yaml
+- protein:
+    - /path/to/protein1.fasta
+  options:
+    num_samples: 5
+    device: gpu
+
+- protein:
+    - /path/to/protein2.fasta
+  ligands:
+    - ATP
+  tool: boltz
+  options:
+    num_samples: 3
+    use_potentials: true
+
+- protein:
+    - /path/to/protein3.fasta
+  dna:
+    - /path/to/dna.fasta
+  tool: chai
+  options:
+    sampling_steps: 100
+
+- protein:
+    - /path/to/protein4.fasta
+  options:
+    device: cpu
+    backend: subprocess
+```
+
+Each job entry supports:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `protein` | list of paths | Protein FASTA files |
+| `dna` | list of paths | DNA FASTA files |
+| `rna` | list of paths | RNA FASTA files |
+| `ligands` | list of strings | Ligand CCD codes |
+| `smiles` | list of strings | SMILES strings |
+| `glycans` | list of strings | Glycan specifications |
+| `tool` | string | Tool name (optional — auto-selected if omitted) |
+| `options` | dict | Any shared or tool-specific options |
+
+### Global options
+
+These options are available on all tool subcommands:
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o`, `--output-dir` | path | (required) | Output directory |
+| `-n`, `--num-samples` | int | 1 | Number of structure samples (diffusion samples for Boltz/Chai) |
+| `--num-recycles` | int | 3 | Recycling iterations |
+| `--seed` | int | none | Random seed |
+| `--msa` | path | none | MSA file (.a3m, .sto, .pqt) |
+| `--output-format` | enum | `pdb` | `pdb` or `mmcif` |
+| `--debug` | flag | off | Print the command instead of executing |
+
+### Execution options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | enum | `subprocess` | `subprocess`, `docker`, or `cwl` |
+| `--device` | enum | `gpu` | `gpu` or `cpu` |
+| `--image` | string | none | Override Docker image (docker backend only) |
+| `--cwl-runner` | string | `cwltool` | CWL runner command (cwl backend only) |
+| `--cwl-tool` | string | none | Path to CWL tool definition (cwl backend only) |
+
+### Tool-specific options
+
+#### Boltz-2
+
+```bash
+predict-structure boltz --protein input.fasta -o output/ \
+  --num-samples 5 \
+  --sampling-steps 200 \
+  --use-msa-server \
+  --msa-server-url https://my-mmseqs-server.com \
+  --use-potentials
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--sampling-steps` | int | 200 | Diffusion sampling steps |
+| `--use-msa-server` | flag | off | Use remote MSA server |
+| `--msa-server-url` | string | none | Custom MSA server URL (implies `--use-msa-server`) |
+| `--use-potentials` | flag | off | Enable potential terms |
+
+#### Chai-1
+
+```bash
+predict-structure chai --protein input.fasta -o output/ \
+  --num-samples 5 \
+  --use-msa-server \
+  --no-esm-embeddings
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--sampling-steps` | int | 200 | Diffusion timesteps |
+| `--use-msa-server` | flag | off | Use remote MSA server |
+| `--msa-server-url` | string | none | Custom MSA server URL (implies `--use-msa-server`) |
+| `--no-esm-embeddings` | flag | off | Disable ESM2 language model embeddings |
+| `--use-templates-server` | flag | off | Use PDB template server |
+| `--constraint-path` | path | none | Constraint JSON file |
+| `--template-hits-path` | path | none | Pre-computed template hits file |
+| `--num-trunk-samples` | int | 1 | Trunk forward passes (independent of `--num-samples` diffusion samples) |
+| `--recycle-msa-subsample` | int | 0 | MSA subsample per recycle (0 = all) |
+| `--no-low-memory` | flag | off | Disable low-memory mode |
+
+#### AlphaFold 2
+
+```bash
+predict-structure alphafold --protein input.fasta -o output/ \
+  --af2-data-dir /databases \
+  --af2-model-preset monomer \
+  --af2-db-preset reduced_dbs
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--af2-data-dir` | path | (required) | AlphaFold database directory (~2 TB) |
+| `--af2-model-preset` | string | `monomer` | `monomer`, `monomer_casp14`, or `multimer` |
+| `--af2-db-preset` | string | `reduced_dbs` | `reduced_dbs` or `full_dbs` |
+| `--af2-max-template-date` | string | `2022-01-01` | Max template date (YYYY-MM-DD) |
+
+#### ESMFold
+
+```bash
+predict-structure esmfold --protein input.fasta -o output/ \
+  --fp16 \
+  --num-recycles 8 \
+  --device cpu
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--fp16` | flag | off | Half-precision (FP16) inference |
+| `--chunk-size` | int | none | Chunk size for long sequences |
+| `--max-tokens-per-batch` | int | none | Max tokens per batch |
 
 ### Auto-discovery
 
@@ -79,22 +285,22 @@ The `auto` subcommand detects which tools are installed and picks the best one:
 
 | Condition | Selection |
 |-----------|-----------|
-| `.yaml`/`.yml` input | Boltz (only tool supporting YAML) |
-| `--device cpu` | ESMFold (others impractical on CPU) |
+| `--device cpu` (protein only) | ESMFold preferred |
+| Non-protein entities present | AlphaFold and ESMFold excluded |
 | GPU available | Boltz > Chai > AlphaFold > ESMFold (accuracy priority) |
 
 AlphaFold is only auto-selected when both the executable and the database directory (`/databases`) are found.
 
-### Custom MSA server
+### Parameter mapping (shared → native)
 
-Boltz and Chai support a custom ColabFold MMseqs2 server URL:
-
-```bash
-predict-structure boltz input.fasta -o output/ \
-  --msa-server-url https://my-mmseqs-server.com
-
-# --msa-server-url implies --use-msa-server
-```
+| Shared Flag | Boltz-2 | Chai-1 | AlphaFold 2 | ESMFold |
+|-------------|---------|--------|-------------|---------|
+| `--output-dir` | `--out_dir` | positional | `--output_dir` | `-o` |
+| `--num-samples` | `--diffusion_samples` | `--num-diffn-samples` | N/A | N/A |
+| `--num-recycles` | `--recycling_steps` | `--num-trunk-recycles` | implicit | `--num-recycles` |
+| `--seed` | N/A | `--seed` | `--random_seed` | N/A |
+| `--device` | `--accelerator` | `--device` | implicit | `--cpu-only` |
+| `--msa` | inject into YAML | `--msa-directory` (a3m→pqt) | `--msa_dir` | ignored |
 
 ### CWL
 
@@ -128,12 +334,16 @@ singularity build predict-structure-bvbrc.sif \
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  CLI  (predict-structure <tool> <input> [OPTIONS])      │
-│  click.group() with per-tool subcommands                │
+│  CLI  (predict-structure <tool> --protein f.fa [OPTS])  │
+│  click.group() with per-tool subcommands + --job batch  │
+├─────────────────────────────────────────────────────────┤
+│  Entity Layer                                           │
+│  EntityList · EntityType · detect_sequence_type          │
+│  --protein/--dna/--rna/--ligand/--smiles/--glycan       │
 ├─────────────────────────────────────────────────────────┤
 │  Adapter Layer                                          │
 │  Boltz │ Chai │ AlphaFold │ ESMFold                     │
-│  Input conversion · Param mapping · Output normalization│
+│  Entity→native format · Param mapping · Output normalize│
 ├─────────────────────────────────────────────────────────┤
 │  Execution Backends                                     │
 │  subprocess │ docker │ cwl                              │
@@ -151,14 +361,16 @@ PredictStructureApp does **not** bundle all tools into a single image. The CLI a
 PredictStructureApp/
 ├── predict_structure/          # Python package
 │   ├── cli.py                  # CLI entry point (click group + subcommands)
+│   ├── entities.py             # Entity data model (EntityType, EntityList, detection)
 │   ├── adapters/               # Per-tool adapters (build_command, normalize_output)
-│   │   ├── base.py             # Abstract BaseAdapter
-│   │   ├── boltz.py            # Boltz-2 (FASTA→YAML, mmCIF→PDB)
-│   │   ├── chai.py             # Chai-1 (A3M→Parquet MSA)
-│   │   ├── alphafold.py        # AlphaFold 2 (database path wiring)
-│   │   └── esmfold.py          # ESMFold (HuggingFace transformers)
-│   ├── converters.py           # Format conversions (FASTA→YAML, A3M→Parquet, mmCIF↔PDB)
+│   │   ├── base.py             # Abstract BaseAdapter with validate_entities()
+│   │   ├── boltz.py            # Boltz-2 (entities→YAML, mmCIF→PDB)
+│   │   ├── chai.py             # Chai-1 (entities→typed FASTA, A3M→Parquet MSA)
+│   │   ├── alphafold.py        # AlphaFold 2 (entities→FASTA, database path wiring)
+│   │   └── esmfold.py          # ESMFold (entities→FASTA, HuggingFace transformers)
+│   ├── converters.py           # Format conversions (entities→YAML/FASTA, A3M→Parquet, mmCIF↔PDB)
 │   ├── normalizers.py          # Unified output layout + confidence.json
+│   ├── config.py               # Tool config loader (tools.yml)
 │   └── backends/               # Execution backends
 │       ├── subprocess.py       # Direct subprocess execution
 │       ├── docker.py           # Docker with volume mounts
@@ -186,14 +398,13 @@ pytest
 # Verbose with coverage
 pytest -v --cov=predict_structure
 
-# Specific test classes
-pytest tests/test_cli.py -v                     # CLI argument parsing
-pytest tests/test_adapters.py -v                # Adapter logic
-pytest tests/test_cwl_tool.py -v                # CWL validation
-pytest tests/test_cwl_backend.py -v             # CWL backend
-
-# CWL validation only
-cwltool --validate cwl/tools/predict-structure.cwl
+# Specific test areas
+pytest tests/test_entities.py -v              # Entity model and detection
+pytest tests/test_cli.py -v                   # CLI argument parsing
+pytest tests/test_adapters.py -v              # Adapter logic
+pytest tests/test_converters.py -v            # Format conversions
+pytest tests/test_cwl_tool.py -v              # CWL validation
+pytest tests/test_cwl_backend.py -v           # CWL backend
 ```
 
 ### BV-BRC Makefile tests

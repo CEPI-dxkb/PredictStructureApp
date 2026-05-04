@@ -1,0 +1,61 @@
+Bootstrap: localimage
+From: /scout/containers/base-gpu.2026-04-16.001.sif
+
+# Build a folding production container from base-gpu.
+# Adds OpenFold, ESMFold, predict-structure CLI, and the dev code.
+#
+# Build:
+#   APPTAINER_TMPDIR=/scout/tmp apptainer build \
+#     /scout/containers/folding_FROM_BASE.sif \
+#     container/folding-from-base.def
+
+%files
+    /home/wilke/Development/PredictStructureApp/predict_structure /app/predict-structure/predict_structure
+    /home/wilke/Development/PredictStructureApp/pyproject.toml /app/predict-structure/pyproject.toml
+    /home/wilke/Development/PredictStructureApp/README.md /app/predict-structure/README.md
+    /home/wilke/Development/PredictStructureApp/cwl /app/predict-structure/cwl
+    /home/wilke/Development/PredictStructureApp/app_specs /app/predict-structure/app_specs
+    /home/wilke/Development/PredictStructureApp/test_data /app/predict-structure/test_data
+
+%post
+    # --- OpenFold 3 ---
+    if [ ! -d /opt/conda-openfold ]; then
+        /opt/miniforge/bin/conda create -y -p /opt/conda-openfold python=3.11
+        /opt/conda-openfold/bin/pip install --no-cache-dir openfold3
+        /opt/miniforge/bin/conda clean -afy
+    fi
+
+    # --- ESMFold (HuggingFace transformers) ---
+    if [ ! -d /opt/conda-esmfold ]; then
+        /opt/miniforge/bin/conda create -y -p /opt/conda-esmfold python=3.11
+        /opt/conda-esmfold/bin/pip install --no-cache-dir 'torch>=2.6' transformers accelerate biopython
+        /opt/miniforge/bin/conda clean -afy
+    fi
+
+    # --- predict-structure CLI ---
+    if [ ! -d /opt/conda-predict ]; then
+        /opt/miniforge/bin/conda create -y -p /opt/conda-predict python=3.12
+        /opt/miniforge/bin/conda clean -afy
+    fi
+
+    cd /app/predict-structure && /opt/conda-predict/bin/pip install --no-cache-dir ".[all]"
+    ln -sf /opt/conda-predict/bin/predict-structure /usr/local/bin/predict-structure
+
+    # Cache / data directories (runtime bind-mounts will overlay these)
+    mkdir -p /input /output /databases /cache
+    chmod 777 /cache
+
+%environment
+    export BOLTZ_CACHE=/local_databases/boltz
+    export CHAI_DOWNLOADS_DIR=/local_databases/chai
+    export HF_HOME=/local_databases/cache
+    export TORCH_HOME=/local_databases/cache
+    export OPENFOLD3_CACHE_DIR=/local_databases/openfold
+
+%labels
+    version 0.2.0-from-base-gpu
+    base base-gpu.2026-04-16.001.sif
+    built 2026-04-20
+
+%runscript
+    exec predict-structure "$@"

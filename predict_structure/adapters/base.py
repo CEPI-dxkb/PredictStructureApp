@@ -1,8 +1,26 @@
 """Abstract base adapter for structure prediction tools."""
 
+from __future__ import annotations
+
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
+
+from predict_structure.entities import EntityList, EntityType
+
+logger = logging.getLogger(__name__)
+
+# Characters expected for each sequence-based entity type
+_VALID_CHARS: dict[EntityType, set[str]] = {
+    EntityType.PROTEIN: set("ACDEFGHIKLMNPQRSTVWXYUBZJO*"),
+    EntityType.DNA: set("ACGTNRYSWKMBDHV"),
+    EntityType.RNA: set("ACGUNRYSWKMBDHV"),
+}
+
+# Characters that distinguish protein from nucleic acid
+_DNA_ONLY = set("ACGTN")
+_PROTEIN_ONLY = set("DEFHIKLMPQRSVWY")  # never appear in DNA
 
 
 class BaseAdapter(ABC):
@@ -26,19 +44,71 @@ class BaseAdapter(ABC):
     #: Whether this tool requires a GPU
     requires_gpu: bool = True
 
+    #: Entity types supported by this tool
+    supported_entities: frozenset[EntityType] = frozenset({EntityType.PROTEIN})
+
+    def validate_entities(self, entity_list: EntityList) -> None:
+        """Check that all entity types in the list are supported by this tool.
+
+        Raises:
+            ValueError: If any entity type is not in ``supported_entities``.
+        """
+        unsupported = entity_list.entity_types - self.supported_entities
+        if unsupported:
+            names = ", ".join(sorted(e.value for e in unsupported))
+            supported = ", ".join(sorted(e.value for e in self.supported_entities))
+            raise ValueError(
+                f"{self.tool_name} does not support entity type(s): {names}. "
+                f"Supported: {supported}"
+            )
+
+    def validate_sequences(self, entity_list: EntityList) -> None:
+        """Warn if sequence characters are inconsistent with declared entity type.
+
+        Checks protein, DNA, and RNA entities against expected character sets.
+        Also detects DNA sequences misclassified as protein (all ACGTN, no
+        protein-only characters, length > 10).
+        Logs warnings but does not raise — callers may use ``--force`` to proceed.
+        """
+        for entity in entity_list:
+            expected_chars = _VALID_CHARS.get(entity.entity_type)
+            if expected_chars is None:
+                continue  # ligand, SMILES, glycan — no character validation
+            upper = set(entity.value.upper())
+            invalid = upper - expected_chars
+            if invalid:
+                logger.warning(
+                    "Sequence '%s' contains characters %s unexpected for %s",
+                    entity.name or entity.chain_id,
+                    "".join(sorted(invalid)),
+                    entity.entity_type.value,
+                )
+            # Detect DNA masquerading as protein: all DNA chars, no protein-only, long
+            if (
+                entity.entity_type == EntityType.PROTEIN
+                and upper <= _DNA_ONLY
+                and not (upper & _PROTEIN_ONLY)
+                and len(entity.value) > 10
+            ):
+                logger.warning(
+                    "Sequence '%s' looks like DNA (all ACGTN, %d nt) but declared as protein",
+                    entity.name or entity.chain_id,
+                    len(entity.value),
+                )
+
     @abstractmethod
     def prepare_input(
         self,
-        input_path: Path,
+        entity_list: EntityList,
         output_dir: Path,
         *,
         msa_path: Path | None = None,
         **kwargs: Any,
     ) -> Path:
-        """Convert universal input (FASTA + optional MSA) to tool-native format.
+        """Convert entity list to tool-native input format.
 
         Args:
-            input_path: Path to input FASTA or tool-native file.
+            entity_list: Entities to predict (proteins, DNA, RNA, ligands, etc.).
             output_dir: Working directory for prepared files.
             msa_path: Optional MSA file (.a3m, .sto, .pqt).
 

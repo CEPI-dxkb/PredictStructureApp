@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from predict_structure.adapters.base import BaseAdapter
+from predict_structure.converters import entities_to_fasta
+from predict_structure.entities import EntityList, EntityType
 from predict_structure.normalizers import normalize_esmfold_output
 
 logger = logging.getLogger(__name__)
@@ -23,19 +25,22 @@ class ESMFoldAdapter(BaseAdapter):
     tool_name: str = "esmfold"
     supports_msa: bool = False
     requires_gpu: bool = False
+    supported_entities: frozenset[EntityType] = frozenset({EntityType.PROTEIN})
 
     def prepare_input(
         self,
-        input_path: Path,
+        entity_list: EntityList,
         output_dir: Path,
         *,
         msa_path: Path | None = None,
         **kwargs: Any,
     ) -> Path:
-        """FASTA pass-through. Warn if MSA provided."""
+        """Convert entity list to plain FASTA. Warn if MSA provided."""
         if msa_path is not None:
             logger.warning("ESMFold does not use MSA input; ignoring --msa")
-        return input_path
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return entities_to_fasta(entity_list, output_dir / "input.fasta")
 
     def build_command(
         self,

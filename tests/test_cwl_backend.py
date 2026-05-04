@@ -1,8 +1,7 @@
 """Tests for the CWL execution backend.
 
-All tests mock subprocess.run to avoid requiring cwltool at runtime.
-The CWL backend now dispatches to per-tool CWL definitions (boltz.cwl,
-chailab.cwl, etc.) rather than the unified predict-structure.cwl.
+Tests cover both the unified CWL approach (build_unified_job / run_unified)
+and the legacy per-tool approach (_build_job_yaml / run).
 """
 
 from __future__ import annotations
@@ -41,6 +40,12 @@ class TestCWLBackendRegistry:
         backend = get_backend("cwl", cwl_tool=str(tool_path))
         assert backend._cwl_tool_override == str(tool_path)
 
+    def test_get_backend_cwl_with_singularity(self):
+        from predict_structure.backends import get_backend
+
+        backend = get_backend("cwl", use_singularity=True)
+        assert backend._use_singularity is True
+
 
 class TestCWLBackendDefaults:
     """Verify default configuration."""
@@ -51,22 +56,29 @@ class TestCWLBackendDefaults:
         backend = CWLBackend()
         assert backend._runner == "cwltool"
 
-    def test_per_tool_cwl_definitions_exist(self):
-        """Each tool has a CWL definition in its app repo."""
+    def test_default_no_singularity(self):
+        from predict_structure.backends.cwl import CWLBackend
+
+        backend = CWLBackend()
+        assert backend._use_singularity is False
+
+    def test_cwl_definitions_exist(self):
+        """All tools point to a CWL definition that exists."""
         from predict_structure.config import get_tools, get_cwl_path
 
         for tool in get_tools():
             cwl_path = get_cwl_path(tool)
             assert cwl_path.exists(), f"CWL tool for '{tool}' not found at {cwl_path}"
 
-    def test_resolves_per_tool_cwl(self):
-        from predict_structure.backends.cwl import CWLBackend
+    def test_each_tool_has_own_cwl(self):
+        """Each tool has its own per-tool CWL definition."""
+        from predict_structure.config import get_tools, get_cwl_path
 
-        backend = CWLBackend()
-        for tool in ("boltz", "chai", "alphafold", "esmfold"):
-            cwl_path = backend._resolve_cwl_tool(tool)
-            assert Path(cwl_path).exists()
-            assert tool in cwl_path.lower() or tool[:4] in cwl_path.lower()
+        for tool in get_tools():
+            cwl_path = get_cwl_path(tool)
+            assert tool in cwl_path.stem or tool[:4] in cwl_path.stem, (
+                f"CWL path for '{tool}' should contain tool name: {cwl_path}"
+            )
 
     def test_override_takes_precedence(self, tmp_path):
         from predict_structure.backends.cwl import CWLBackend
@@ -77,8 +89,262 @@ class TestCWLBackendDefaults:
         assert backend._resolve_cwl_tool("boltz") == str(override)
 
 
-class TestBuildJobYAML:
-    """Test command-to-job-YAML conversion with native CWL input names."""
+class TestBuildUnifiedJob:
+    """Test the unified job builder for predict-structure.cwl."""
+
+    def test_basic_protein_job(self, tmp_path):
+        from predict_structure.backends.cwl import CWLBackend
+
+        fasta = tmp_path / "test.fasta"
+        fasta.write_text(">A\nMKTAYIAKQRQISFVKSHFS\n")
+
+        backend = CWLBackend()
+        job = backend.build_unified_job(
+            "boltz",
+            {"protein": (str(fasta),), "dna": (), "rna": (),
+             "ligand": (), "smiles": (), "glycan": ()},
+            output_dir="/tmp/output",
+        )
+
+        assert job["tool"] == "boltz"
+        assert job["output_dir"] == "/tmp/output"
+        assert len(job["protein"]) == 1
+        assert job["protein"][0]["class"] == "File"
+        assert job["num_samples"] == 1
+        assert job["num_recycles"] == 3
+        assert job["device"] == "gpu"
+
+    def test_multi_entity_job(self, tmp_path):
+        from predict_structure.backends.cwl import CWLBackend
+
+        fasta1 = tmp_path / "chain_a.fasta"
+        fasta1.write_text(">A\nMKTAYIAKQRQISFVKSHFS\n")
+        fasta2 = tmp_path / "chain_b.fasta"
+        fasta2.write_text(">B\nMGSSHHHHHHSSGLVPRGS\n")
+
+        backend = CWLBackend()
+        job = backend.build_unified_job(
+            "boltz",
+            {"protein": (str(fasta1), str(fasta2)), "dna": (), "rna": (),
+             "ligand": ("ATP",), "smiles": (), "glycan": ()},
+            output_dir="/tmp/output",
+        )
+
+        assert len(job["protein"]) == 2
+        assert job["ligand"] == ["ATP"]
+
+    def test_tool_specific_options_mapped(self, tmp_path):
+        from predict_structure.backends.cwl import CWLBackend
+
+        fasta = tmp_path / "test.fasta"
+        fasta.write_text(">A\nMKTAYIAKQRQISFVKSHFS\n")
+
+        backend = CWLBackend()
+        job = backend.build_unified_job(
+            "boltz",
+            {"protein": (str(fasta),), "dna": (), "rna": (),
+             "ligand": (), "smiles": (), "glycan": ()},
+            output_dir="/tmp/output",
+            boltz_use_potentials=True,
+            sampling_steps=200,
+        )
+
+        # boltz_use_potentials → use_potentials
+        assert job["use_potentials"] is True
+        assert job["sampling_steps"] == 200
+
+    def test_esmfold_options_mapped(self, tmp_path):
+        from predict_structure.backends.cwl import CWLBackend
+
+        fasta = tmp_path / "test.fasta"
+        fasta.write_text(">A\nMKTAYIAKQRQISFVKSHFS\n")
+
+        backend = CWLBackend()
+        job = backend.build_unified_job(
+            "esmfold",
+            {"protein": (str(fasta),), "dna": (), "rna": (),
+             "ligand": (), "smiles": (), "glycan": ()},
+            output_dir="/tmp/output",
+            esm_fp16=True,
+            esm_chunk_size=128,
+            esm_max_tokens=1024,
+        )
+
+        assert job["fp16"] is True
+        assert job["chunk_size"] == 128
+        assert job["max_tokens_per_batch"] == 1024
+
+    def test_alphafold_data_dir_as_directory(self, tmp_path):
+        from predict_structure.backends.cwl import CWLBackend
+
+        fasta = tmp_path / "test.fasta"
+        fasta.write_text(">A\nMKTAYIAKQRQISFVKSHFS\n")
+
+        backend = CWLBackend()
+        job = backend.build_unified_job(
+            "alphafold",
+            {"protein": (str(fasta),), "dna": (), "rna": (),
+             "ligand": (), "smiles": (), "glycan": ()},
+            output_dir="/tmp/output",
+            af2_data_dir="/databases",
+            af2_model_preset="monomer",
+        )
+
+        assert job["af2_data_dir"]["class"] == "Directory"
+        assert job["af2_model_preset"] == "monomer"
+
+    def test_seed_omitted_when_none(self, tmp_path):
+        from predict_structure.backends.cwl import CWLBackend
+
+        fasta = tmp_path / "test.fasta"
+        fasta.write_text(">A\nMKTAYIAKQRQISFVKSHFS\n")
+
+        backend = CWLBackend()
+        job = backend.build_unified_job(
+            "boltz",
+            {"protein": (str(fasta),), "dna": (), "rna": (),
+             "ligand": (), "smiles": (), "glycan": ()},
+            output_dir="/tmp/output",
+        )
+
+        assert "seed" not in job
+
+    def test_seed_included_when_set(self, tmp_path):
+        from predict_structure.backends.cwl import CWLBackend
+
+        fasta = tmp_path / "test.fasta"
+        fasta.write_text(">A\nMKTAYIAKQRQISFVKSHFS\n")
+
+        backend = CWLBackend()
+        job = backend.build_unified_job(
+            "boltz",
+            {"protein": (str(fasta),), "dna": (), "rna": (),
+             "ligand": (), "smiles": (), "glycan": ()},
+            output_dir="/tmp/output",
+            seed=42,
+        )
+
+        assert job["seed"] == 42
+
+    def test_msa_included_as_file(self, tmp_path):
+        from predict_structure.backends.cwl import CWLBackend
+
+        fasta = tmp_path / "test.fasta"
+        fasta.write_text(">A\nMKTAYIAKQRQISFVKSHFS\n")
+        msa = tmp_path / "align.a3m"
+        msa.write_text(">A\nMKTAYIAKQRQISFVKSHFS\n")
+
+        backend = CWLBackend()
+        job = backend.build_unified_job(
+            "chai",
+            {"protein": (str(fasta),), "dna": (), "rna": (),
+             "ligand": (), "smiles": (), "glycan": ()},
+            output_dir="/tmp/output",
+            msa=str(msa),
+        )
+
+        assert job["msa"]["class"] == "File"
+
+    def test_false_options_excluded(self, tmp_path):
+        from predict_structure.backends.cwl import CWLBackend
+
+        fasta = tmp_path / "test.fasta"
+        fasta.write_text(">A\nMKTAYIAKQRQISFVKSHFS\n")
+
+        backend = CWLBackend()
+        job = backend.build_unified_job(
+            "boltz",
+            {"protein": (str(fasta),), "dna": (), "rna": (),
+             "ligand": (), "smiles": (), "glycan": ()},
+            output_dir="/tmp/output",
+            boltz_use_potentials=False,
+            use_msa_server=False,
+        )
+
+        assert "use_potentials" not in job
+        assert "use_msa_server" not in job
+
+
+class TestCWLBackendRunUnified:
+    """Test run_unified() with mocked subprocess."""
+
+    @patch("predict_structure.backends.cwl.subprocess.run")
+    def test_invokes_cwltool(self, mock_run, tmp_path):
+        from predict_structure.backends.cwl import CWLBackend
+
+        mock_run.return_value = MagicMock(returncode=0)
+        # Use explicit cwl_tool override to target the unified CWL definition
+        unified_cwl = tmp_path / "predict-structure.cwl"
+        unified_cwl.touch()
+        backend = CWLBackend(cwl_tool=str(unified_cwl))
+
+        fasta = tmp_path / "test.fasta"
+        fasta.write_text(">A\nMKTAYIAKQRQISFVKSHFS\n")
+
+        job = backend.build_unified_job(
+            "boltz",
+            {"protein": (str(fasta),), "dna": (), "rna": (),
+             "ligand": (), "smiles": (), "glycan": ()},
+            output_dir=str(tmp_path / "output"),
+        )
+        rc = backend.run_unified(job, tool_name="boltz")
+
+        assert rc == 0
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args[0][0]
+        assert call_args[0] == "cwltool"
+        assert "predict-structure.cwl" in call_args[1]
+
+    @patch("predict_structure.backends.cwl.subprocess.run")
+    def test_singularity_flag(self, mock_run, tmp_path):
+        from predict_structure.backends.cwl import CWLBackend
+
+        mock_run.return_value = MagicMock(returncode=0)
+        backend = CWLBackend(use_singularity=True)
+
+        fasta = tmp_path / "test.fasta"
+        fasta.write_text(">A\nMKTAYIAKQRQISFVKSHFS\n")
+
+        job = backend.build_unified_job(
+            "esmfold",
+            {"protein": (str(fasta),), "dna": (), "rna": (),
+             "ligand": (), "smiles": (), "glycan": ()},
+            output_dir=str(tmp_path / "output"),
+        )
+        backend.run_unified(job, tool_name="esmfold")
+
+        call_args = mock_run.call_args[0][0]
+        assert "--singularity" in call_args
+
+    @patch("predict_structure.backends.cwl.subprocess.run")
+    def test_job_yaml_written(self, mock_run, tmp_path):
+        from predict_structure.backends.cwl import CWLBackend
+
+        mock_run.return_value = MagicMock(returncode=0)
+        backend = CWLBackend()
+
+        fasta = tmp_path / "test.fasta"
+        fasta.write_text(">A\nMKTAYIAKQRQISFVKSHFS\n")
+        out_dir = tmp_path / "output"
+
+        job = backend.build_unified_job(
+            "boltz",
+            {"protein": (str(fasta),), "dna": (), "rna": (),
+             "ligand": (), "smiles": (), "glycan": ()},
+            output_dir=str(out_dir / "raw"),
+            sampling_steps=200,
+        )
+        backend.run_unified(job, tool_name="boltz", output_dir=str(out_dir))
+
+        job_path = out_dir / "job.yml"
+        assert job_path.exists()
+        job_doc = yaml.safe_load(job_path.read_text())
+        assert job_doc["tool"] == "boltz"
+        assert job_doc["sampling_steps"] == 200
+
+
+class TestBuildJobYAMLLegacy:
+    """Test legacy command-to-job-YAML conversion (backward compat)."""
 
     def test_boltz_command(self):
         from predict_structure.backends.cwl import CWLBackend
@@ -91,11 +357,11 @@ class TestBuildJobYAML:
         ]
         job = backend._build_job_yaml(command, tool_name="boltz")
 
-        # No "tool" key — the CWL definition IS the tool
         assert "tool" not in job
         assert job["input_file"]["class"] == "File"
         assert job["input_file"]["path"] == "/data/input.yaml"
-        assert job["output_dir"] == "/data/output"
+        # CWL uses relative output path
+        assert job["output_dir"] == "output"
         assert job["diffusion_samples"] == 3
 
     def test_esmfold_command(self):
@@ -112,7 +378,7 @@ class TestBuildJobYAML:
         assert "tool" not in job
         assert job["sequences"]["class"] == "File"
         assert job["sequences"]["path"] == "/data/input.fasta"
-        assert job["output_dir"] == "/data/output"
+        assert job["output_dir"] == "output"
         assert job["num_recycles"] == 4
 
     def test_chai_positional_output(self):
@@ -132,24 +398,11 @@ class TestBuildJobYAML:
         assert "tool" not in job
         assert job["input_fasta"]["class"] == "File"
         assert job["input_fasta"]["path"] == "/data/input.fasta"
-        assert job["output_directory"] == "/data/output"
+        assert job["output_directory"] == "output"
         assert job["num_diffn_samples"] == 5
         assert job["num_trunk_recycles"] == 3
         assert job["num_diffn_timesteps"] == 200
         assert job["device"] == "cuda"
-        assert job["use_msa_server"] is True
-
-    def test_boltz_use_msa_server_boolean(self):
-        from predict_structure.backends.cwl import CWLBackend
-
-        backend = CWLBackend()
-        command = [
-            "boltz", "predict", "/data/input.yaml",
-            "--out_dir", "/data/output",
-            "--use_msa_server",
-        ]
-        job = backend._build_job_yaml(command, tool_name="boltz")
-
         assert job["use_msa_server"] is True
 
     def test_alphafold_with_data_dir(self):
@@ -173,35 +426,19 @@ class TestBuildJobYAML:
         assert "tool" not in job
         assert job["fasta_paths"]["class"] == "File"
         assert job["fasta_paths"]["path"] == "/data/input.fasta"
-        assert job["output_dir"] == "/data/output"
+        assert job["output_dir"] == "output"
         assert job["data_dir"] == "/databases"
         assert job["model_preset"] == "monomer"
         assert job["use_gpu_relax"] is True
-        # Database sub-paths should be skipped (derived from data_dir)
         assert "uniref90_database_path" not in job
         assert "pdb70_database_path" not in job
 
-    def test_skips_unknown_flags(self):
-        from predict_structure.backends.cwl import CWLBackend
 
-        backend = CWLBackend()
-        command = [
-            "boltz", "predict", "/data/input.yaml",
-            "--out_dir", "/data/output",
-            "--backend", "subprocess",
-            "--image", "my/image:latest",
-        ]
-        job = backend._build_job_yaml(command, tool_name="boltz")
-
-        assert "backend" not in job
-        assert "image" not in job
-
-
-class TestCWLBackendRun:
-    """Test the run() method with mocked subprocess."""
+class TestCWLBackendRunLegacy:
+    """Test the legacy run() method with mocked subprocess."""
 
     @patch("predict_structure.backends.cwl.subprocess.run")
-    def test_invokes_per_tool_cwl(self, mock_run):
+    def test_invokes_cwl(self, mock_run):
         from predict_structure.backends.cwl import CWLBackend
 
         mock_run.return_value = MagicMock(returncode=0)
@@ -246,27 +483,6 @@ class TestCWLBackendRun:
         assert call_args[0] == "toil-cwl-runner"
 
     @patch("predict_structure.backends.cwl.subprocess.run")
-    def test_job_yaml_written_to_disk(self, mock_run):
-        from predict_structure.backends.cwl import CWLBackend
-
-        mock_run.return_value = MagicMock(returncode=0)
-        backend = CWLBackend()
-
-        backend.run(
-            ["boltz", "predict", "/data/input.yaml",
-             "--out_dir", "/data/output",
-             "--diffusion_samples", "3"],
-            tool_name="boltz",
-        )
-
-        job_path = Path(mock_run.call_args[0][0][2])
-        assert job_path.exists()
-        job_doc = yaml.safe_load(job_path.read_text())
-        assert "tool" not in job_doc
-        assert job_doc["input_file"]["path"] == "/data/input.yaml"
-        assert job_doc["diffusion_samples"] == 3
-
-    @patch("predict_structure.backends.cwl.subprocess.run")
     def test_timeout_passed(self, mock_run):
         from predict_structure.backends.cwl import CWLBackend
 
@@ -280,18 +496,3 @@ class TestCWLBackendRun:
         )
 
         assert mock_run.call_args[1]["timeout"] == 3600
-
-    @patch("predict_structure.backends.cwl.subprocess.run")
-    def test_esmfold_resolves_to_esmfold_cwl(self, mock_run):
-        from predict_structure.backends.cwl import CWLBackend
-
-        mock_run.return_value = MagicMock(returncode=0)
-        backend = CWLBackend()
-
-        backend.run(
-            ["esm-fold-hf", "-i", "/data/input.fasta", "-o", "/data/output"],
-            tool_name="esmfold",
-        )
-
-        call_args = mock_run.call_args[0][0]
-        assert "esmfold.cwl" in call_args[1]

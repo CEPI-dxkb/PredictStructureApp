@@ -1,0 +1,10 @@
+# Auto mode — protein + ligand, GPU, MSA (should select Boltz)
+tool: auto
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+ligand:
+  - ATP
+output_dir: output
+device: gpu
+use_msa_server: true

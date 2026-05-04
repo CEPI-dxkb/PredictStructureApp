@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "predict-structure"
-version = "0.1.0"
-description = "Unified protein structure prediction CLI for BV-BRC (Boltz-2, Chai-1, AlphaFold2, ESMFold)"
+version = "0.2.0"
+description = "Unified protein structure prediction CLI for BV-BRC (Boltz-2, OpenFold 3, Chai-1, AlphaFold 2, ESMFold)"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -29,33 +29,36 @@ dependencies = [
     "biopython>=1.80",
     "numpy>=1.23",
     "pandas>=1.5",
+    "pyarrow>=12.0",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
-boltz = [
-    "pyyaml>=6.0",
-]
-chai = [
-    "pyarrow>=12.0",
-]
 esmfold = [
     "torch>=2.0",
     "transformers>=4.30",
     "accelerate>=0.20",
 ]
 cwl = [
-    "pyyaml>=6.0",
     "cwltool>=3.1",
+]
+provenance = [
+    "rocrate>=0.9",
 ]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "pytest-timeout>=2.2",
+    "pytest-xdist>=3.5",
+    "pytest-json-report>=1.5",
+    "filelock>=3.12",
+    "jsonschema>=4.17",
     "black>=23.0",
     "ruff>=0.1",
     "mypy>=1.0",
 ]
 all = [
-    "predict-structure[boltz,chai,cwl,esmfold,dev]",
+    "predict-structure[cwl,esmfold,dev,provenance]",
 ]
 
 [project.scripts]
@@ -67,6 +70,9 @@ Repository = "https://github.com/CEPI-dxkb/PredictStructureApp"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["predict_structure*"]
+
+[tool.setuptools.package-data]
+predict_structure = ["tools.yml"]
 
 [tool.black]
 line-length = 99
@@ -93,4 +99,15 @@ markers = [
     "cwl: CWL validation tests (no Docker or GPU needed)",
     "docker: requires Docker daemon",
     "gpu: requires GPU hardware",
+    "slow: tests taking > 5 minutes (AlphaFold, full Boltz)",
+    "container: requires Apptainer container",
+    "workspace: requires BV-BRC workspace token",
+    "phase1: Phase 1 native tool tests",
+    "phase2: Phase 2 CLI integration tests",
+    "phase3: Phase 3 service script + workspace tests",
+    "tier1: smoke -- small protein, every tool, every layer",
+    "tier2: functional -- medium protein (~200-300 aa), full pipeline",
+    "tier3: multi-entity -- protein + ligand/DNA/RNA at small size",
+    "tier4: multimer -- multi-chain protein",
+    "tier5: large -- ~500 aa scaling regression",
 ]

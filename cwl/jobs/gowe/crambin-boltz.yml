@@ -1,0 +1,11 @@
+input_file:
+  class: File
+  path: ../../../test_data/simple_protein.fasta
+output_dir: output
+diffusion_samples: 1
+recycling_steps: 3
+sampling_steps: 200
+output_format: mmcif
+write_full_pae: true
+accelerator: gpu
+use_msa_server: true

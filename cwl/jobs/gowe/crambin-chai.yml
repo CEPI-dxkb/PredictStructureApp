@@ -1,0 +1,9 @@
+input_fasta:
+  class: File
+  path: ../../../test_data/simple_protein.fasta
+output_directory: output
+num_diffn_samples: 1
+num_trunk_recycles: 3
+num_diffn_timesteps: 200
+device: cuda
+use_msa_server: true

@@ -32,6 +32,7 @@ def write_confidence_json(
     plddt_mean: float,
     ptm: float | None,
     per_residue_plddt: list[float],
+    per_atom_plddt: list[float] | None = None,
 ) -> Path:
     """Write standardized confidence metrics.
 
@@ -40,6 +41,11 @@ def write_confidence_json(
         plddt_mean: Average per-residue confidence (0-100 scale).
         ptm: Predicted TM-score (None if unavailable).
         per_residue_plddt: Per-residue pLDDT array (0-100 scale).
+        per_atom_plddt: Optional per-atom pLDDT array, ordered to match
+            ATOM records in model_1.pdb. Length >= per_residue_plddt length.
+            For AF3-style tools (Boltz, Chai, OpenFold) this has true per-atom
+            values; for AF2/ESMFold the residue value is replicated across
+            each residue's atoms.
 
     Returns:
         Path to confidence.json.
@@ -50,6 +56,13 @@ def write_confidence_json(
         "ptm": round(ptm, 4) if ptm is not None else None,
         "per_residue_plddt": [round(v, 2) for v in per_residue_plddt],
     }
+    if per_atom_plddt is not None:
+        if len(per_atom_plddt) < len(per_residue_plddt):
+            raise ValueError(
+                f"per_atom_plddt ({len(per_atom_plddt)}) shorter than "
+                f"per_residue_plddt ({len(per_residue_plddt)})"
+            )
+        data["per_atom_plddt"] = [round(v, 2) for v in per_atom_plddt]
     path.write_text(json.dumps(data, indent=2))
     return path
 
@@ -85,18 +98,56 @@ def write_metadata_json(
     return path
 
 
-def _extract_ca_bfactors(pdb_path: Path) -> list[float]:
-    """Extract B-factors from CA atoms in a PDB file."""
+def _extract_bfactors(pdb_path: Path) -> tuple[list[float], list[float]]:
+    """Extract per-residue and per-atom B-factors from a PDB file in one pass.
+
+    Hetatms (ligands, waters) are excluded from both lists. Only the first
+    model is read.
+
+    Per-residue convention:
+      - Protein residues: CA atom's B-factor (standard pLDDT convention).
+      - DNA/RNA residues: C1' (sugar carbon; standard backbone reference).
+      - Fallback (no CA or C1'): first atom in the residue.
+
+    Returns:
+        (per_residue_bfactors, per_atom_bfactors)
+    """
     parser = PDBParser(QUIET=True)
     structure = parser.get_structure("s", str(pdb_path))
-    bfactors = []
+    per_residue: list[float] = []
+    all_atom: list[float] = []
     for model in structure:
         for chain in model:
             for residue in chain:
+                # Biopython residue.id is (hetflag, resseq, icode);
+                # " " means a standard residue, anything else is a hetatm.
+                if residue.id[0] != " ":
+                    continue
+                residue_atoms = list(residue)
+                if not residue_atoms:
+                    continue
+                all_atom.extend(a.get_bfactor() for a in residue_atoms)
+                # Pick a representative atom: CA for protein, C1' for
+                # nucleic acids, else first atom.
                 if "CA" in residue:
-                    bfactors.append(residue["CA"].get_bfactor())
+                    rep = residue["CA"]
+                elif "C1'" in residue:
+                    rep = residue["C1'"]
+                else:
+                    rep = residue_atoms[0]
+                per_residue.append(rep.get_bfactor())
         break  # first model only
-    return bfactors
+    return per_residue, all_atom
+
+
+def _extract_ca_bfactors(pdb_path: Path) -> list[float]:
+    """Return per-residue pLDDT (thin wrapper for back-compat)."""
+    return _extract_bfactors(pdb_path)[0]
+
+
+def _extract_all_atom_bfactors(pdb_path: Path) -> list[float]:
+    """Return per-atom pLDDT (thin wrapper for back-compat)."""
+    return _extract_bfactors(pdb_path)[1]
 
 
 def _copy_raw(raw_dir: Path, output_dir: Path) -> None:
@@ -107,19 +158,56 @@ def _copy_raw(raw_dir: Path, output_dir: Path) -> None:
     shutil.copytree(str(raw_dir), str(dest))
 
 
+def move_reports_to_subdir(output_dir: Path) -> Path | None:
+    """Relocate protein_compare report files into output_dir/report/.
+
+    `protein_compare characterize -o <prefix>` writes `<prefix>.html`,
+    `<prefix>.json`, `<prefix>.pdf` at the top level. For a unified layout
+    we move any `report.{html,json,pdf}` into a `report/` subdir so the
+    top level stays uniformly machine-readable and `report.json` doesn't
+    collide with `results.json`.
+
+    No-op if no report files are present. Safe to call multiple times.
+
+    Returns:
+        Path to the `report/` directory if any reports were moved, else None.
+    """
+    report_names = ("report.html", "report.json", "report.pdf")
+    moved = False
+    dest = output_dir / "report"
+    for name in report_names:
+        src = output_dir / name
+        if src.is_file():
+            dest.mkdir(exist_ok=True)
+            shutil.move(str(src), str(dest / name))
+            moved = True
+    return dest if moved else None
+
+
 def normalize_boltz_output(raw_dir: Path, output_dir: Path) -> Path:
     """Normalize Boltz-2 output to standardized layout.
 
-    Raw structure:
-        raw_dir/predictions/{name}/{name}_model_0.cif
-        raw_dir/predictions/{name}/confidence_{name}_model_0.json
+    Raw structure (Boltz-2 nests under boltz_results_{input_stem}/):
+        raw_dir/boltz_results_{stem}/predictions/{name}/{name}_model_0.cif
+        raw_dir/boltz_results_{stem}/predictions/{name}/confidence_{name}_model_0.json
+
+    Also handles the flat layout for backward compatibility:
+        raw_dir/predictions/{name}/...
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Find the predictions subdirectory
+    # Find the predictions subdirectory — check flat first, then boltz_results_*
     pred_dir = raw_dir / "predictions"
     if not pred_dir.exists():
-        raise FileNotFoundError(f"No predictions/ directory in {raw_dir}")
+        # Boltz-2 nests output under boltz_results_{input_stem}/
+        results_dirs = sorted(raw_dir.glob("boltz_results_*/predictions"))
+        if results_dirs:
+            pred_dir = results_dirs[0]
+        else:
+            raise FileNotFoundError(
+                f"No predictions/ directory in {raw_dir} "
+                f"(also checked boltz_results_*/predictions)"
+            )
 
     # Get first (usually only) prediction subdirectory
     subdirs = [d for d in pred_dir.iterdir() if d.is_dir()]
@@ -141,22 +229,51 @@ def normalize_boltz_output(raw_dir: Path, output_dir: Path) -> Path:
     # Convert CIF → PDB
     mmcif_to_pdb(cif_dst, output_dir / "model_1.pdb")
 
-    # Extract confidence
+    # Extract confidence from JSON + per-residue pLDDT from NPZ
     conf_files = list(pred_subdir.glob(f"confidence_{name}_model_0.json"))
     if not conf_files:
         conf_files = list(pred_subdir.glob("confidence_*.json"))
 
-    if conf_files:
-        conf_data = json.loads(conf_files[0].read_text())
-        plddt_array = conf_data.get("plddt", [])
+    plddt_array: list[float] = []
+    plddt_mean = 0.0
+    ptm = None
+
+    # Per-residue pLDDT from NPZ (Boltz-2 writes plddt_{name}_model_0.npz)
+    plddt_npz = list(pred_subdir.glob(f"plddt_{name}_model_0.npz"))
+    if not plddt_npz:
+        plddt_npz = list(pred_subdir.glob("plddt_*.npz"))
+    if plddt_npz:
+        plddt_data = np.load(str(plddt_npz[0]))
+        plddt_array = plddt_data["plddt"].flatten().tolist()
         # Scale 0-1 → 0-100 if needed
         if plddt_array and max(plddt_array) <= 1.0:
             plddt_array = [v * 100 for v in plddt_array]
         plddt_mean = sum(plddt_array) / len(plddt_array) if plddt_array else 0.0
+
+    if conf_files:
+        conf_data = json.loads(conf_files[0].read_text())
         ptm = conf_data.get("ptm")
-        write_confidence_json(output_dir, plddt_mean, ptm, plddt_array)
+        # Use complex_plddt as mean if per-residue not available
+        if not plddt_array:
+            cplddt = conf_data.get("complex_plddt", conf_data.get("plddt"))
+            if isinstance(cplddt, list):
+                plddt_array = cplddt
+                if plddt_array and max(plddt_array) <= 1.0:
+                    plddt_array = [v * 100 for v in plddt_array]
+                plddt_mean = sum(plddt_array) / len(plddt_array) if plddt_array else 0.0
+            elif isinstance(cplddt, (int, float)):
+                plddt_mean = cplddt * 100 if cplddt <= 1.0 else cplddt
+
+    if plddt_array or ptm is not None:
+        _, per_atom = _extract_bfactors(output_dir / "model_1.pdb")
+        # Apply the same 0-1 -> 0-100 heuristic as per-residue so both
+        # arrays share the same scale.
+        if per_atom and max(per_atom) <= 1.0:
+            per_atom = [v * 100 for v in per_atom]
+        write_confidence_json(output_dir, plddt_mean, ptm, plddt_array,
+                              per_atom_plddt=per_atom)
     else:
-        logger.warning("No confidence JSON found in %s", pred_subdir)
+        logger.warning("No confidence data found in %s", pred_subdir)
 
     _copy_raw(raw_dir, output_dir)
     return output_dir
@@ -180,78 +297,100 @@ def normalize_chai_output(raw_dir: Path, output_dir: Path) -> Path:
     shutil.copy2(str(cif_src), str(cif_dst))
 
     # Convert CIF → PDB
-    mmcif_to_pdb(cif_dst, output_dir / "model_1.pdb")
+    pdb_dst = output_dir / "model_1.pdb"
+    mmcif_to_pdb(cif_dst, pdb_dst)
 
-    # Extract confidence from NPZ
+    # Extract confidence from NPZ + PDB B-factors
+    ptm = None
     score_files = sorted(raw_dir.glob("scores.model_idx_*.npz"))
     if score_files:
         data = np.load(str(score_files[0]))
-        plddt_array = data["plddt"].flatten().tolist()
-        # Scale 0-1 → 0-100 if needed
-        if plddt_array and max(plddt_array) <= 1.0:
-            plddt_array = [v * 100 for v in plddt_array]
-        plddt_mean = sum(plddt_array) / len(plddt_array) if plddt_array else 0.0
-        ptm = float(data["ptm"]) if "ptm" in data else None
-        write_confidence_json(output_dir, plddt_mean, ptm, plddt_array)
-    else:
-        logger.warning("No scores NPZ found in %s", raw_dir)
+        ptm = float(data["ptm"].item()) if "ptm" in data else None
+
+    # Per-residue (CA) and per-atom pLDDT from PDB B-factors (Chai stores 0-100)
+    per_residue, per_atom = _extract_bfactors(pdb_dst)
+    plddt_mean = sum(per_residue) / len(per_residue) if per_residue else 0.0
+
+    write_confidence_json(output_dir, plddt_mean, ptm, per_residue,
+                          per_atom_plddt=per_atom)
 
     _copy_raw(raw_dir, output_dir)
     return output_dir
 
 
+def _find_af2_best_pdb(search_dir: Path) -> Path | None:
+    """Find the best AlphaFold PDB: ranked_0.pdb > relaxed_model_1 > unrelaxed_model_1."""
+    # Prefer ranked (post-relaxation)
+    ranked = search_dir / "ranked_0.pdb"
+    if ranked.exists():
+        return ranked
+    # Fall back to relaxed model 1
+    relaxed = sorted(search_dir.glob("relaxed_model_*_pred_0.pdb"))
+    if relaxed:
+        return relaxed[0]
+    # Fall back to unrelaxed model 1
+    unrelaxed = sorted(search_dir.glob("unrelaxed_model_*_pred_0.pdb"))
+    if unrelaxed:
+        return unrelaxed[0]
+    return None
+
+
 def normalize_alphafold_output(raw_dir: Path, output_dir: Path) -> Path:
     """Normalize AlphaFold2 output to standardized layout.
 
-    Raw structure:
+    Raw structure (tries ranked > relaxed > unrelaxed):
         raw_dir/{target}/ranked_0.pdb
+        raw_dir/{target}/relaxed_model_1_pred_0.pdb
+        raw_dir/{target}/unrelaxed_model_1_pred_0.pdb
         raw_dir/{target}/ranking_debug.json
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # AF2 nests under a target subdirectory
-    ranked_pdb = None
+    best_pdb = None
     ranking_json = None
 
     # Check for direct files first, then subdirectories
-    if (raw_dir / "ranked_0.pdb").exists():
-        ranked_pdb = raw_dir / "ranked_0.pdb"
+    best_pdb = _find_af2_best_pdb(raw_dir)
+    if best_pdb:
         ranking_json = raw_dir / "ranking_debug.json"
     else:
         for subdir in raw_dir.iterdir():
-            if subdir.is_dir() and (subdir / "ranked_0.pdb").exists():
-                ranked_pdb = subdir / "ranked_0.pdb"
-                ranking_json = subdir / "ranking_debug.json"
-                break
+            if subdir.is_dir():
+                best_pdb = _find_af2_best_pdb(subdir)
+                if best_pdb:
+                    ranking_json = subdir / "ranking_debug.json"
+                    break
 
-    if ranked_pdb is None:
-        raise FileNotFoundError(f"No ranked_0.pdb found in {raw_dir}")
+    if best_pdb is None:
+        raise FileNotFoundError(f"No AlphaFold PDB output found in {raw_dir}")
+
+    if best_pdb.name.startswith("unrelaxed"):
+        logger.warning("Using unrelaxed model (relaxation failed): %s", best_pdb.name)
 
     # Copy PDB → model_1.pdb
     pdb_dst = output_dir / "model_1.pdb"
-    shutil.copy2(str(ranked_pdb), str(pdb_dst))
+    shutil.copy2(str(best_pdb), str(pdb_dst))
 
     # Convert PDB → CIF
     pdb_to_mmcif(pdb_dst, output_dir / "model_1.cif")
 
-    # Extract confidence
-    # Per-residue pLDDT from CA B-factors (AF2 stores pLDDT in B-factor, 0-100)
-    per_residue = _extract_ca_bfactors(pdb_dst)
+    # AF2 stores per-residue pLDDT (0-100) in B-factors, duplicated across atoms.
+    per_residue, per_atom = _extract_bfactors(pdb_dst)
     plddt_mean = sum(per_residue) / len(per_residue) if per_residue else 0.0
 
-    # Try ranking_debug.json for mean pLDDT (more accurate)
+    # Prefer ranking_debug.json's mean pLDDT over the simple average (it uses
+    # the model-selection score, which may differ from raw CA B-factor mean).
     ptm = None
     if ranking_json and ranking_json.exists():
         rdata = json.loads(ranking_json.read_text())
         plddts = rdata.get("plddts", {})
-        if plddts:
-            # Use the mean from ranking_debug if available
-            order = rdata.get("order", [])
-            if order:
-                top_model = order[0]
-                plddt_mean = plddts.get(top_model, plddt_mean)
+        order = rdata.get("order", [])
+        if plddts and order:
+            plddt_mean = plddts.get(order[0], plddt_mean)
 
-    write_confidence_json(output_dir, plddt_mean, ptm, per_residue)
+    write_confidence_json(output_dir, plddt_mean, ptm, per_residue,
+                          per_atom_plddt=per_atom)
     _copy_raw(raw_dir, output_dir)
     return output_dir
 
@@ -277,15 +416,94 @@ def normalize_esmfold_output(raw_dir: Path, output_dir: Path) -> Path:
     # Convert PDB → CIF
     pdb_to_mmcif(pdb_dst, output_dir / "model_1.cif")
 
-    # Extract confidence — ESMFold B-factors are 0-1, scale to 0-100
-    raw_bfactors = _extract_ca_bfactors(pdb_dst)
-    if raw_bfactors and max(raw_bfactors) <= 1.0:
-        per_residue = [b * 100 for b in raw_bfactors]
-    else:
-        per_residue = raw_bfactors
+    # ESMFold writes pLDDT as PDB B-factors, sometimes on 0-1 and sometimes
+    # on 0-100 scale depending on version. Detect from CA values and scale.
+    per_residue, per_atom = _extract_bfactors(pdb_dst)
+    if per_residue and max(per_residue) <= 1.0:
+        per_residue = [b * 100 for b in per_residue]
+        per_atom = [b * 100 for b in per_atom]
     plddt_mean = sum(per_residue) / len(per_residue) if per_residue else 0.0
 
     # pTM not available in PDB output (logged to stdout by hf_fold.py)
-    write_confidence_json(output_dir, plddt_mean, None, per_residue)
+    write_confidence_json(output_dir, plddt_mean, None, per_residue,
+                          per_atom_plddt=per_atom)
+    _copy_raw(raw_dir, output_dir)
+    return output_dir
+
+
+def normalize_openfold_output(raw_dir: Path, output_dir: Path) -> Path:
+    """Normalize OpenFold 3 output to standardized layout.
+
+    Raw structure (OF3 nests under query_name/seed_N/):
+        raw_dir/<query_name>/seed_<N>/<query>_seed_<N>_sample_<M>_model.cif
+        raw_dir/<query_name>/seed_<N>/<query>_seed_<N>_sample_<M>_confidences.json
+        raw_dir/<query_name>/seed_<N>/<query>_seed_<N>_sample_<M>_confidences_aggregated.json
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Find the first query subdirectory
+    query_dirs = [d for d in raw_dir.iterdir() if d.is_dir() and d.name != "raw"]
+    if not query_dirs:
+        raise FileNotFoundError(f"No query output directories in {raw_dir}")
+    query_dir = query_dirs[0]
+
+    # Find the first seed subdirectory
+    seed_dirs = sorted(d for d in query_dir.iterdir() if d.is_dir() and d.name.startswith("seed_"))
+    if not seed_dirs:
+        raise FileNotFoundError(f"No seed_* directories in {query_dir}")
+    seed_dir = seed_dirs[0]
+
+    # Find model CIF files and select the best sample by ranking score
+    model_files = sorted(seed_dir.glob("*_model.cif"))
+    if not model_files:
+        raise FileNotFoundError(f"No *_model.cif files in {seed_dir}")
+
+    best_cif = model_files[0]
+    best_score = -float("inf")
+
+    for cif in model_files:
+        # Derive aggregated confidences filename from model filename
+        # e.g. prediction_seed_42_sample_1_model.cif
+        #    → prediction_seed_42_sample_1_confidences_aggregated.json
+        agg_path = cif.parent / cif.name.replace("_model.cif", "_confidences_aggregated.json")
+        if agg_path.exists():
+            agg_data = json.loads(agg_path.read_text())
+            score = agg_data.get("sample_ranking_score", -float("inf"))
+            if score > best_score:
+                best_score = score
+                best_cif = cif
+
+    # Copy best CIF → model_1.cif
+    cif_dst = output_dir / "model_1.cif"
+    shutil.copy2(str(best_cif), str(cif_dst))
+
+    # Convert CIF → PDB
+    mmcif_to_pdb(cif_dst, output_dir / "model_1.pdb")
+
+    # Extract confidence from aggregated JSON
+    stem = best_cif.name.replace("_model.cif", "")
+    agg_path = best_cif.parent / f"{stem}_confidences_aggregated.json"
+    conf_path = best_cif.parent / f"{stem}_confidences.json"
+
+    plddt_mean = 0.0
+    ptm = None
+    per_residue: list[float] = []
+
+    if agg_path.exists():
+        agg_data = json.loads(agg_path.read_text())
+        plddt_mean = float(agg_data.get("avg_plddt", 0.0))
+        ptm = agg_data.get("ptm")
+        if ptm is not None:
+            ptm = float(ptm)
+
+    # OpenFold 3's confidences.json has per-ATOM pLDDT by design (AF3 atomization
+    # convention -- see docs/OUTPUT_NORMALIZATION.md). Use CA B-factors for the
+    # per-residue convention consumers expect.
+    per_residue, per_atom = _extract_bfactors(output_dir / "model_1.pdb")
+    if per_residue and not plddt_mean:
+        plddt_mean = sum(per_residue) / len(per_residue)
+
+    write_confidence_json(output_dir, plddt_mean, ptm, per_residue,
+                          per_atom_plddt=per_atom)
     _copy_raw(raw_dir, output_dir)
     return output_dir

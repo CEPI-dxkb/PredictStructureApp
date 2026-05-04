@@ -1,0 +1,9 @@
+# Auto mode — protein + ligand, GPU, no MSA (should error: no tool supports this)
+tool: auto
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+ligand:
+  - ATP
+output_dir: output
+device: gpu

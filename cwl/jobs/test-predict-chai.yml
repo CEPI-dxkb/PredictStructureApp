@@ -1,0 +1,9 @@
+# Chai basic — shared params only
+tool: chai
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+output_dir: output
+num_samples: 2
+seed: 42
+device: gpu

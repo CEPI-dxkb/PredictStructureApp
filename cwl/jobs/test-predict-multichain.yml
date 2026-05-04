@@ -1,0 +1,10 @@
+# Multi-file protein array binding test
+tool: esmfold
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+  - class: File
+    path: ../../test_data/multimer.fasta
+output_dir: output
+num_recycles: 4
+device: gpu

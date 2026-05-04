@@ -1,0 +1,142 @@
+{
+    "seeds": [
+        42
+    ],
+    "queries": {
+        "crambin": {
+            "query_name": "crambin",
+            "chains": [
+                {
+                    "molecule_type": "PROTEIN",
+                    "chain_ids": [
+                        "A"
+                    ],
+                    "description": null,
+                    "sequence": "TTCCPSIVARSNFNVCRLPGTPEALCATYTGCIIIPGATCPGDYAN",
+                    "non_canonical_residues": null,
+                    "smiles": null,
+                    "ccd_codes": null,
+                    "paired_msa_file_paths": null,
+                    "main_msa_file_paths": [
+                        "/work/msas/main/249ad6ea56bfc63d1af64c40346aae1bf88ff7e593be2223cdc64720f8ad3d55/colabfold_main.a3m"
+                    ],
+                    "template_alignment_file_path": "/work/msas/template/249ad6ea56bfc63d1af64c40346aae1bf88ff7e593be2223cdc64720f8ad3d55/colabfold_template.m8",
+                    "template_entry_chain_ids": null,
+                    "sdf_file_path": null
+                }
+            ],
+            "use_msas": true,
+            "use_paired_msas": true,
+            "use_main_msas": true,
+            "covalent_bonds": null
+        },
+        "ubiquitin": {
+            "query_name": "ubiquitin",
+            "chains": [
+                {
+                    "molecule_type": "PROTEIN",
+                    "chain_ids": [
+                        "A"
+                    ],
+                    "description": null,
+                    "sequence": "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG",
+                    "non_canonical_residues": null,
+                    "smiles": null,
+                    "ccd_codes": null,
+                    "paired_msa_file_paths": null,
+                    "main_msa_file_paths": [
+                        "/work/msas/main/233b4b0b8c4616095bc3249f9375fc345d32af7deaef07117d0383c51d6f19aa/colabfold_main.a3m"
+                    ],
+                    "template_alignment_file_path": "/work/msas/template/233b4b0b8c4616095bc3249f9375fc345d32af7deaef07117d0383c51d6f19aa/colabfold_template.m8",
+                    "template_entry_chain_ids": null,
+                    "sdf_file_path": null
+                }
+            ],
+            "use_msas": true,
+            "use_paired_msas": true,
+            "use_main_msas": true,
+            "covalent_bonds": null
+        },
+        "lysozyme": {
+            "query_name": "lysozyme",
+            "chains": [
+                {
+                    "molecule_type": "PROTEIN",
+                    "chain_ids": [
+                        "A"
+                    ],
+                    "description": null,
+                    "sequence": "MNIFEMLRIDEGLRLKIYKDTEGYYTIGIGHLLTKSPSLNAAKSELDKAIGRNTNGVITKDEAEKLFNQDVDAAVRGILRNAKLKPVYDSLDAVRRAALINMVFQMGETGVAGFTNSLRMLQQKRWDEAAVNLAKSRWYNQTPNRAKRVITTFRTGTWDAYKNL",
+                    "non_canonical_residues": null,
+                    "smiles": null,
+                    "ccd_codes": null,
+                    "paired_msa_file_paths": null,
+                    "main_msa_file_paths": [
+                        "/work/msas/main/4ed2b4805eb5a146827af8d2127dfb66c3df25ee0ae1377927ad6749dfbc16c0/colabfold_main.a3m"
+                    ],
+                    "template_alignment_file_path": "/work/msas/template/4ed2b4805eb5a146827af8d2127dfb66c3df25ee0ae1377927ad6749dfbc16c0/colabfold_template.m8",
+                    "template_entry_chain_ids": null,
+                    "sdf_file_path": null
+                }
+            ],
+            "use_msas": true,
+            "use_paired_msas": true,
+            "use_main_msas": true,
+            "covalent_bonds": null
+        },
+        "gfp": {
+            "query_name": "gfp",
+            "chains": [
+                {
+                    "molecule_type": "PROTEIN",
+                    "chain_ids": [
+                        "A"
+                    ],
+                    "description": null,
+                    "sequence": "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITHGMDELYK",
+                    "non_canonical_residues": null,
+                    "smiles": null,
+                    "ccd_codes": null,
+                    "paired_msa_file_paths": null,
+                    "main_msa_file_paths": [
+                        "/work/msas/main/44f2688342a00e4b01e82be5e655b26499f981515d5da9a6076315627355b403/colabfold_main.a3m"
+                    ],
+                    "template_alignment_file_path": "/work/msas/template/44f2688342a00e4b01e82be5e655b26499f981515d5da9a6076315627355b403/colabfold_template.m8",
+                    "template_entry_chain_ids": null,
+                    "sdf_file_path": null
+                }
+            ],
+            "use_msas": true,
+            "use_paired_msas": true,
+            "use_main_msas": true,
+            "covalent_bonds": null
+        },
+        "adenylate_kinase": {
+            "query_name": "adenylate_kinase",
+            "chains": [
+                {
+                    "molecule_type": "PROTEIN",
+                    "chain_ids": [
+                        "A"
+                    ],
+                    "description": null,
+                    "sequence": "MRIILLGAPGAGKGTQAQFIMEKYGIPQISTGDMLRAAVKSGSELGKQAKDIMDAGKLVTDELVIALVKERIAQEDCRNGFLLDGFPRTIPQADAMKEAGINVDYVLEFDVPDELIVDRIVGRRVHAPSGRVYHVKFNPPKVEGKDDVTGEELTTRKDDQEETVRKRLVEYHQMTAPLIGYYSKEAEAGNTKYAKVDGTKPVAEVRADLEKILG",
+                    "non_canonical_residues": null,
+                    "smiles": null,
+                    "ccd_codes": null,
+                    "paired_msa_file_paths": null,
+                    "main_msa_file_paths": [
+                        "/work/msas/main/c7fb9fc96e9e0aabc1a454ba36086dc00a2fc71387e8d5fb44a50d830b27d697/colabfold_main.a3m"
+                    ],
+                    "template_alignment_file_path": "/work/msas/template/c7fb9fc96e9e0aabc1a454ba36086dc00a2fc71387e8d5fb44a50d830b27d697/colabfold_template.m8",
+                    "template_entry_chain_ids": null,
+                    "sdf_file_path": null
+                }
+            ],
+            "use_msas": true,
+            "use_paired_msas": true,
+            "use_main_msas": true,
+            "covalent_bonds": null
+        }
+    }
+}

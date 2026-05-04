@@ -1,0 +1,11 @@
+{
+  "tool": "openfold",
+  "output_path": "${WS_HOME}/AppTests/tier5_openfold",
+  "output_file": "tier5_openfold_test",
+  "num_recycles": 3,
+  "output_format": "pdb",
+  "msa_mode": "upload",
+  "seed": 42,
+  "input_file": "/data/large_protein.fasta",
+  "msa_file": "/data/msa/large_protein.a3m"
+}

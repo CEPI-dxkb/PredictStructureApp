@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from predict_structure.adapters.base import BaseAdapter
-from predict_structure.converters import a3m_to_parquet
+from predict_structure.converters import a3m_to_parquet, entities_to_chai_fasta
+from predict_structure.entities import EntityList, EntityType
 from predict_structure.normalizers import normalize_chai_output
 
 logger = logging.getLogger(__name__)
@@ -17,26 +18,30 @@ class ChaiAdapter(BaseAdapter):
     """Adapter for Chai-1 protein structure prediction.
 
     Chai-1 is a diffusion-based model for protein structure prediction.
-    Takes FASTA input directly. MSA must be in Parquet format (.aligned.pqt)
-    — A3M files are auto-converted. Outputs mmCIF + NPZ confidence scores.
+    Requires entity-typed FASTA headers. MSA must be in Parquet format
+    (.aligned.pqt) — A3M files are auto-converted. Outputs mmCIF + NPZ
+    confidence scores.
     """
 
     tool_name: str = "chai"
     supports_msa: bool = True
     requires_gpu: bool = True
+    supported_entities: frozenset[EntityType] = frozenset({
+        EntityType.PROTEIN, EntityType.DNA, EntityType.RNA, EntityType.LIGAND,
+    })
 
     def __init__(self) -> None:
         self._msa_dir: Path | None = None
 
     def prepare_input(
         self,
-        input_path: Path,
+        entity_list: EntityList,
         output_dir: Path,
         *,
         msa_path: Path | None = None,
         **kwargs: Any,
     ) -> Path:
-        """Pass FASTA through; convert A3M MSA to Parquet if provided."""
+        """Convert entity list to Chai entity-typed FASTA; handle MSA."""
         if msa_path is not None:
             if msa_path.suffix.lower() == ".a3m":
                 msa_out_dir = output_dir / "msa"
@@ -47,9 +52,10 @@ class ChaiAdapter(BaseAdapter):
             elif msa_path.is_dir():
                 self._msa_dir = msa_path
             else:
-                # Assume it's already in the right format; use parent as msa dir
                 self._msa_dir = msa_path.parent
-        return input_path
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return entities_to_chai_fasta(entity_list, output_dir / "input.fasta")
 
     def build_command(
         self,
@@ -131,6 +137,6 @@ class ChaiAdapter(BaseAdapter):
             "policy_data": {
                 "gpu_count": 1,
                 "partition": "gpu2",
-                "constraint": "A100|H100|H200",
+                "constraint": "V100|H100|H200",
             },
         }

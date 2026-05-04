@@ -1,0 +1,16 @@
+# Chai with constraint and template hits paths
+# Covers: constraint_path, template_hits_path
+tool: chai
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+output_dir: output
+num_samples: 1
+device: gpu
+use_msa_server: true
+constraint_path:
+  class: File
+  path: ../../test_data/constraint.json
+template_hits_path:
+  class: File
+  path: ../../test_data/template_hits.json

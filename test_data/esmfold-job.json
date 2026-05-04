@@ -1,0 +1,7 @@
+{
+  "sequences": {
+    "class": "File",
+    "path": "/home/wilke/Development/PredictStructureApp/test_data/simple_protein.fasta"
+  },
+  "model_cache_dir": "/scout/wf/gowe/cache/hf"
+}

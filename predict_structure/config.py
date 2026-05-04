@@ -25,8 +25,11 @@ import yaml
 # Default config ships with the package.
 _DEFAULT_CONFIG = Path(__file__).resolve().parent / "tools.yml"
 
-# Workspace root: two levels up from predict_structure/config.py
-# (predict_structure/ → PredictStructureApp/ → dxkb/)
+# Project root: one level up from predict_structure/config.py
+# (predict_structure/ → PredictStructureApp/)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+# Workspace root: two levels up (PredictStructureApp/ → dxkb/)
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -100,6 +103,69 @@ def get_sif_path(tool_name: str) -> Path:
 
 
 # -----------------------------------------------------------------
+# Data directory helpers
+# -----------------------------------------------------------------
+
+# Native env vars that tools use directly for their data/cache paths.
+_NATIVE_ENV_VARS: dict[str, str] = {
+    "boltz": "BOLTZ_CACHE",
+    "chai": "CHAI_DOWNLOADS_DIR",
+}
+
+
+def get_data_root() -> Path:
+    """Return the base data directory.
+
+    Resolution order:
+      1. ``PREDICT_STRUCTURE_DATA`` env var
+      2. ``data_root`` in tools.yml
+      3. ``/local_databases`` (fallback)
+    """
+    env = os.environ.get("PREDICT_STRUCTURE_DATA")
+    if env:
+        return Path(env)
+    cfg_root = _load_config().get("data_root")
+    if cfg_root:
+        return Path(cfg_root)
+    return Path("/local_databases")
+
+
+def get_data_dir(tool_name: str) -> Path:
+    """Return the data directory for a specific tool.
+
+    Resolution order (highest wins):
+      1. Native env var (``BOLTZ_CACHE``, ``CHAI_DOWNLOADS_DIR``, etc.)
+      2. ``PREDICT_STRUCTURE_DATA`` / per-tool ``data_dir``
+      3. ``data_root`` / per-tool ``data_dir`` from tools.yml
+      4. ``data_root`` / ``tool_name``
+
+    Returns:
+        Absolute path to the tool's data directory.
+    """
+    # 1. Native env var override
+    native_var = _NATIVE_ENV_VARS.get(tool_name)
+    if native_var:
+        native_val = os.environ.get(native_var)
+        if native_val:
+            return Path(native_val)
+
+    # 2-3. data_root + per-tool data_dir
+    root = get_data_root()
+    tool_cfg = get_tools().get(tool_name, {})
+    rel = tool_cfg.get("data_dir", tool_name)
+
+    # Normalize to string (guards against null/non-string in YAML)
+    if not isinstance(rel, str):
+        rel = str(rel) if rel is not None else tool_name
+
+    # Absolute data_dir → use as-is
+    if rel.startswith("/"):
+        return Path(rel)
+
+    return root / rel
+
+
+# -----------------------------------------------------------------
 # Local execution helpers
 # -----------------------------------------------------------------
 
@@ -137,8 +203,11 @@ def get_shared_sif() -> Path | None:
 # -----------------------------------------------------------------
 
 def get_cwl_path(tool_name: str) -> Path:
-    """Return the absolute path to the tool's CWL definition."""
+    """Return the absolute path to the tool's CWL definition.
+
+    Resolves relative to PROJECT_ROOT (PredictStructureApp/).
+    """
     rel = get_tool_config(tool_name).get("cwl")
     if not rel:
         raise KeyError(f"No CWL path configured for tool '{tool_name}'")
-    return WORKSPACE_ROOT / rel
+    return PROJECT_ROOT / rel

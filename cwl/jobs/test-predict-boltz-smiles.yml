@@ -1,0 +1,12 @@
+# Boltz with protein + SMILES ligand
+# Covers: smiles
+tool: boltz
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+smiles:
+  - "c1ccc2c(c1)c(=O)c3ccccc3o2"
+output_dir: output
+num_samples: 1
+device: gpu
+use_msa_server: true

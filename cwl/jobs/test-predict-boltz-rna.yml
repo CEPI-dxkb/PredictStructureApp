@@ -1,0 +1,13 @@
+# Boltz with protein + RNA entity
+# Covers: rna
+tool: boltz
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+rna:
+  - class: File
+    path: ../../test_data/rna.fasta
+output_dir: output
+num_samples: 1
+device: gpu
+use_msa_server: true

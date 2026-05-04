@@ -1,0 +1,12 @@
+# Boltz with protein + glycan entity
+# Covers: glycan
+tool: boltz
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+glycan:
+  - "MAN"
+output_dir: output
+num_samples: 1
+device: gpu
+use_msa_server: true

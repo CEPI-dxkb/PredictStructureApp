@@ -1,0 +1,10 @@
+# Boltz multi-entity — protein + ligand
+tool: boltz
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+ligand:
+  - ATP
+output_dir: output
+num_samples: 1
+device: gpu

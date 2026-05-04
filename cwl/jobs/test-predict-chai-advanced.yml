@@ -1,0 +1,19 @@
+# Chai with all tool-specific params
+# Covers: no_esm_embeddings, use_templates_server, num_trunk_samples,
+#         recycle_msa_subsample, no_low_memory, msa_server_url
+tool: chai
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+output_dir: output
+num_samples: 1
+seed: 42
+device: gpu
+use_msa_server: true
+msa_server_url: https://api.colabfold.com
+sampling_steps: 50
+no_esm_embeddings: true
+use_templates_server: true
+num_trunk_samples: 2
+recycle_msa_subsample: 128
+no_low_memory: true

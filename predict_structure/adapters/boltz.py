@@ -6,8 +6,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from predict_structure.adapters.base import BaseAdapter
-from predict_structure.converters import fasta_to_boltz_yaml
+from predict_structure.converters import entities_to_boltz_yaml
+from predict_structure.entities import EntityList, EntityType
 from predict_structure.normalizers import normalize_boltz_output
 
 logger = logging.getLogger(__name__)
@@ -18,46 +21,50 @@ class BoltzAdapter(BaseAdapter):
 
     Boltz-2 is a diffusion-based model for predicting structures of proteins,
     DNA, RNA, and ligand complexes. It uses YAML input format (auto-converted
-    from FASTA) and outputs mmCIF structures with confidence metrics.
+    from entity list) and outputs mmCIF structures with confidence metrics.
     """
 
     tool_name: str = "boltz"
     supports_msa: bool = True
     requires_gpu: bool = True
+    supported_entities: frozenset[EntityType] = frozenset({
+        EntityType.PROTEIN, EntityType.DNA, EntityType.RNA,
+        EntityType.LIGAND, EntityType.SMILES,
+    })
 
     def prepare_input(
         self,
-        input_path: Path,
+        entity_list: EntityList,
         output_dir: Path,
         *,
         msa_path: Path | None = None,
         **kwargs: Any,
     ) -> Path:
-        """Ensure input is in Boltz YAML format, converting from FASTA if needed."""
-        suffix = input_path.suffix.lower()
+        """Convert entity list to Boltz YAML format.
 
-        if suffix in (".yaml", ".yml"):
-            if msa_path is not None:
-                # Inject MSA path into existing YAML
-                try:
-                    import yaml
-                except ImportError:
-                    raise RuntimeError("pip install predict-structure[boltz]")
+        If the entity list contains a single entity whose value is a path to
+        a Boltz YAML file, it is passed through (with optional MSA injection).
+        Otherwise, entities are converted to YAML via ``entities_to_boltz_yaml``.
+        """
+        # Single-entity YAML pass-through
+        if len(entity_list) == 1:
+            first = entity_list.entities[0]
+            yaml_path = Path(first.value)
+            if yaml_path.suffix.lower() in (".yaml", ".yml") and yaml_path.exists():
+                if msa_path is not None:
+                    data = yaml.safe_load(yaml_path.read_text())
+                    for entry in data.get("sequences", []):
+                        if "protein" in entry:
+                            entry["protein"]["msa"] = str(msa_path.resolve())
+                    prepared = output_dir / "input.yaml"
+                    prepared.parent.mkdir(parents=True, exist_ok=True)
+                    with open(prepared, "w") as f:
+                        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+                    return prepared
+                return yaml_path
 
-                data = yaml.safe_load(input_path.read_text())
-                for entry in data.get("sequences", []):
-                    if "protein" in entry:
-                        entry["protein"]["msa"] = str(msa_path.resolve())
-                prepared = output_dir / "input.yaml"
-                prepared.parent.mkdir(parents=True, exist_ok=True)
-                with open(prepared, "w") as f:
-                    yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-                return prepared
-            return input_path
-
-        # FASTA → YAML conversion
         output_dir.mkdir(parents=True, exist_ok=True)
-        return fasta_to_boltz_yaml(input_path, output_dir / "input.yaml", msa_path)
+        return entities_to_boltz_yaml(entity_list, output_dir / "input.yaml", msa_path)
 
     def build_command(
         self,
@@ -112,6 +119,6 @@ class BoltzAdapter(BaseAdapter):
             "policy_data": {
                 "gpu_count": 1,
                 "partition": "gpu2",
-                "constraint": "A100|H100|H200",
+                "constraint": "V100|H100|H200",
             },
         }

@@ -1,12 +1,9 @@
-tool: alphafold
-input_file:
+fasta_paths:
   class: File
   path: ../../test_data/simple_protein.fasta
 output_dir: output
-device: gpu
-af2_data_dir:
-  class: Directory
-  path: /databases
-af2_model_preset: monomer
-af2_db_preset: reduced_dbs
-af2_max_template_date: "2022-01-01"
+data_dir: /local_databases/alphafold/databases
+model_preset: monomer
+db_preset: reduced_dbs
+max_template_date: "2022-01-01"
+use_gpu_relax: true

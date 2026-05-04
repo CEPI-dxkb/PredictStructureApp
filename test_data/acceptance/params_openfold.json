@@ -1,0 +1,11 @@
+{
+    "tool": "openfold",
+    "input_file": "/data/simple_protein.fasta",
+    "output_path": "/data/output",
+    "num_diffusion_samples": 1,
+    "num_model_seeds": 1,
+    "output_format": "pdb",
+    "msa_mode": "none",
+    "seed": 42,
+    "use_templates": true
+}

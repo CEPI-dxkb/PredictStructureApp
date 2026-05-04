@@ -1,0 +1,13 @@
+{
+  "tool": "chai",
+  "output_path": "${WS_HOME}/AppTests/tier5_chai",
+  "output_file": "tier5_chai_test",
+  "num_recycles": 3,
+  "output_format": "pdb",
+  "msa_mode": "upload",
+  "seed": 42,
+  "input_file": "/data/large_protein.fasta",
+  "msa_file": "/data/msa/large_protein.a3m",
+  "sampling_steps": 200,
+  "num_samples": 1
+}

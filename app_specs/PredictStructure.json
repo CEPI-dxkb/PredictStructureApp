@@ -2,7 +2,7 @@
     "id": "PredictStructure",
     "script": "App-PredictStructure",
     "label": "Protein Structure Prediction",
-    "description": "Predict protein structures using Boltz-2, Chai-1, AlphaFold 2, or ESMFold. Provides a unified interface with automatic parameter mapping, format conversion, output normalization, and confidence scoring.",
+    "description": "Predict protein structures using Boltz-2, OpenFold 3, Chai-1, AlphaFold 2, or ESMFold. Provides a unified interface with automatic parameter mapping, format conversion, output normalization, and confidence scoring.",
     "default_memory": "64G",
     "default_cpu": 8,
     "default_runtime": 14400,
@@ -10,18 +10,46 @@
         {
             "id": "tool",
             "type": "enum",
-            "enum": ["auto", "boltz", "chai", "alphafold", "esmfold"],
+            "enum": ["auto", "boltz", "openfold", "chai", "alphafold", "esmfold"],
             "default": "auto",
             "required": 1,
             "label": "Prediction Tool",
-            "desc": "Structure prediction engine. 'auto' discovers the best available tool based on input format, device, and installed software. Boltz-2 and Chai-1 are diffusion-based with highest accuracy. AlphaFold 2 uses co-evolutionary features (requires database). ESMFold is fastest (single-sequence, no MSA, CPU-capable)."
+            "desc": "Structure prediction engine. 'auto' discovers the best available tool based on input format, device, and installed software. Boltz-2, OpenFold 3, and Chai-1 are diffusion-based with highest accuracy. OpenFold 3 is an open-source AF3 reproduction supporting protein/DNA/RNA/ligand complexes. AlphaFold 2 uses co-evolutionary features (requires database). ESMFold is fastest (single-sequence, no MSA, CPU-capable)."
         },
         {
             "id": "input_file",
             "type": "wsfile",
-            "required": 1,
+            "required": 0,
             "label": "Input File",
-            "desc": "Protein sequence in FASTA format (.fasta, .fa). Boltz also accepts YAML for full feature support (ligands, constraints, templates)."
+            "desc": "Protein sequence in FASTA format (.fasta, .fa). Maximum 26 sequences and 10,000 total residues per job. Boltz also accepts YAML for full feature support (ligands, constraints, templates). Alternative to text_input."
+        },
+        {
+            "id": "text_input",
+            "type": "list",
+            "required": 0,
+            "label": "Sequence Text Input",
+            "desc": "One or more sequences as text. Each entry has an optional type (protein, dna, rna, or auto for auto-detection) and a sequence in FASTA format. Alternative to input_file.",
+            "item": {
+                "id": "entry",
+                "type": "object",
+                "properties": [
+                    {
+                        "id": "type",
+                        "type": "enum",
+                        "enum": ["auto", "protein", "dna", "rna"],
+                        "default": "auto",
+                        "label": "Sequence Type",
+                        "desc": "Molecule type. Use 'auto' to auto-detect from sequence characters."
+                    },
+                    {
+                        "id": "sequence",
+                        "type": "string",
+                        "required": 1,
+                        "label": "Sequence",
+                        "desc": "Sequence in FASTA format (with >header line) or bare sequence."
+                    }
+                ]
+            }
         },
         {
             "id": "num_samples",
@@ -156,6 +184,31 @@
         },
 
         {
+            "id": "num_diffusion_samples",
+            "type": "int",
+            "default": 5,
+            "required": 0,
+            "label": "Diffusion Samples",
+            "desc": "Number of diffusion samples per query. OpenFold 3 only. Default: 5."
+        },
+        {
+            "id": "num_model_seeds",
+            "type": "int",
+            "default": 1,
+            "required": 0,
+            "label": "Model Seeds",
+            "desc": "Number of independent model seeds. OpenFold 3 only. Default: 1."
+        },
+        {
+            "id": "use_templates",
+            "type": "bool",
+            "default": true,
+            "required": 0,
+            "label": "Use Templates",
+            "desc": "Use PDB template structures for improved accuracy. OpenFold 3 only. Default: true."
+        },
+
+        {
             "id": "output_path",
             "type": "folder",
             "required": 1,
@@ -169,16 +222,5 @@
             "label": "Output File",
             "desc": "Optional workspace output file path."
         }
-    ],
-    "preflight": {
-        "cpu": 8,
-        "memory": "64G",
-        "runtime": 14400,
-        "storage": "50G",
-        "policy_data": {
-            "gpu_count": 1,
-            "partition": "gpu2",
-            "constraint": "A100|H100|H200"
-        }
-    }
+    ]
 }

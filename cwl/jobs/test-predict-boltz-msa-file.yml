@@ -1,0 +1,12 @@
+# Boltz with precomputed MSA file
+# Covers: msa
+tool: boltz
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+output_dir: output
+num_samples: 1
+device: gpu
+msa:
+  class: File
+  path: ../../test_data/msa/crambin.a3m

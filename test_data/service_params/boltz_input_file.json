@@ -1,0 +1,12 @@
+{
+    "tool": "boltz",
+    "input_file": "/data/simple_protein.fasta",
+    "output_path": "/output",
+    "output_file": "boltz_test",
+    "num_samples": 1,
+    "num_recycles": 3,
+    "sampling_steps": 200,
+    "output_format": "pdb",
+    "msa_mode": "none",
+    "seed": 42
+}

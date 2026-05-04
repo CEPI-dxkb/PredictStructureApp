@@ -1,0 +1,12 @@
+{
+  "tool": "boltz",
+  "output_path": "${WS_HOME}/AppTests/tier4_boltz",
+  "output_file": "tier4_boltz_test",
+  "num_recycles": 3,
+  "output_format": "pdb",
+  "msa_mode": "none",
+  "seed": 42,
+  "input_file": "/data/multimer.fasta",
+  "sampling_steps": 200,
+  "num_samples": 1
+}

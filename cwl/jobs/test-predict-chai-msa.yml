@@ -1,0 +1,11 @@
+# Chai with tool-specific params
+tool: chai
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+output_dir: output
+num_samples: 2
+seed: 42
+device: gpu
+use_msa_server: true
+sampling_steps: 50

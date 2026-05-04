@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from predict_structure.adapters.base import BaseAdapter
+from predict_structure.converters import entities_to_fasta
+from predict_structure.entities import EntityList, EntityType
 from predict_structure.normalizers import normalize_alphafold_output
 
 logger = logging.getLogger(__name__)
@@ -25,23 +27,26 @@ class AlphaFoldAdapter(BaseAdapter):
     tool_name: str = "alphafold"
     supports_msa: bool = True
     requires_gpu: bool = True
+    supported_entities: frozenset[EntityType] = frozenset({EntityType.PROTEIN})
 
     def __init__(self) -> None:
         self._use_precomputed_msas: bool = False
 
     def prepare_input(
         self,
-        input_path: Path,
+        entity_list: EntityList,
         output_dir: Path,
         *,
         msa_path: Path | None = None,
         **kwargs: Any,
     ) -> Path:
-        """FASTA pass-through. Flag precomputed MSA directory if provided."""
+        """Convert entity list to plain FASTA. Flag precomputed MSA if provided."""
         if msa_path is not None and msa_path.is_dir():
             self._use_precomputed_msas = True
             logger.info("Using precomputed MSAs from %s", msa_path)
-        return input_path
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return entities_to_fasta(entity_list, output_dir / "input.fasta")
 
     def build_command(
         self,
@@ -55,18 +60,23 @@ class AlphaFoldAdapter(BaseAdapter):
         **kwargs: Any,
     ) -> list[str]:
         """Construct the ``run_alphafold.py`` command with all database paths."""
+        from predict_structure.config import get_command, get_data_dir
+
         data_dir = kwargs.get("af2_data_dir")
         if not data_dir:
-            raise ValueError(
-                "AlphaFold requires --af2-data-dir pointing to the database directory (~2TB). "
-                "See https://github.com/deepmind/alphafold#databases for setup."
-            )
+            # Fall back to tools.yml data_dir (e.g. /local_databases/alphafold/databases)
+            try:
+                data_dir = str(get_data_dir("alphafold"))
+            except (FileNotFoundError, KeyError):
+                raise ValueError(
+                    "AlphaFold requires --af2-data-dir pointing to the database directory (~2TB). "
+                    "See https://github.com/deepmind/alphafold#databases for setup."
+                )
         data_dir = Path(data_dir)
 
         model_preset = kwargs.get("af2_model_preset", "monomer")
         db_preset = kwargs.get("af2_db_preset", "reduced_dbs")
 
-        from predict_structure.config import get_command
         cmd = [
             *get_command("alphafold"),
             "--fasta_paths", str(input_path),
@@ -109,9 +119,8 @@ class AlphaFoldAdapter(BaseAdapter):
                 str(data_dir / "uniprot" / "uniprot.fasta"),
             ])
 
-        # GPU relax
-        if device != "cpu":
-            cmd.append("--use_gpu_relax=true")
+        # GPU relax disabled by default (OpenMM compatibility issues on H100/H200)
+        cmd.append("--nouse_gpu_relax")
 
         # Random seed
         if seed is not None:
@@ -144,6 +153,6 @@ class AlphaFoldAdapter(BaseAdapter):
             "policy_data": {
                 "gpu_count": 1,
                 "partition": "gpu2",
-                "constraint": "A100|H100|H200",
+                "constraint": "V100|H100|H200",
             },
         }

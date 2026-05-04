@@ -1,0 +1,9 @@
+# ESMFold with mmcif output — tests select-structure CIF fallback
+tool: esmfold
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+output_dir: output
+num_recycles: 4
+device: gpu
+output_format: mmcif

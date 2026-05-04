@@ -1,0 +1,79 @@
+{
+  "name": "tier2_openfold",
+  "description": "openfold via App-PredictStructure.pl on the tier2 fixture (see docs/TEST_COVERAGE.md tier ladder).",
+  "input": {
+    "params_file": "tier2_openfold.json",
+    "needs_gpu": true,
+    "needs_workspace_token": false
+  },
+  "expected": {
+    "exit_code": 0,
+    "timeout_s": 3600,
+    "output_dir": "/output/output",
+    "files_exist": [
+      "model_1.pdb",
+      "model_1.cif",
+      "confidence.json",
+      "metadata.json",
+      "results.json",
+      "raw"
+    ],
+    "schemas": {
+      "confidence.json": "schemas/confidence.schema.json",
+      "metadata.json": "schemas/metadata.schema.json",
+      "results.json": "schemas/results.schema.json"
+    },
+    "json_constraints": {
+      "confidence.json": {
+        "plddt_mean": {
+          "min": 0,
+          "max": 100
+        },
+        "per_residue_plddt[*]": {
+          "min": 0,
+          "max": 100
+        },
+        "per_residue_plddt": {
+          "length": 214
+        }
+      },
+      "metadata.json": {
+        "tool": {
+          "equals": "openfold"
+        },
+        "runtime_seconds": {
+          "min": 0
+        },
+        "version": {
+          "matches": "^\\d+\\.\\d+\\.\\d+"
+        }
+      },
+      "results.json": {
+        "schema_version": {
+          "equals": "1.0"
+        },
+        "status": {
+          "equals": "success"
+        },
+        "tool": {
+          "equals": "openfold"
+        },
+        "outputs[*].sha256": {
+          "oneOf": [
+            {
+              "matches": "^[0-9a-f]{64}$"
+            },
+            "null"
+          ]
+        }
+      }
+    },
+    "pdb_constraints": {
+      "model_1.pdb": {
+        "min_atoms": 40,
+        "min_size_bytes": 1000,
+        "first_record_type": "ATOM"
+      }
+    }
+  }
+}

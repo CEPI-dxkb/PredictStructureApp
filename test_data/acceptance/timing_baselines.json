@@ -1,0 +1,16 @@
+{
+    "esmfold_protein_gpu": {"min_s": 3, "max_s": 45, "typical_s": 7},
+    "esmfold_protein_cpu_cpu": {"min_s": 15, "max_s": 120, "typical_s": 26},
+    "esmfold_protein_recycles8_gpu": {"min_s": 5, "max_s": 60, "typical_s": 12},
+    "esmfold_protein_mmcif_gpu": {"min_s": 3, "max_s": 45, "typical_s": 7},
+    "boltz_protein_gpu": {"min_s": 30, "max_s": 1800, "typical_s": 120},
+    "boltz_protein_msa_gpu": {"min_s": 30, "max_s": 1800, "typical_s": 120},
+    "boltz_multimer_gpu": {"min_s": 60, "max_s": 3600, "typical_s": 300},
+    "boltz_protein_steps50_gpu": {"min_s": 15, "max_s": 900, "typical_s": 60},
+    "boltz_protein_samples3_gpu": {"min_s": 90, "max_s": 5400, "typical_s": 360},
+    "openfold_protein_gpu": {"min_s": 30, "max_s": 1800, "typical_s": 120},
+    "openfold_protein_msa_gpu": {"min_s": 30, "max_s": 1800, "typical_s": 120},
+    "chai_protein_gpu": {"min_s": 30, "max_s": 1800, "typical_s": 120},
+    "chai_protein_msa_gpu": {"min_s": 30, "max_s": 1800, "typical_s": 120},
+    "alphafold_protein_gpu": {"min_s": 600, "max_s": 7200, "typical_s": 1500}
+}

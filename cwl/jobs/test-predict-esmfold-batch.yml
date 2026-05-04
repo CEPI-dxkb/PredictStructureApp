@@ -1,0 +1,10 @@
+# ESMFold with max_tokens_per_batch
+# Covers: max_tokens_per_batch
+tool: esmfold
+protein:
+  - class: File
+    path: ../../test_data/simple_protein.fasta
+output_dir: output
+num_recycles: 4
+device: gpu
+max_tokens_per_batch: 512
