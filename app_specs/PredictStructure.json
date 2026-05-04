@@ -222,16 +222,5 @@
             "label": "Output File",
             "desc": "Optional workspace output file path."
         }
-    ],
-    "preflight": {
-        "cpu": 8,
-        "memory": "64G",
-        "runtime": 14400,
-        "storage": "50G",
-        "policy_data": {
-            "gpu_count": 1,
-            "partition": "gpu2",
-            "constraint": "A100|H100|H200"
-        }
-    }
+    ]
 }

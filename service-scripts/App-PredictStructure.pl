@@ -137,7 +137,7 @@ sub preflight {
         $result->{policy_data} = $resources->{policy_data} // {
             gpu_count  => 1,
             partition  => 'gpu2',
-            constraint => 'A100|H100|H200',
+            constraint => 'V100|H100|H200',
         };
     }
 
@@ -164,7 +164,7 @@ sub _default_preflight {
         policy_data => {
             gpu_count  => 1,
             partition  => 'gpu2',
-            constraint => 'A100|H100|H200',
+            constraint => 'V100|H100|H200',
         },
     };
 }
