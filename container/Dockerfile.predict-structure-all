@@ -112,15 +112,12 @@ RUN conda create -p /opt/conda-chai --yes --quiet python=3.10 && \
 
 RUN conda create -p /opt/conda-esmfold --yes --quiet python=3.11 && \
     /opt/conda-esmfold/bin/pip install --no-cache-dir \
-<<<<<<< HEAD
         'torch>=2.2' --index-url https://download.pytorch.org/whl/cu121
 RUN /opt/conda-esmfold/bin/pip install --no-cache-dir \
         transformers accelerate biopython && \
     conda clean --all --force-pkgs-dirs --yes
-=======
-        'torch>=2.6' transformers accelerate biopython && \
-    conda clean -afy
->>>>>>> a78758515ac60874b67a342d4423e6e5a9125faa
+        # 'torch>=2.6' transformers accelerate biopython && \
+    #conda clean -afy
 
 # ─── AlphaFold 2 (matches reqts-alphafold.def) ───────────────────────
 
