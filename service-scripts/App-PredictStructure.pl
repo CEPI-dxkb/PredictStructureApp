@@ -230,9 +230,8 @@ sub _validate_file_format {
 
 Estimate resource requirements by delegating to the Python CLI's
 C<preflight> subcommand. Returns a hash with cpu, memory, runtime,
-storage, and optional policy_data for GPU scheduling.
-
-ESMFold does not require a GPU, so policy_data is omitted for it.
+storage, and policy_data for scheduling. All tools are scheduled on
+the gpu2 partition; GPU-capable tools additionally request a GPU device.
 
 =cut
 
@@ -306,12 +305,18 @@ sub preflight {
         storage => $resources->{storage} // "50G",
     };
 
-    # Add GPU policy only if the tool needs it
+    # Always set partition to gpu2 for proper scheduling. GPU-capable
+    # tools additionally get gpu_count + constraint so SLURM allocates
+    # a GPU device.
     if ($resources->{needs_gpu}) {
         $result->{policy_data} = $resources->{policy_data} // {
             gpu_count  => 1,
             partition  => 'gpu2',
             constraint => 'V100|H100|H200',
+        };
+    } else {
+        $result->{policy_data} = {
+            partition  => 'gpu2',
         };
     }
 
@@ -327,6 +332,9 @@ sub _default_preflight {
             memory  => "32G",
             runtime => 3600,
             storage => "50G",
+            policy_data => {
+                partition  => 'gpu2',
+            },
         };
     }
 
