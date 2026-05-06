@@ -424,11 +424,17 @@ sub run_app {
 
     # When dispatched via GoWe's bvbrc executor, CWL File inputs arrive
     # as hash refs ({"class":"File","path":"...","location":"..."}).
-    # Resolve them to plain path strings so the rest of the Perl works.
+    # Resolve them to a single path string. Prefer `location` — GoWe
+    # sets this to a ws:// workspace URL when files have been staged to
+    # the workspace for the bvbrc executor. Fall back to `path` (local
+    # filesystem) for direct worker execution, then `basename`.
     for my $key (qw(input_file dna_file rna_file msa_file)) {
         my $val = $params->{$key};
         if (ref($val) eq 'HASH') {
-            $params->{$key} = $val->{path} // $val->{location} // $val->{basename};
+            my $resolved = $val->{location} // $val->{path} // $val->{basename};
+            # Strip file:// scheme if present (local paths don't need it)
+            $resolved =~ s{^file://}{};
+            $params->{$key} = $resolved;
             print "Resolved $key from CWL File object → $params->{$key}\n"
                 if $ENV{P3_DEBUG};
         }
