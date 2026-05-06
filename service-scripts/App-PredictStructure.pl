@@ -242,6 +242,16 @@ sub preflight {
     _init_debug($params);
     _validate_params($params);
 
+    # Peek at workspace files to catch format errors before resource
+    # estimation. Uses p3-cat | head (only streams first few lines).
+    for my $key (qw(input_file dna_file rna_file)) {
+        next unless $params->{$key};
+        _validate_file_format($params->{$key}, $key, "fasta");
+    }
+    if ($params->{msa_file}) {
+        _validate_file_format($params->{msa_file}, "msa_file", "msa");
+    }
+
     my $tool = $params->{tool} // "auto";
 
     # Build preflight command
