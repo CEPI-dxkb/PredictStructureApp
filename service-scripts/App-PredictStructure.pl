@@ -273,6 +273,20 @@ sub run_app {
 
     make_path($input_dir, $output_dir);
 
+    # Ensure the workspace output folder exists before we attempt to
+    # upload results there at the end. p3-mkdir is a no-op if the
+    # folder already exists; errors are non-fatal (the upload step
+    # will report a clearer message if the path is truly invalid).
+    if (my $ws_out = $params->{output_path}) {
+        my $rc = system("p3-mkdir", $ws_out);
+        if ($rc != 0) {
+            print STDERR "Warning: p3-mkdir $ws_out returned rc="
+                . ($rc >> 8) . "; continuing (folder may already exist)\n";
+        } else {
+            print "Workspace output folder ready: $ws_out\n" if $ENV{P3_DEBUG};
+        }
+    }
+
     # -----------------------------------------------------------------
     # 1. Download input files from workspace
     # -----------------------------------------------------------------
