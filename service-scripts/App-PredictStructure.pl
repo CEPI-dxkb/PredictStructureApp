@@ -144,24 +144,43 @@ sub _validate_params {
 }
 
 
-sub _validate_file_format {
-    my ($path, $label, $expected_fmt) = @_;
-    # $expected_fmt: "fasta" | "msa" | undef (skip content check)
+sub _peek_file_lines {
+    my ($source, $n_lines) = @_;
+    $n_lines //= 5;
 
-    unless (-f $path && -s $path) {
-        die "$label: file is missing or empty ($path).\n";
+    # $source is either a local path or a ws:// path. For workspace
+    # paths we stream via p3-cat and read only the first N lines (the
+    # SIGPIPE from head stops the transfer early so we don't pull the
+    # entire file). For local paths we open directly.
+    my @lines;
+    if (-f $source) {
+        open(my $fh, "<", $source) or die "Cannot open $source: $!\n";
+        while (my $line = <$fh>) {
+            push @lines, $line;
+            last if @lines >= $n_lines;
+        }
+        close($fh);
+    } else {
+        # Assume workspace path — stream first N lines via p3-cat
+        my $cmd = "p3-cat '$source' 2>/dev/null | head -n $n_lines";
+        @lines = `$cmd`;
     }
+    return @lines;
+}
+
+
+sub _validate_file_format {
+    my ($source, $label, $expected_fmt) = @_;
+    # $source: local path or workspace path
+    # $expected_fmt: "fasta" | "msa" | undef (skip content check)
 
     return unless $expected_fmt;
 
-    # Read the first 10 lines for format sniffing
-    open(my $fh, "<", $path) or die "$label: cannot open $path: $!\n";
-    my @lines;
-    while (my $line = <$fh>) {
-        push @lines, $line;
-        last if @lines >= 10;
+    my @lines = _peek_file_lines($source, 5);
+
+    unless (@lines) {
+        die "$label: file is empty or unreadable ($source).\n";
     }
-    close($fh);
 
     my $first_content = "";
     for my $l (@lines) {
@@ -171,10 +190,10 @@ sub _validate_file_format {
     }
     chomp $first_content;
 
-    my $ext = ($path =~ /\.([^.]+)$/) ? lc($1) : "";
+    my $ext = ($source =~ /\.([^.]+)$/) ? lc($1) : "";
 
     if ($expected_fmt eq "fasta") {
-        # Boltz YAML pass-through: .yaml/.yml files bypass FASTA check
+        # Boltz YAML pass-through
         if ($ext =~ /^(yaml|yml)$/) {
             my $joined = join("", @lines);
             die "$label: expected Boltz YAML manifest (must contain "
@@ -193,7 +212,6 @@ sub _validate_file_format {
               . "'# STOCKHOLM'), got: '$first_content'\n"
                 unless $first_content =~ /^#\s*STOCKHOLM/;
         } else {
-            # a3m and other MSA formats: first non-comment line starts with >
             die "$label: expected MSA format (first non-comment line "
               . "must start with '>' or '#'), got: '$first_content'\n"
                 unless $first_content =~ /^[>#]/;
@@ -441,9 +459,10 @@ sub run_app {
     );
     for my $key (sort keys %file_param_flag) {
         next unless $params->{$key};
+        # Peek at first lines via p3-cat before downloading the whole file
+        _validate_file_format($params->{$key}, $key, "fasta");
         print "Downloading $key: $params->{$key}\n";
         my $local = download_workspace_file($app, $params->{$key}, $input_dir);
-        _validate_file_format($local, $key, "fasta");
         push @input_flags, [$file_param_flag{$key}, $local];
     }
 
@@ -499,9 +518,9 @@ sub run_app {
     # msa_mode parameter (BV-BRC policy: external MSA servers are disabled).
     my $local_msa;
     if ($params->{msa_file}) {
+        _validate_file_format($params->{msa_file}, "msa_file", "msa");
         print "Downloading MSA file: $params->{msa_file}\n";
         $local_msa = download_workspace_file($app, $params->{msa_file}, $input_dir);
-        _validate_file_format($local_msa, "msa_file", "msa");
     }
 
     # -----------------------------------------------------------------
