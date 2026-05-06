@@ -1,20 +1,19 @@
 cwlVersion: v1.2
 class: CommandLineTool
 
-label: "Predict Structure (BV-BRC AppService wrapper)"
+label: "Predict Structure (BV-BRC App)"
 doc: |
-  Wraps the full BV-BRC App-PredictStructure.pl service script as a
-  single CWL tool. Unlike the multi-step protein-structure-prediction
-  workflow (predict → extract → report → merge), this tool runs
-  everything in one invocation: input validation, prediction,
-  characterization report (protein_compare), results.json + ro-crate
-  finalization.
+  BV-BRC protein structure prediction app. Dispatched via the BV-BRC
+  AppService runtime (executor: bvbrc), which handles workspace file
+  staging, SLURM scheduling, and result upload.
 
-  Inputs mirror the basic PredictStructure.json app spec. The tool
-  generates a params.json from CWL inputs via InitialWorkDirRequirement,
-  sets up the environment, and invokes the Perl AppScript. Workspace
-  upload is skipped (PREDICT_STRUCTURE_SKIP_UPLOAD=1) — CWL collects
-  the output directory directly.
+  The app runs App-PredictStructure.pl end-to-end: input validation,
+  prediction (Boltz-2 / OpenFold 3 / Chai-1 / AlphaFold 2 / ESMFold),
+  characterization report (protein_compare), and results finalization
+  (results.json v2.0 + ro-crate-metadata.json).
+
+  Inputs mirror the basic PredictStructure.json app spec. GoWe
+  translates CWL inputs to BV-BRC params.json for the AppService.
 
   Output directory (unified layout):
     output/
@@ -22,80 +21,21 @@ doc: |
     ├── inputs/            ├── predictions/       ├── reports/
     ├── metadata/          └── raw/
 
-requirements:
-  InlineJavascriptRequirement: {}
-  InitialWorkDirRequirement:
-    listing:
-      # Stage input files so the Perl's local-copy fallback in
-      # download_workspace_file finds them by path.
-      - entryname: staged/protein.fasta
-        entry: |
-          ${ return inputs.protein ? inputs.protein : null; }
-      - entryname: staged/dna.fasta
-        entry: |
-          ${ return inputs.dna ? inputs.dna : null; }
-      - entryname: staged/rna.fasta
-        entry: |
-          ${ return inputs.rna ? inputs.rna : null; }
-      - entryname: staged/msa_file
-        entry: |
-          ${ return inputs.msa ? inputs.msa : null; }
-      # Generate params.json from CWL inputs
-      - entryname: params.json
-        entry: |
-          ${
-            var params = {
-              tool: inputs.tool,
-              output_path: "/cwl/output"
-            };
-            if (inputs.protein) {
-              params.input_file = "staged/protein.fasta";
-            }
-            if (inputs.dna) {
-              params.dna_file = "staged/dna.fasta";
-            }
-            if (inputs.rna) {
-              params.rna_file = "staged/rna.fasta";
-            }
-            if (inputs.msa) {
-              params.msa_file = "staged/msa_file";
-            }
-            if (inputs.ligand && inputs.ligand.length > 0) {
-              params.ligand = inputs.ligand;
-            }
-            if (inputs.smiles && inputs.smiles.length > 0) {
-              params.smiles = inputs.smiles;
-            }
-            if (inputs.debug) {
-              params.debug = true;
-            }
-            return JSON.stringify(params, null, 2);
-          }
-  EnvVarRequirement:
-    envDef:
-      - envName: P3_WORKDIR
-        envValue: "."
-      - envName: PREDICT_STRUCTURE_SKIP_UPLOAD
-        envValue: "1"
-      - envName: HF_HOME
-        envValue: /local_databases/cache
+$namespaces:
+  cwltool: http://commonwl.org/cwltool#
+  gowe: "https://github.com/wilke/GoWe#"
+
+hints:
   DockerRequirement:
     dockerPull: folding_prod.sif
     dockerImageId: /scout/containers/folding_prod.sif
-  ResourceRequirement:
-    coresMin: 8
-    ramMin: 65536
-    ramMax: 204800
-  NetworkAccess:
-    networkAccess: true
-
-hints:
   cwltool:CUDARequirement:
     cudaVersionMin: "11.8"
     cudaDeviceCountMin: 1
     cudaDeviceCountMax: 1
   gowe:Execution:
-    executor: worker
+    bvbrc_app_id: PredictStructure
+    executor: bvbrc
     gpu: true
   gowe:ResourceData:
     datasets:
@@ -116,17 +56,15 @@ hints:
         size: 20GB
         mode: cache
 
-baseCommand:
-  - perl
-  - /build/dev_container/modules/PredictStructureApp/service-scripts/App-PredictStructure.pl
+requirements:
+  ResourceRequirement:
+    coresMin: 8
+    ramMin: 65536
+    ramMax: 204800
+  NetworkAccess:
+    networkAccess: true
 
-arguments:
-  - position: 1
-    valueFrom: ""
-  - position: 2
-    valueFrom: /build/dev_container/modules/PredictStructureApp/app_specs/PredictStructure.json
-  - position: 3
-    valueFrom: params.json
+baseCommand: [App-PredictStructure]
 
 # ===================================================================
 #  Inputs (mirrors basic PredictStructure.json app spec)
@@ -138,11 +76,14 @@ inputs:
       type: enum
       symbols: [auto, boltz, openfold, chai, alphafold, esmfold]
     default: auto
-    doc: "Prediction tool. 'auto' picks best from inputs (see docs/tool-selection.md)."
+    doc: |
+      Prediction tool. 'auto' picks best from inputs:
+        with MSA → Boltz > OpenFold > Chai > ESMFold > AlphaFold
+        no MSA   → ESMFold > AlphaFold
 
   protein:
     type: File?
-    doc: "Protein FASTA file. Multi-chain via multiple sequences in one file."
+    doc: "Protein FASTA file. Multi-chain via multiple sequences."
 
   dna:
     type: File?
@@ -154,7 +95,7 @@ inputs:
 
   ligand:
     type: string[]?
-    doc: "Ligand CCD codes (e.g. ATP, NAG). Glycans use CCD codes here too."
+    doc: "Ligand CCD codes (e.g. ATP, NAG). Glycans use CCD codes."
 
   smiles:
     type: string[]?
@@ -169,6 +110,10 @@ inputs:
     default: false
     doc: "Enable debug logging (P3_DEBUG=1, --verbose)"
 
+  output_path:
+    type: string?
+    doc: "Workspace output folder (BV-BRC). Set by the UI or GoWe --output-destination."
+
 # ===================================================================
 #  Outputs (unified layout)
 # ===================================================================
@@ -179,27 +124,27 @@ outputs:
     outputBinding:
       glob: output
     doc: |
-      Full prediction output directory (unified layout):
-      model_1.pdb + report.html + results.json at top, plus
-      inputs/ predictions/ reports/ metadata/ raw/ subdirs.
+      Full prediction output directory. Top-level: model_1.pdb,
+      report.html, results.json. Subdirs: inputs/, predictions/,
+      reports/, metadata/, raw/.
 
   best_model:
     type: File?
     outputBinding:
       glob: output/model_1.pdb
-    doc: "Top-level rank-1 PDB (user-facing copy)"
+    doc: "Rank-1 PDB structure"
 
   report:
     type: File?
     outputBinding:
       glob: output/report.html
-    doc: "HTML characterization report (user-facing copy)"
+    doc: "HTML characterization report"
 
   results:
     type: File?
     outputBinding:
       glob: output/results.json
-    doc: "results.json v2.0 (CWL-style outputs map + UI summary)"
+    doc: "results.json v2.0 (CWL-style outputs map)"
 
   metadata:
     type: File?
@@ -209,10 +154,3 @@ outputs:
 
 stdout: predict-structure-app.log
 stderr: predict-structure-app.err
-
-$namespaces:
-  cwltool: http://commonwl.org/cwltool#
-  gowe: https://gowe.bv-brc.org/cwl#
-
-$schemas:
-  - https://schema.org/version/latest/schemaorg-current-https.rdf
