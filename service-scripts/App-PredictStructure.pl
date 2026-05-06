@@ -427,6 +427,39 @@ sub run_app {
 
     _validate_params($params);
 
+    # Ensure HuggingFace model cache is usable. ESMFold loads weights via
+    # the transformers library which writes to HF_HOME. The SIF bakes
+    # HF_HOME=/local_databases/esmfold, but on production workers where
+    # /local_databases isn't bind-mounted that path is read-only or
+    # absent → OSError EROFS. We check the current HF_HOME (or the
+    # default locations) and redirect to a writable path if needed.
+    {
+        my $hf = $ENV{HF_HOME} // "";
+        my $hf_ok = $hf && -d $hf && -w $hf;
+
+        if (!$hf_ok) {
+            # Try the standard pre-cached locations
+            for my $candidate ("/local_databases/cache", "/local_databases/esmfold") {
+                if (-d $candidate && -w $candidate) {
+                    $ENV{HF_HOME} = $candidate;
+                    $hf_ok = 1;
+                    print "Set HF_HOME=$candidate (pre-cached model weights)\n"
+                        if $ENV{P3_DEBUG};
+                    last;
+                }
+            }
+        }
+
+        if (!$hf_ok) {
+            my $hf_tmp = ($ENV{P3_WORKDIR} // $ENV{TMPDIR} // "/tmp") . "/hf_cache";
+            make_path($hf_tmp);
+            $ENV{HF_HOME} = $hf_tmp;
+            print STDERR "Warning: HF_HOME=$hf is not writable and "
+                       . "/local_databases/cache not found; "
+                       . "redirected to $hf_tmp (model download may be slow)\n";
+        }
+    }
+
     # Create working directories
     my $work_dir = $ENV{P3_WORKDIR} // $ENV{TMPDIR} // "/tmp";
     my $input_dir  = "$work_dir/input";
