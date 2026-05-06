@@ -14,7 +14,7 @@
             "default": "auto",
             "required": 1,
             "label": "Prediction Tool",
-            "desc": "Structure prediction engine. 'auto' picks the best available tool from the inputs. Boltz-2, OpenFold 3, and Chai-1 are diffusion-based and support protein/DNA/RNA/ligand complexes. AlphaFold 2 builds an MSA from local databases (protein-only). ESMFold is fastest (single-sequence, protein-only, CPU-capable). MSA file is required for boltz/openfold/chai by BV-BRC policy."
+            "desc": "Structure prediction engine. 'auto' picks the best available tool: with MSA → Boltz > OpenFold > Chai; without MSA → ESMFold (fast, single-sequence) > AlphaFold (slow, local-DB MSA). Boltz-2, OpenFold 3, and Chai-1 are diffusion-based and support protein/DNA/RNA/ligand complexes but require an uploaded MSA file (BV-BRC policy). ESMFold is fastest (single-sequence, protein-only, CPU-capable). AlphaFold 2 builds its own MSA from local databases (protein-only, hours)."
         },
         {
             "id": "input_file",

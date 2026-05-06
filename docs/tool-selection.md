@@ -99,18 +99,18 @@ the Perl only auto-flips to `cpu` for ESMFold itself.
 ## Capability matrix
 
 ```
-                     Boltz   OpenFold   Chai    ESMFold   AlphaFold
-Priority (auto):       1        2         3         4          5
-Protein:               ✓        ✓         ✓         ✓          ✓
-DNA:                   ✓        ✓         ✓         —          —
-RNA:                   ✓        ✓         ✓         —          —
-Ligand (CCD):          ✓        ✓         ✓         —          —
-SMILES:                ✓        ✓         ✓         —          —
-Glycan (CCD):          ✓        ✓         ✓         —          —
-Needs MSA (protein):  yes      yes       yes        no         no
-   ↳ source:          file     file      file    local DBs   (none, single-seq)
-CPU practical:         —        —         —         —          ✓
-Multi-chain:           ✓        ✓         ✓        ✓ (multimer preset)   single-chain only
+                     Boltz   OpenFold   Chai    ESMFold     AlphaFold
+Priority (auto):       1        2         3         4            5
+Protein:               ✓        ✓         ✓         ✓            ✓
+DNA:                   ✓        ✓         ✓         —            —
+RNA:                   ✓        ✓         ✓         —            —
+Ligand (CCD):          ✓        ✓         ✓         —            —
+SMILES:                ✓        ✓         ✓         —            —
+Glycan (CCD):          ✓        ✓         ✓         —            —
+Needs MSA (protein):  yes      yes       yes        no           no
+   ↳ source:          file     file      file   (none, single-seq)  local DBs
+CPU practical:         —        —         —         ✓            —
+Multi-chain:           ✓        ✓         ✓    single-chain   ✓ (multimer preset)
 ```
 
 Notes:

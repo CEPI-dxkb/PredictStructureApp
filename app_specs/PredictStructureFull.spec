@@ -14,7 +14,7 @@
             "default": "auto",
             "required": 1,
             "label": "Prediction Tool",
-            "desc": "Structure prediction engine. 'auto' picks the best available tool from the inputs."
+            "desc": "Structure prediction engine. 'auto' picks the best available tool: with MSA → Boltz > OpenFold > Chai > ESMFold > AlphaFold; without MSA → ESMFold > AlphaFold."
         },
 
         {
