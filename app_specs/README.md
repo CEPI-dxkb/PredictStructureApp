@@ -47,8 +47,8 @@ When `tool: auto` (the default), the chosen prediction tool depends on the entit
 
 | `input_file` | DNA / RNA / lig / SMILES | `msa_file` | → Auto picks |
 |:-:|:-:|:-:|---|
-| ✓ | — | — | **AlphaFold** (uses local DB MSA), fallback **ESMFold** |
-| ✓ | — | ✓ | **Boltz** > OpenFold > Chai > AlphaFold > ESMFold |
+| ✓ | — | — | **ESMFold** (fast single-sequence), fallback **AlphaFold** (slow, local DB MSA) |
+| ✓ | — | ✓ | **Boltz** > OpenFold > Chai > ESMFold > AlphaFold |
 | ✓ | ✓ | — | **ERROR** — Boltz/OpenFold/Chai need MSA; AF/ESMFold can't handle non-protein |
 | ✓ | ✓ | ✓ | **Boltz** > OpenFold > Chai |
 | — | DNA / RNA only | any | **Boltz** > OpenFold > Chai |

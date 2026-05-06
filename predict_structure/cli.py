@@ -98,8 +98,10 @@ def _auto_select_tool(
       - AlphaFold builds its own MSA from local databases (no external
         server, no upload), so it is selectable without an explicit MSA.
       - ESMFold is single-sequence by design and never uses MSA.
-      - Otherwise pick first available in accuracy-priority order:
-        Boltz > OpenFold > Chai > AlphaFold > ESMFold.
+      - Otherwise pick first available in priority order:
+        Boltz > OpenFold > Chai > ESMFold > AlphaFold.
+        ESMFold before AlphaFold because it returns in minutes (vs
+        hours for AF2's local-DB MSA pipeline).
 
     Raises:
         click.UsageError: If no suitable tool is found.
@@ -112,8 +114,11 @@ def _auto_select_tool(
         if _is_tool_available("esmfold"):
             return "esmfold"
 
-    # Accuracy-priority order
-    for tool in ("boltz", "openfold", "chai", "alphafold", "esmfold"):
+    # Priority order: diffusion tools first (need MSA), then ESMFold
+    # (fast single-sequence), then AlphaFold (slow, builds own MSA from
+    # local DBs). ESMFold before AlphaFold because it's minutes vs hours
+    # and covers the common "quick protein fold" use case.
+    for tool in ("boltz", "openfold", "chai", "esmfold", "alphafold"):
         # Skip tools that don't support the entity types
         if tool in ("alphafold", "esmfold") and has_non_protein:
             continue
@@ -166,8 +171,8 @@ def discover_tool(input_file: Path, device: str = "gpu") -> str:
             return "esmfold"
         # Fall through to general priority
 
-    # Accuracy-priority order
-    for tool in ("boltz", "openfold", "chai", "alphafold", "esmfold"):
+    # Priority order: ESMFold before AlphaFold (fast vs hours)
+    for tool in ("boltz", "openfold", "chai", "esmfold", "alphafold"):
         if tool == "alphafold":
             if _is_tool_available(tool) and AF2_DEFAULT_DATA_DIR.is_dir():
                 return tool
@@ -1035,8 +1040,8 @@ def auto(protein, dna, rna, ligand, smiles, use_msa_server, **shared):
     (single-sequence).
 
     \b
-    Priority order (GPU, MSA available):  Boltz > OpenFold > Chai > AlphaFold > ESMFold
-    Priority order (GPU, no MSA):         AlphaFold > ESMFold
+    Priority order (GPU, MSA available):  Boltz > OpenFold > Chai > ESMFold > AlphaFold
+    Priority order (GPU, no MSA):         ESMFold > AlphaFold
     Priority order (CPU):                 ESMFold > others
     Non-protein entities:                 AlphaFold and ESMFold excluded
     """

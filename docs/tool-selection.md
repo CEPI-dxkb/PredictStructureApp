@@ -42,7 +42,7 @@ auto-select(protein, dna, rna, ligand, smiles, msa, device)
   ┌─ device == cpu  AND  protein-only?
   │     └─→ ESMFold
   │
-  ├─ For each tool in priority order: boltz, openfold, chai, alphafold, esmfold
+  ├─ For each tool in priority order: boltz, openfold, chai, esmfold, alphafold
   │
   │     ┌─ tool ∈ {alphafold, esmfold}  AND  non_protein?
   │     │     └─ SKIP  (AF2 / ESMFold are protein-only)
@@ -70,14 +70,14 @@ the Perl only auto-flips to `cpu` for ESMFold itself.
 
 | protein | dna/rna/lig/smi | msa_file | → Auto picks | Why |
 |:-:|:-:|:-:|---|---|
-| ✓ | — | — | **AlphaFold** | Only protein, no upload — AF2 builds its own MSA from local DBs |
+| ✓ | — | — | **ESMFold** | Fast single-sequence (~5 min); fallback AlphaFold (hours, local DB MSA) |
 | ✓ | — | ✓ | **Boltz** | MSA available, highest priority |
 | ✓ | ✓ (any) | — | **ERROR** | Boltz/OpenFold/Chai require MSA for protein; AF/ESMFold can't handle DNA/RNA/ligand |
 | ✓ | ✓ (any) | ✓ | **Boltz** | MSA + multi-entity → diffusion tool, Boltz first |
 | — | DNA/RNA only | — | **Boltz** | No protein → no MSA gate; Boltz first |
 | — | DNA/RNA only | ✓ | **Boltz** | Same |
 | — | ligand or SMILES only (no biopolymer) | any | **ERROR** in practice | Tools require at least one chain |
-| ✓ (only) | — | — | **ESMFold** *if* AlphaFold DBs absent | Single-sequence fallback |
+| ✓ (only) | — | — | **AlphaFold** only if ESMFold unavailable AND AF DBs present | Last resort |
 
 ### Three failure modes the UI should surface
 
@@ -99,7 +99,7 @@ the Perl only auto-flips to `cpu` for ESMFold itself.
 ## Capability matrix
 
 ```
-                     Boltz   OpenFold   Chai    AlphaFold   ESMFold
+                     Boltz   OpenFold   Chai    ESMFold   AlphaFold
 Priority (auto):       1        2         3         4          5
 Protein:               ✓        ✓         ✓         ✓          ✓
 DNA:                   ✓        ✓         ✓         —          —
@@ -137,10 +137,10 @@ function recommendedTool({protein, dna, rna, ligand, smiles, msa_file}) {
     // Single-sequence path (protein-only, no MSA)
     if (hasProtein && !hasNonProtein && !msa_file) {
         return {
-            tool: "alphafold",
-            fallback: "esmfold",
-            hint: "AlphaFold will build its MSA from local databases. " +
-                  "ESMFold is selected if AF databases are unavailable."
+            tool: "esmfold",
+            fallback: "alphafold",
+            hint: "ESMFold selected — fast single-sequence prediction (~5 min). " +
+                  "AlphaFold (hours) is the fallback if ESMFold is unavailable."
         };
     }
 
@@ -148,7 +148,7 @@ function recommendedTool({protein, dna, rna, ligand, smiles, msa_file}) {
     if (hasProtein && msa_file) {
         return {
             tool: "boltz",
-            fallbacks: ["openfold", "chai", "alphafold", "esmfold"],
+            fallbacks: ["openfold", "chai", "esmfold", "alphafold"],
             hint: "Boltz selected — diffusion tool with highest priority when MSA is available."
         };
     }
