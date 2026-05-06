@@ -1,0 +1,9 @@
+# Test job for predict-structure-app.cwl (single-step AppService wrapper)
+# Boltz with MSA: protein + MSA file, auto-selects Boltz.
+tool: auto
+protein:
+  class: File
+  path: ../../test_data/simple_protein.fasta
+msa:
+  class: File
+  path: ../../test_data/msa/crambin.a3m

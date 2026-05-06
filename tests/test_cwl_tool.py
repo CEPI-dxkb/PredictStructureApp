@@ -162,5 +162,9 @@ class TestJobYAMLs:
         assert has_input, f"Job missing input file key (expected one of {sorted(accepted_keys)})"
 
     def test_has_output_dir(self, job_doc):
+        # App-wrapper jobs (predict-structure-app.cwl) use P3_WORKDIR
+        # instead of an explicit output_dir in the job spec.
+        if "tool" in job_doc and "output_dir" not in job_doc and "output_directory" not in job_doc:
+            pytest.skip("App-wrapper job uses P3_WORKDIR, not output_dir")
         has_output = "output_dir" in job_doc or "output_directory" in job_doc
         assert has_output

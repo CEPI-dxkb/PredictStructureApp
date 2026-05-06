@@ -928,6 +928,14 @@ Upload prediction results to the BV-BRC workspace using p3-cp.
 sub upload_results {
     my ($app, $local_dir, $ws_path) = @_;
 
+    # CWL invocations set PREDICT_STRUCTURE_SKIP_UPLOAD=1 because CWL
+    # collects outputs from the working directory directly; there is no
+    # workspace to upload to.
+    if ($ENV{PREDICT_STRUCTURE_SKIP_UPLOAD}) {
+        print "Skipping workspace upload (PREDICT_STRUCTURE_SKIP_UPLOAD=1)\n";
+        return;
+    }
+
     my @mapping = (
         '--map-suffix' => "txt=txt",
         '--map-suffix' => "pdb=pdb",
