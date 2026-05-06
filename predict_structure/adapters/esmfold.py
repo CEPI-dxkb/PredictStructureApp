@@ -95,4 +95,7 @@ class ESMFoldAdapter(BaseAdapter):
             "cpu": 8,
             "memory": "32G",
             "runtime": 3600,
+            "policy_data": {
+                "partition": "gpu2",
+            },
         }

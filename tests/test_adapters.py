@@ -239,12 +239,13 @@ class TestESMFoldAdapter:
 
         assert "does not use MSA" in caplog.text
 
-    def test_preflight_no_gpu(self):
+    def test_preflight_partition(self):
         from predict_structure.adapters.esmfold import ESMFoldAdapter
 
         pf = ESMFoldAdapter().preflight()
-        assert "policy_data" not in pf
         assert pf["memory"] == "32G"
+        assert pf["policy_data"]["partition"] == "gpu2"
+        assert "gpu_count" not in pf["policy_data"]
 
     def test_requires_gpu_false(self):
         from predict_structure.adapters.esmfold import ESMFoldAdapter
