@@ -67,6 +67,14 @@
             "desc": "Pre-computed Multiple Sequence Alignment (.a3m, .sto). Required for Boltz, OpenFold, and Chai (their dummy single-sequence fallback produces unusable predictions; external MSA servers are disabled by BV-BRC policy). ESMFold ignores MSA; AlphaFold builds its own from local databases. Auto-converted to tool-native format (Parquet for Chai, injected into YAML for Boltz, JSON for OpenFold)."
         },
         {
+            "id": "debug",
+            "type": "bool",
+            "default": false,
+            "required": 0,
+            "label": "Debug Mode",
+            "desc": "Enable verbose debug logging. Sets P3_DEBUG=1 for the Perl service script and passes --verbose to the predict-structure CLI."
+        },
+        {
             "id": "output_path",
             "type": "folder",
             "required": 1,

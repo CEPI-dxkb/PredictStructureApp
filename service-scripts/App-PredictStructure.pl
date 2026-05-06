@@ -62,6 +62,19 @@ $script->donot_create_result_folder(1);
 $script->run(\@ARGV);
 
 # ---------------------------------------------------------------------------
+# Debug initialization
+# ---------------------------------------------------------------------------
+
+sub _init_debug {
+    my ($params) = @_;
+    if ($params->{debug}) {
+        $ENV{P3_DEBUG} = 1;
+        $ENV{P3_LOG_LEVEL} = 'DEBUG';
+        print STDERR "Debug mode enabled (P3_DEBUG=1, P3_LOG_LEVEL=DEBUG)\n";
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Preflight: resource estimation
 # ---------------------------------------------------------------------------
 
@@ -77,6 +90,8 @@ ESMFold does not require a GPU, so policy_data is omitted for it.
 
 sub preflight {
     my ($app, $app_def, $raw_params, $params) = @_;
+
+    _init_debug($params);
 
     my $tool = $params->{tool} // "auto";
 
@@ -234,6 +249,8 @@ sub _expand_ws_placeholders {
 
 sub run_app {
     my ($app, $app_def, $raw_params, $params) = @_;
+
+    _init_debug($params);
 
     print "Starting PredictStructure service\n";
     print STDERR "Parameters: " . Dumper($params) . "\n" if $ENV{P3_DEBUG};
@@ -447,6 +464,9 @@ sub build_command {
 
     # Always use subprocess backend inside the container
     push @cmd, "--backend", "subprocess";
+
+    # Verbose logging when debug is on
+    push @cmd, "--verbose" if $ENV{P3_DEBUG};
 
     # --- Shared options ---
 
