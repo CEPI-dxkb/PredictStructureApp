@@ -1,10 +1,10 @@
-# Test job for predict-structure-app.cwl (single-step AppService wrapper)
+# Test job for predict-structure-app.cwl
 # Boltz with MSA + ligand: tests CCD ligand input.
 tool: auto
-protein:
+input_file:
   class: File
   path: ../../test_data/simple_protein.fasta
-msa:
+msa_file:
   class: File
   path: ../../test_data/msa/crambin.a3m
 ligand:

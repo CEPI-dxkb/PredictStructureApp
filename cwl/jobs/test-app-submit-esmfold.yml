@@ -1,0 +1,14 @@
+# GoWe submission test for predict-structure-app.cwl (executor: bvbrc)
+# ESMFold: fast, protein-only, no MSA.
+# Input names match app_spec param names (GoWe passes them as-is to BV-BRC).
+tool: esmfold
+input_file:
+  class: File
+  path: ../../test_data/simple_protein.fasta
+dna_file: null
+rna_file: null
+ligand: []
+smiles: []
+msa_file: null
+debug: false
+output_path: /awilke@bvbrc/home/AppTests/gowe_app_esmfold

@@ -81,15 +81,15 @@ inputs:
         with MSA → Boltz > OpenFold > Chai > ESMFold > AlphaFold
         no MSA   → ESMFold > AlphaFold
 
-  protein:
+  input_file:
     type: File?
     doc: "Protein FASTA file. Multi-chain via multiple sequences."
 
-  dna:
+  dna_file:
     type: File?
     doc: "DNA FASTA file. Tools: Boltz-2, OpenFold 3, Chai-1."
 
-  rna:
+  rna_file:
     type: File?
     doc: "RNA FASTA file. Tools: Boltz-2, OpenFold 3, Chai-1."
 
@@ -101,7 +101,7 @@ inputs:
     type: string[]?
     doc: "SMILES strings for arbitrary small molecules."
 
-  msa:
+  msa_file:
     type: File?
     doc: "Pre-computed MSA (.a3m, .sto). Required for Boltz / OpenFold / Chai."
 

@@ -422,6 +422,18 @@ sub run_app {
     print "Starting PredictStructure service\n";
     print STDERR "Parameters: " . Dumper($params) . "\n" if $ENV{P3_DEBUG};
 
+    # When dispatched via GoWe's bvbrc executor, CWL File inputs arrive
+    # as hash refs ({"class":"File","path":"...","location":"..."}).
+    # Resolve them to plain path strings so the rest of the Perl works.
+    for my $key (qw(input_file dna_file rna_file msa_file)) {
+        my $val = $params->{$key};
+        if (ref($val) eq 'HASH') {
+            $params->{$key} = $val->{path} // $val->{location} // $val->{basename};
+            print "Resolved $key from CWL File object → $params->{$key}\n"
+                if $ENV{P3_DEBUG};
+        }
+    }
+
     # Expand ${WS_HOME} / ${WS_USER} placeholders in workspace-bound
     # params so committed params files don't have to bake in a
     # specific user. Same expansion happens client-side in
