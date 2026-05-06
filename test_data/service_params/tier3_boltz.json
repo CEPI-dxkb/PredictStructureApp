@@ -4,7 +4,6 @@
   "output_file": "tier3_boltz_test",
   "num_recycles": 3,
   "output_format": "pdb",
-  "msa_mode": "none",
   "seed": 42,
   "text_input": [
     {

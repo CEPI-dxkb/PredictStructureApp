@@ -64,14 +64,14 @@
     },
     "inputs": {
       "type": "array",
-      "description": "Descriptors for every user-supplied input. File-backed entities have source/staged/checksum; inline entities (CCD/SMILES/glycan) have value.",
+      "description": "Descriptors for every user-supplied input. File-backed entities have source/staged/checksum; inline entities (CCD/SMILES) have value.",
       "items": {
         "type": "object",
         "required": ["kind"],
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["protein", "dna", "rna", "msa", "ligand", "smiles", "glycan", "mixed"]
+            "enum": ["protein", "dna", "rna", "msa", "ligand", "smiles", "mixed"]
           },
           "name": {"type": "string"},
           "source": {
@@ -89,8 +89,8 @@
           "size": {"type": "integer", "minimum": 0},
           "length": {"type": "integer", "minimum": 0, "description": "Sequence length (residue/nucleotide count)."},
           "depth": {"type": "integer", "minimum": 0, "description": "MSA row count (a3m_depth)."},
-          "format": {"type": "string", "description": "fasta / a3m / sto / pqt / ccd / smiles / glycan-iupac / boltz-yaml"},
-          "value": {"type": "string", "description": "Inline value (CCD code, SMILES, glycan IUPAC). Mutually exclusive with file fields."},
+          "format": {"type": "string", "description": "fasta / a3m / sto / pqt / ccd / smiles / boltz-yaml"},
+          "value": {"type": "string", "description": "Inline value (CCD code, SMILES). Mutually exclusive with file fields."},
           "sequences": {
             "type": "array",
             "description": "For multi-record FASTAs: per-sequence breakdown.",

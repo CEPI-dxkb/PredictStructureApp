@@ -91,10 +91,15 @@ def _auto_select_tool(
     Selection rules:
       - Non-protein entities exclude AlphaFold and ESMFold.
       - ``device=cpu`` prefers ESMFold (others are impractical on CPU).
-      - Boltz and Chai require an MSA source (``--msa`` file or
-        ``--use-msa-server``).  Without one they are skipped.
+      - Boltz, OpenFold, and Chai require an MSA source (``--msa`` file
+        or ``--use-msa-server``).  Without one they are skipped --
+        running them with a dummy single-sequence MSA produces unusable
+        predictions, so we exclude them rather than silently degrade.
+      - AlphaFold builds its own MSA from local databases (no external
+        server, no upload), so it is selectable without an explicit MSA.
+      - ESMFold is single-sequence by design and never uses MSA.
       - Otherwise pick first available in accuracy-priority order:
-        Boltz > Chai > AlphaFold > ESMFold.
+        Boltz > OpenFold > Chai > AlphaFold > ESMFold.
 
     Raises:
         click.UsageError: If no suitable tool is found.
@@ -113,10 +118,11 @@ def _auto_select_tool(
         if tool in ("alphafold", "esmfold") and has_non_protein:
             continue
 
-        # Boltz/Chai benefit from MSAs for protein sequences, but
-        # DNA/RNA/ligand-only inputs don't need MSAs at all.
+        # Boltz/OpenFold/Chai need MSA for protein chains. Skip them
+        # when none is available to avoid the silent dummy-MSA fallback
+        # (catastrophic quality regression).
         has_protein = EntityType.PROTEIN in entity_list.entity_types
-        if tool in ("boltz", "chai") and has_protein and not msa_available:
+        if tool in ("boltz", "openfold", "chai") and has_protein and not msa_available:
             continue
 
         if tool == "alphafold":
@@ -184,7 +190,6 @@ def _build_entity_list(
     rna: tuple[str, ...],
     ligand: tuple[str, ...],
     smiles: tuple[str, ...],
-    glycan: tuple[str, ...],
     *,
     sequence_files: tuple[str, ...] = (),
     force: bool = False,
@@ -192,8 +197,11 @@ def _build_entity_list(
     """Build an EntityList from CLI option tuples.
 
     FASTA files (--protein, --dna, --rna) are parsed and each sequence
-    becomes a separate entity. Inline values (--ligand, --smiles, --glycan)
-    become one entity each.
+    becomes a separate entity. Inline values (--ligand, --smiles) become
+    one entity each. ``--ligand`` accepts a CCD code (1-3 alphanumeric
+    chars; e.g. ``ATP``); ``--smiles`` accepts a SMILES string for arbitrary
+    small molecules. Glycans are submitted as CCD-coded ligands (use
+    ``--ligand <CCD>``); the upstream tools have no separate glycan type.
 
     Also handles Boltz YAML pass-through: if a single --protein path points
     to a .yaml/.yml file, it's treated as a YAML entity for Boltz.
@@ -258,13 +266,10 @@ def _build_entity_list(
     for smi in smiles:
         entities.add(EntityType.SMILES, smi, name="smiles", format="smiles")
 
-    for gly in glycan:
-        entities.add(EntityType.GLYCAN, gly, name="glycan", format="glycan-iupac")
-
     if not entities:
         raise click.UsageError(
             "No input entities provided. Use --protein, --dna, --rna, "
-            "--sequence, --ligand, --smiles, or --glycan to specify input."
+            "--sequence, --ligand, or --smiles to specify input."
         )
 
     # Validate total size
@@ -292,11 +297,12 @@ def entity_options(func):
     @optgroup.option("--sequence", "sequence_files", multiple=True, type=click.Path(exists=True),
                      help="FASTA file with auto-detected sequence type (repeatable)")
     @optgroup.option("--ligand", multiple=True, type=str,
-                     help="Ligand CCD code (repeatable)")
+                     help="Ligand CCD code, 1-3 alphanumeric chars (e.g. ATP). "
+                          "Use this for any CCD-coded compound including "
+                          "glycans (e.g. NAG, MAN). Repeatable.")
     @optgroup.option("--smiles", multiple=True, type=str,
-                     help="SMILES string (repeatable)")
-    @optgroup.option("--glycan", multiple=True, type=str,
-                     help="Glycan specification (repeatable)")
+                     help="SMILES string for an arbitrary small molecule. "
+                          "Use --ligand for CCD-coded compounds. Repeatable.")
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
@@ -733,8 +739,6 @@ def _run_job_file(job_path: Path, base_output_dir: Path | None) -> None:
             entities.add(EntityType.LIGAND, code, name=code, format="ccd")
         for smi in job.get("smiles", []):
             entities.add(EntityType.SMILES, smi, name="smiles", format="smiles")
-        for gly in job.get("glycans", []):
-            entities.add(EntityType.GLYCAN, gly, name="glycan", format="glycan-iupac")
 
         if not entities:
             click.echo(f"Warning: job {idx} has no entities, skipping", err=True)
@@ -771,7 +775,6 @@ def _run_job_file(job_path: Path, base_output_dir: Path | None) -> None:
             "rna": job.get("rna", []),
             "ligand": job.get("ligands", []),
             "smiles": job.get("smiles", []),
-            "glycan": job.get("glycans", []),
             "sequence": job.get("sequence", []),
         }
 
@@ -829,10 +832,10 @@ def main(ctx, job, job_output_dir, verbose):
 @optgroup.option("--msa-server-url", default=None, help="Custom MSA server URL (implies --use-msa-server)")
 @optgroup.option("--use-potentials", is_flag=True, default=False, help="Enable potential terms")
 @backend_options
-def boltz(protein, dna, rna, ligand, smiles, glycan,
+def boltz(protein, dna, rna, ligand, smiles,
           sampling_steps, use_msa_server, msa_server_url, use_potentials, **shared):
     """Predict structure with Boltz-2 (diffusion-based, proteins/DNA/RNA/ligands)."""
-    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
     extra = {
         "sampling_steps": sampling_steps,
         "use_msa_server": use_msa_server or (msa_server_url is not None),
@@ -841,7 +844,7 @@ def boltz(protein, dna, rna, ligand, smiles, glycan,
     }
     entity_inputs = {
         "protein": protein, "dna": dna, "rna": rna,
-        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+        "ligand": ligand, "smiles": smiles,
         "sequence": shared.get("sequence_files", ()),
     }
     run_prediction("boltz", extra, entity_list=entity_list,
@@ -866,13 +869,13 @@ def boltz(protein, dna, rna, ligand, smiles, glycan,
 @optgroup.option("--recycle-msa-subsample", type=int, default=0, help="MSA subsample per recycle [default: 0 = all]")
 @optgroup.option("--no-low-memory", is_flag=True, default=False, help="Disable low-memory mode")
 @backend_options
-def chai(protein, dna, rna, ligand, smiles, glycan,
+def chai(protein, dna, rna, ligand, smiles,
          sampling_steps, use_msa_server, msa_server_url,
          no_esm_embeddings, use_templates_server, constraint_path,
          template_hits_path, num_trunk_samples, recycle_msa_subsample,
          no_low_memory, **shared):
     """Predict structure with Chai-1 (diffusion-based protein prediction)."""
-    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
     extra = {
         "sampling_steps": sampling_steps,
         "use_msa_server": use_msa_server or (msa_server_url is not None),
@@ -887,7 +890,7 @@ def chai(protein, dna, rna, ligand, smiles, glycan,
     }
     entity_inputs = {
         "protein": protein, "dna": dna, "rna": rna,
-        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+        "ligand": ligand, "smiles": smiles,
         "sequence": shared.get("sequence_files", ()),
     }
     run_prediction("chai", extra, entity_list=entity_list,
@@ -906,10 +909,10 @@ def chai(protein, dna, rna, ligand, smiles, glycan,
 @optgroup.option("--af2-db-preset", default="reduced_dbs", help="DB preset (reduced_dbs, full_dbs)")
 @optgroup.option("--af2-max-template-date", default="2022-01-01", help="Max template date (YYYY-MM-DD)")
 @backend_options
-def alphafold(protein, dna, rna, ligand, smiles, glycan,
+def alphafold(protein, dna, rna, ligand, smiles,
               af2_data_dir, af2_model_preset, af2_db_preset, af2_max_template_date, **shared):
     """Predict structure with AlphaFold 2 (MSA-based, high accuracy)."""
-    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
     extra = {
         "af2_data_dir": af2_data_dir,
         "af2_model_preset": af2_model_preset,
@@ -918,7 +921,7 @@ def alphafold(protein, dna, rna, ligand, smiles, glycan,
     }
     entity_inputs = {
         "protein": protein, "dna": dna, "rna": rna,
-        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+        "ligand": ligand, "smiles": smiles,
         "sequence": shared.get("sequence_files", ()),
     }
     run_prediction("alphafold", extra, entity_list=entity_list,
@@ -936,10 +939,10 @@ def alphafold(protein, dna, rna, ligand, smiles, glycan,
 @optgroup.option("--chunk-size", type=int, default=None, help="Chunk size for long sequences")
 @optgroup.option("--max-tokens-per-batch", type=int, default=None, help="Max tokens per batch")
 @backend_options
-def esmfold(protein, dna, rna, ligand, smiles, glycan,
+def esmfold(protein, dna, rna, ligand, smiles,
             fp16, chunk_size, max_tokens_per_batch, **shared):
     """Predict structure with ESMFold (single-sequence, no MSA needed, CPU-capable)."""
-    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
     extra = {
         "esm_fp16": fp16,
         "esm_chunk_size": chunk_size,
@@ -947,7 +950,7 @@ def esmfold(protein, dna, rna, ligand, smiles, glycan,
     }
     entity_inputs = {
         "protein": protein, "dna": dna, "rna": rna,
-        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+        "ligand": ligand, "smiles": smiles,
         "sequence": shared.get("sequence_files", ()),
     }
     run_prediction("esmfold", extra, entity_list=entity_list,
@@ -969,11 +972,11 @@ def esmfold(protein, dna, rna, ligand, smiles, glycan,
 @optgroup.option("--runner-yaml", type=click.Path(exists=True), default=None,
                  help="Runner YAML for advanced config (e.g. disable DeepSpeed for H200)")
 @backend_options
-def openfold(protein, dna, rna, ligand, smiles, glycan,
+def openfold(protein, dna, rna, ligand, smiles,
              num_diffusion_samples, num_model_seeds,
              use_msa_server, use_templates, checkpoint, runner_yaml, **shared):
     """Predict structure with OpenFold 3 (AF3-class, protein/DNA/RNA/ligands)."""
-    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
     extra = {
         "num_diffusion_samples": num_diffusion_samples,
         "num_model_seeds": num_model_seeds,
@@ -984,7 +987,7 @@ def openfold(protein, dna, rna, ligand, smiles, glycan,
     }
     entity_inputs = {
         "protein": protein, "dna": dna, "rna": rna,
-        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+        "ligand": ligand, "smiles": smiles,
         "sequence": shared.get("sequence_files", ()),
     }
     run_prediction("openfold", extra, entity_list=entity_list,
@@ -1017,23 +1020,24 @@ _AUTO_DEFAULTS: dict[str, dict] = {
 @click.option("--use-msa-server", is_flag=True, default=False,
               help="Use remote MSA server (enables Boltz/Chai selection)")
 @backend_options
-def auto(protein, dna, rna, ligand, smiles, glycan, use_msa_server, **shared):
+def auto(protein, dna, rna, ligand, smiles, use_msa_server, **shared):
     """Auto-discover the best available tool and predict structure.
 
     Checks which prediction tools are installed and selects the best
     one based on entity types, device, and availability.
 
-    Boltz and Chai are only selected when an MSA source is available
-    (--msa file or --use-msa-server).  Without one, they are skipped
-    in favor of AlphaFold or ESMFold.
+    Boltz, OpenFold, and Chai are only selected when an MSA source is
+    available (--msa file or --use-msa-server).  Without one, they are
+    skipped in favor of AlphaFold (local MSA databases) or ESMFold
+    (single-sequence).
 
     \b
     Priority order (GPU, MSA available):  Boltz > OpenFold > Chai > AlphaFold > ESMFold
-    Priority order (GPU, no MSA):         OpenFold > AlphaFold > ESMFold
+    Priority order (GPU, no MSA):         AlphaFold > ESMFold
     Priority order (CPU):                 ESMFold > others
     Non-protein entities:                 AlphaFold and ESMFold excluded
     """
-    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, glycan, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
     tool_name = _auto_select_tool(
         entity_list,
         device=shared.get("device", "gpu"),
@@ -1043,11 +1047,11 @@ def auto(protein, dna, rna, ligand, smiles, glycan, use_msa_server, **shared):
     click.echo(f"Auto-selected: {tool_name}")
 
     extra = dict(_AUTO_DEFAULTS.get(tool_name, {}))
-    if use_msa_server and tool_name in ("boltz", "chai"):
+    if use_msa_server and tool_name in ("boltz", "openfold", "chai"):
         extra["use_msa_server"] = True
     entity_inputs = {
         "protein": protein, "dna": dna, "rna": rna,
-        "ligand": ligand, "smiles": smiles, "glycan": glycan,
+        "ligand": ligand, "smiles": smiles,
         "sequence": shared.get("sequence_files", ()),
     }
     run_prediction(tool_name, extra, entity_list=entity_list,
@@ -1084,7 +1088,7 @@ def preflight(tool, protein, msa, use_msa_server, device):
     if tool == "auto":
         if protein:
             entity_list = _build_entity_list(
-                protein=(protein,), dna=(), rna=(), ligand=(), smiles=(), glycan=(),
+                protein=(protein,), dna=(), rna=(), ligand=(), smiles=(),
             )
         else:
             # Default to a single-protein entity for preflight estimation

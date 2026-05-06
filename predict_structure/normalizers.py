@@ -192,7 +192,6 @@ _ENTITY_KIND = {
     EntityType.RNA: "rna",
     EntityType.LIGAND: "ligand",
     EntityType.SMILES: "smiles",
-    EntityType.GLYCAN: "glycan",
 }
 
 
@@ -206,8 +205,8 @@ def stage_inputs(
     Returns a list of input descriptors suitable for ``metadata.inputs[]``.
     File-backed entities are grouped by source path: a single FASTA with
     multiple chains becomes one descriptor with a ``sequences[]`` breakdown.
-    Inline entities (CCD codes, SMILES strings, glycans) become one
-    descriptor each carrying ``value`` instead of file fields.
+    Inline entities (CCD codes, SMILES strings) become one descriptor
+    each carrying ``value`` instead of file fields.
 
     The MSA file (if provided) is also copied into ``inputs/`` and
     annotated with ``depth`` (a3m row count) when applicable.

@@ -83,7 +83,7 @@ class TestBoltzAdapter:
         assert EntityType.PROTEIN in adapter.supported_entities
         assert EntityType.DNA in adapter.supported_entities
         assert EntityType.LIGAND in adapter.supported_entities
-        assert EntityType.GLYCAN not in adapter.supported_entities
+        assert EntityType.SMILES in adapter.supported_entities
 
     def test_validate_entities_ok(self, multi_entity_list):
         from predict_structure.adapters.boltz import BoltzAdapter
@@ -146,16 +146,18 @@ class TestChaiAdapter:
         assert EntityType.PROTEIN in adapter.supported_entities
         assert EntityType.DNA in adapter.supported_entities
         assert EntityType.LIGAND in adapter.supported_entities
-        assert EntityType.SMILES not in adapter.supported_entities
+        # SMILES is now supported -- chai-lab's `ligand` entity accepts
+        # both CCD codes and SMILES strings as the value form.
+        assert EntityType.SMILES in adapter.supported_entities
 
-    def test_validate_rejects_smiles(self):
+    def test_smiles_accepted_as_ligand(self):
+        """Chai routes SMILES through the same `ligand` entity, value-encoded."""
         from predict_structure.adapters.chai import ChaiAdapter
 
         el = EntityList()
         el.add(EntityType.SMILES, "CCO")
         adapter = ChaiAdapter()
-        with pytest.raises(ValueError, match="does not support"):
-            adapter.validate_entities(el)
+        adapter.validate_entities(el)  # should not raise
 
 
 class TestAlphaFoldAdapter:
@@ -333,7 +335,6 @@ class TestOpenFoldAdapter:
         assert EntityType.RNA in adapter.supported_entities
         assert EntityType.LIGAND in adapter.supported_entities
         assert EntityType.SMILES in adapter.supported_entities
-        assert EntityType.GLYCAN not in adapter.supported_entities
 
     def test_validate_entities_ok(self, multi_entity_list):
         from predict_structure.adapters.openfold import OpenFoldAdapter
@@ -341,21 +342,12 @@ class TestOpenFoldAdapter:
         adapter = OpenFoldAdapter()
         adapter.validate_entities(multi_entity_list)  # should not raise
 
-    def test_validate_rejects_glycan(self):
-        from predict_structure.adapters.openfold import OpenFoldAdapter
-
-        el = EntityList()
-        el.add(EntityType.GLYCAN, "MAN")
-        adapter = OpenFoldAdapter()
-        with pytest.raises(ValueError, match="does not support"):
-            adapter.validate_entities(el)
-
     def test_preflight(self):
         from predict_structure.adapters.openfold import OpenFoldAdapter
 
         pf = OpenFoldAdapter().preflight()
         assert pf["cpu"] == 8
-        assert pf["memory"] == "96G"
+        assert pf["memory"] == "200G"
         assert "policy_data" in pf
         assert pf["policy_data"]["gpu_count"] == 1
 

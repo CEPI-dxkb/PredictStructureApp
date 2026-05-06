@@ -115,7 +115,7 @@ class TestUnifiedCWLStructure:
         return yaml.safe_load(unified.read_text())
 
     def test_has_entity_inputs(self, cwl_doc):
-        for entity in ("protein", "dna", "rna", "ligand", "smiles", "glycan"):
+        for entity in ("protein", "dna", "rna", "ligand", "smiles"):
             assert entity in cwl_doc["inputs"]
 
     def test_tool_enum_includes_auto(self, cwl_doc):

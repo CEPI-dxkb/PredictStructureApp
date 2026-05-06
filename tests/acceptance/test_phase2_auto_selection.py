@@ -38,7 +38,11 @@ class TestAutoSelectionProteinOnly:
     """Auto-select for protein-only input."""
 
     def test_auto_protein_gpu_no_msa(self, container, tmp_path):
-        """Protein + GPU + no MSA -> should select openfold (boltz/chai need MSA)."""
+        """Protein + GPU + no MSA -> falls back to AlphaFold (local DBs) or ESMFold.
+
+        Boltz/OpenFold/Chai are skipped without an MSA source: dummy
+        single-sequence MSA produces unusable predictions.
+        """
         output_dir = tmp_path / "output"
         output_dir.mkdir()
         binds = {str(TEST_DATA_HOST): "/data", str(output_dir): "/output"}
@@ -49,10 +53,11 @@ class TestAutoSelectionProteinOnly:
             binds=binds,
         )
         assert result.returncode == 0, f"STDERR:\n{result.stderr[-1000:]}"
-        # Should print "Auto-selected: openfold" (boltz/chai need MSA)
         assert "Auto-selected:" in result.stdout
         selected = result.stdout.split("Auto-selected:")[1].strip().split()[0]
-        assert selected == "openfold", f"Expected openfold, got {selected}"
+        assert selected in ("alphafold", "esmfold"), (
+            f"Expected alphafold or esmfold (no MSA), got {selected}"
+        )
 
     def test_auto_protein_gpu_with_msa(self, container, tmp_path):
         """Protein + GPU + MSA file -> should select boltz (highest priority with MSA)."""
@@ -93,14 +98,16 @@ class TestAutoSelectionMixedEntities:
     """Auto-select for non-protein entity combinations."""
 
     def test_auto_protein_dna_excludes_af_esm(self, container, tmp_path):
-        """Protein + DNA -> should exclude AlphaFold and ESMFold."""
+        """Protein + DNA + MSA -> should exclude AlphaFold and ESMFold."""
         output_dir = tmp_path / "output"
         output_dir.mkdir()
         binds = {str(TEST_DATA_HOST): "/data", str(output_dir): "/output"}
 
+        # MSA needed: boltz/openfold/chai are now gated on MSA availability.
         result = _run_auto_debug(
             container,
             ["--protein", PROTEIN_FASTA, "--dna", DNA_FASTA],
+            extra_args=["--msa", MSA_FILE],
             binds=binds,
         )
         assert result.returncode == 0, f"STDERR:\n{result.stderr[-1000:]}"
@@ -112,14 +119,16 @@ class TestAutoSelectionMixedEntities:
         )
 
     def test_auto_protein_ligand_excludes_af_esm(self, container, tmp_path):
-        """Protein + ligand -> should exclude AlphaFold and ESMFold."""
+        """Protein + ligand + MSA -> should exclude AlphaFold and ESMFold."""
         output_dir = tmp_path / "output"
         output_dir.mkdir()
         binds = {str(TEST_DATA_HOST): "/data", str(output_dir): "/output"}
 
+        # MSA needed: boltz/openfold/chai are now gated on MSA availability.
         result = _run_auto_debug(
             container,
             ["--protein", PROTEIN_FASTA, "--ligand", "ATP"],
+            extra_args=["--msa", MSA_FILE],
             binds=binds,
         )
         assert result.returncode == 0, f"STDERR:\n{result.stderr[-1000:]}"

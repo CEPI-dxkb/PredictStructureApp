@@ -53,9 +53,8 @@ Input is specified via explicit entity flags instead of a positional file argume
 | `--protein` | file path | Protein FASTA file (repeatable for multi-chain) |
 | `--dna` | file path | DNA FASTA file (repeatable) |
 | `--rna` | file path | RNA FASTA file (repeatable) |
-| `--ligand` | string | Ligand CCD code, e.g. `ATP` (repeatable) |
-| `--smiles` | string | SMILES string (repeatable) |
-| `--glycan` | string | Glycan specification (repeatable) |
+| `--ligand` | string | Ligand CCD code, e.g. `ATP`. Use this for glycans too (e.g. `NAG`, `MAN`) — there is no separate glycan type. (repeatable) |
+| `--smiles` | string | SMILES string for arbitrary small molecules (repeatable) |
 
 A multi-sequence FASTA file passed to `--protein` is treated as a multi-chain complex (not a batch of separate predictions).
 
@@ -176,9 +175,8 @@ Each job entry supports:
 | `protein` | list of paths | Protein FASTA files |
 | `dna` | list of paths | DNA FASTA files |
 | `rna` | list of paths | RNA FASTA files |
-| `ligands` | list of strings | Ligand CCD codes |
+| `ligands` | list of strings | Ligand CCD codes (incl. glycans like NAG, MAN) |
 | `smiles` | list of strings | SMILES strings |
-| `glycans` | list of strings | Glycan specifications |
 | `tool` | string | Tool name (optional — auto-selected if omitted) |
 | `options` | dict | Any shared or tool-specific options |
 
@@ -339,7 +337,7 @@ singularity build predict-structure-bvbrc.sif \
 ├─────────────────────────────────────────────────────────┤
 │  Entity Layer                                           │
 │  EntityList · EntityType · detect_sequence_type          │
-│  --protein/--dna/--rna/--ligand/--smiles/--glycan       │
+│  --protein/--dna/--rna/--ligand/--smiles                │
 ├─────────────────────────────────────────────────────────┤
 │  Adapter Layer                                          │
 │  Boltz │ Chai │ AlphaFold │ ESMFold                     │

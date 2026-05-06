@@ -27,7 +27,8 @@ class ChaiAdapter(BaseAdapter):
     supports_msa: bool = True
     requires_gpu: bool = True
     supported_entities: frozenset[EntityType] = frozenset({
-        EntityType.PROTEIN, EntityType.DNA, EntityType.RNA, EntityType.LIGAND,
+        EntityType.PROTEIN, EntityType.DNA, EntityType.RNA,
+        EntityType.LIGAND, EntityType.SMILES,
     })
 
     def __init__(self) -> None:

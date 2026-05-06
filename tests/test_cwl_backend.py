@@ -102,7 +102,7 @@ class TestBuildUnifiedJob:
         job = backend.build_unified_job(
             "boltz",
             {"protein": (str(fasta),), "dna": (), "rna": (),
-             "ligand": (), "smiles": (), "glycan": ()},
+             "ligand": (), "smiles": ()},
             output_dir="/tmp/output",
         )
 
@@ -126,7 +126,7 @@ class TestBuildUnifiedJob:
         job = backend.build_unified_job(
             "boltz",
             {"protein": (str(fasta1), str(fasta2)), "dna": (), "rna": (),
-             "ligand": ("ATP",), "smiles": (), "glycan": ()},
+             "ligand": ("ATP",), "smiles": ()},
             output_dir="/tmp/output",
         )
 
@@ -143,7 +143,7 @@ class TestBuildUnifiedJob:
         job = backend.build_unified_job(
             "boltz",
             {"protein": (str(fasta),), "dna": (), "rna": (),
-             "ligand": (), "smiles": (), "glycan": ()},
+             "ligand": (), "smiles": ()},
             output_dir="/tmp/output",
             boltz_use_potentials=True,
             sampling_steps=200,
@@ -163,7 +163,7 @@ class TestBuildUnifiedJob:
         job = backend.build_unified_job(
             "esmfold",
             {"protein": (str(fasta),), "dna": (), "rna": (),
-             "ligand": (), "smiles": (), "glycan": ()},
+             "ligand": (), "smiles": ()},
             output_dir="/tmp/output",
             esm_fp16=True,
             esm_chunk_size=128,
@@ -184,7 +184,7 @@ class TestBuildUnifiedJob:
         job = backend.build_unified_job(
             "alphafold",
             {"protein": (str(fasta),), "dna": (), "rna": (),
-             "ligand": (), "smiles": (), "glycan": ()},
+             "ligand": (), "smiles": ()},
             output_dir="/tmp/output",
             af2_data_dir="/databases",
             af2_model_preset="monomer",
@@ -203,7 +203,7 @@ class TestBuildUnifiedJob:
         job = backend.build_unified_job(
             "boltz",
             {"protein": (str(fasta),), "dna": (), "rna": (),
-             "ligand": (), "smiles": (), "glycan": ()},
+             "ligand": (), "smiles": ()},
             output_dir="/tmp/output",
         )
 
@@ -219,7 +219,7 @@ class TestBuildUnifiedJob:
         job = backend.build_unified_job(
             "boltz",
             {"protein": (str(fasta),), "dna": (), "rna": (),
-             "ligand": (), "smiles": (), "glycan": ()},
+             "ligand": (), "smiles": ()},
             output_dir="/tmp/output",
             seed=42,
         )
@@ -238,7 +238,7 @@ class TestBuildUnifiedJob:
         job = backend.build_unified_job(
             "chai",
             {"protein": (str(fasta),), "dna": (), "rna": (),
-             "ligand": (), "smiles": (), "glycan": ()},
+             "ligand": (), "smiles": ()},
             output_dir="/tmp/output",
             msa=str(msa),
         )
@@ -255,7 +255,7 @@ class TestBuildUnifiedJob:
         job = backend.build_unified_job(
             "boltz",
             {"protein": (str(fasta),), "dna": (), "rna": (),
-             "ligand": (), "smiles": (), "glycan": ()},
+             "ligand": (), "smiles": ()},
             output_dir="/tmp/output",
             boltz_use_potentials=False,
             use_msa_server=False,
@@ -284,7 +284,7 @@ class TestCWLBackendRunUnified:
         job = backend.build_unified_job(
             "boltz",
             {"protein": (str(fasta),), "dna": (), "rna": (),
-             "ligand": (), "smiles": (), "glycan": ()},
+             "ligand": (), "smiles": ()},
             output_dir=str(tmp_path / "output"),
         )
         rc = backend.run_unified(job, tool_name="boltz")
@@ -308,7 +308,7 @@ class TestCWLBackendRunUnified:
         job = backend.build_unified_job(
             "esmfold",
             {"protein": (str(fasta),), "dna": (), "rna": (),
-             "ligand": (), "smiles": (), "glycan": ()},
+             "ligand": (), "smiles": ()},
             output_dir=str(tmp_path / "output"),
         )
         backend.run_unified(job, tool_name="esmfold")
@@ -330,7 +330,7 @@ class TestCWLBackendRunUnified:
         job = backend.build_unified_job(
             "boltz",
             {"protein": (str(fasta),), "dna": (), "rna": (),
-             "ligand": (), "smiles": (), "glycan": ()},
+             "ligand": (), "smiles": ()},
             output_dir=str(out_dir / "raw"),
             sampling_steps=200,
         )

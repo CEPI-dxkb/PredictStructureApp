@@ -10,7 +10,6 @@ dna: []
 rna: []
 ligand: []
 smiles: []
-glycan: []
 
 # --- shared options ---
 output_dir: output

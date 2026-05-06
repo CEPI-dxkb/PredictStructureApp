@@ -1,7 +1,7 @@
 """Entity data model for multi-entity structure prediction.
 
-Defines entity types (protein, DNA, RNA, ligand, SMILES, glycan), sequence
-type detection, and FASTA parsing with entity classification.
+Defines entity types (protein, DNA, RNA, ligand, SMILES), sequence type
+detection, and FASTA parsing with entity classification.
 """
 
 from __future__ import annotations
@@ -26,21 +26,25 @@ MAX_TOTAL_RESIDUES = 10_000
 
 
 class EntityType(Enum):
-    """Biological entity types supported by structure prediction tools."""
+    """Biological entity types supported by structure prediction tools.
+
+    Glycans are intentionally NOT a separate type: neither Boltz nor Chai
+    has a distinct glycan entity, both expect glycans as CCD-coded
+    ligands. Pass glycans via ``--ligand <CCD>`` to the relevant adapter.
+    """
 
     PROTEIN = "protein"
     DNA = "dna"
     RNA = "rna"
-    LIGAND = "ligand"
-    SMILES = "smiles"
-    GLYCAN = "glycan"
+    LIGAND = "ligand"   # CCD code (1-3 alphanumeric chars)
+    SMILES = "smiles"   # SMILES string for arbitrary small molecules
 
 
 # Entity types that are represented as sequences in FASTA format
 _FASTA_TYPES = frozenset({EntityType.PROTEIN, EntityType.DNA, EntityType.RNA})
 
-# Entity types that are inline values (CCD codes, SMILES strings, etc.)
-_INLINE_TYPES = frozenset({EntityType.LIGAND, EntityType.SMILES, EntityType.GLYCAN})
+# Entity types that are inline values (CCD codes, SMILES strings).
+_INLINE_TYPES = frozenset({EntityType.LIGAND, EntityType.SMILES})
 
 # Chain ID alphabet for entity assignment
 _CHAIN_IDS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -92,8 +96,8 @@ class Entity:
         source_path: Original user-supplied file path for file-backed entities;
             None for inline entities. Used by input staging to preserve the
             original input alongside the prediction outputs.
-        format: Source format (``fasta`` / ``a3m`` / ``ccd`` / ``smiles`` /
-            ``glycan-iupac``). Drives staged-file metadata.
+        format: Source format (``fasta`` / ``a3m`` / ``ccd`` / ``smiles``).
+            Drives staged-file metadata.
     """
 
     entity_type: EntityType
@@ -143,7 +147,7 @@ class EntityList:
         return [e for e in self.entities if e.entity_type in _FASTA_TYPES]
 
     def inline_entities(self) -> list[Entity]:
-        """Return entities that are inline values (ligand, SMILES, glycan)."""
+        """Return entities that are inline values (ligand CCD, SMILES)."""
         return [e for e in self.entities if e.entity_type in _INLINE_TYPES]
 
     @property

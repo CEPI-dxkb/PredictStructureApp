@@ -148,7 +148,9 @@ inputs:
         inputBinding:
           prefix: --ligand
           position: 2
-    doc: "Ligand CCD code(s) — repeatable"
+    doc: "Ligand CCD code(s), 1-3 alphanumeric (e.g. ATP). Glycans use
+          their CCD codes here (NAG, MAN, etc.) — there is no separate
+          glycan type. Repeatable."
 
   smiles:
     type:
@@ -158,17 +160,8 @@ inputs:
         inputBinding:
           prefix: --smiles
           position: 2
-    doc: "SMILES string(s) — repeatable"
-
-  glycan:
-    type:
-      - "null"
-      - type: array
-        items: string
-        inputBinding:
-          prefix: --glycan
-          position: 2
-    doc: "Glycan specification(s) — repeatable"
+    doc: "SMILES string(s) for arbitrary small molecules — repeatable.
+          Use `ligand` for CCD-coded compounds (including glycans like NAG/MAN)."
 
   # --- Global options -----------------------------------------------
 

@@ -252,9 +252,8 @@ def entities_to_boltz_yaml(
       - protein → ``{protein: {id, sequence}}``
       - dna → ``{dna: {id, sequence}}``
       - rna → ``{rna: {id, sequence}}``
-      - ligand → ``{ligand: {ccd: code, id}}``
+      - ligand → ``{ligand: {ccd: code, id}}``  (CCD includes glycan codes)
       - smiles → ``{ligand: {smiles: value, id}}``
-      - glycan → ``{glycan: {id, sequence}}``
 
     Args:
         entity_list: Entities to include in the manifest.
@@ -298,10 +297,6 @@ def entities_to_boltz_yaml(
             entry["smiles"] = entity.value
             sequences.append({"ligand": entry})
 
-        elif entity.entity_type == EntityType.GLYCAN:
-            entry["sequence"] = entity.value
-            sequences.append({"glycan": entry})
-
     manifest = {"version": 1, "sequences": sequences}
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -331,13 +326,15 @@ def entities_to_chai_fasta(entity_list: EntityList, output_path: Path) -> Path:
     """
     from predict_structure.entities import EntityType
 
+    # Chai's native types are protein / dna / rna / ligand. Both CCD codes
+    # and SMILES strings are submitted as a `ligand` entity; the value
+    # itself encodes which (Chai parses the value form).
     _TYPE_LABELS = {
         EntityType.PROTEIN: "protein",
         EntityType.DNA: "dna",
         EntityType.RNA: "rna",
         EntityType.LIGAND: "ligand",
-        EntityType.SMILES: "smiles",
-        EntityType.GLYCAN: "glycan",
+        EntityType.SMILES: "ligand",
     }
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -354,7 +351,7 @@ def entities_to_chai_fasta(entity_list: EntityList, output_path: Path) -> Path:
 def entities_to_fasta(entity_list: EntityList, output_path: Path) -> Path:
     """Convert an EntityList to a plain FASTA file (protein/DNA/RNA only).
 
-    Non-sequence entities (ligand, SMILES, glycan) are silently skipped.
+    Non-sequence entities (ligand CCD, SMILES) are silently skipped.
 
     Args:
         entity_list: Entities to include.
@@ -394,8 +391,8 @@ def entities_to_openfold_json(
       - dna → ``{"molecule_type": "dna", "sequence": ...}``
       - rna → ``{"molecule_type": "rna", "sequence": ...}``
       - ligand → ``{"molecule_type": "ligand", "ccd_codes": [...]}``
+        (CCD includes glycan codes — OpenFold has no separate glycan type)
       - smiles → ``{"molecule_type": "ligand", "smiles": ...}``
-      - glycan → raises ValueError (not yet supported by OpenFold 3)
 
     Args:
         entity_list: Entities to include in the query.
@@ -406,9 +403,6 @@ def entities_to_openfold_json(
 
     Returns:
         Path to the written JSON file.
-
-    Raises:
-        ValueError: If a GLYCAN entity is present (unsupported by OpenFold 3).
     """
     from predict_structure.entities import EntityType
 
@@ -425,12 +419,6 @@ def entities_to_openfold_json(
 
     chains = []
     for entity in entity_list:
-        if entity.entity_type == EntityType.GLYCAN:
-            raise ValueError(
-                "OpenFold 3 does not yet support glycan entities. "
-                "See https://github.com/aqlaboratory/openfold-3 for roadmap."
-            )
-
         chain: dict = {
             "chain_ids": entity.chain_id,
         }

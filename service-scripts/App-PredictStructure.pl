@@ -89,12 +89,12 @@ sub preflight {
         push @cmd, "--device", "cpu";
     }
 
-    # Add MSA context for auto-resolution
-    my $msa_mode = $params->{msa_mode} // "none";
-    if ($msa_mode eq "server") {
-        push @cmd, "--use-msa-server";
-    } elsif ($msa_mode eq "upload" && $params->{msa_file}) {
-        push @cmd, "--msa", "/dev/null";  # existence signal only; file not available in preflight
+    # Add MSA context for auto-resolution: presence of msa_file signals to
+    # the auto-selector that an MSA will be available, so it can pick a
+    # tool that requires one (boltz/openfold/chai). The actual file isn't
+    # downloaded here -- a placeholder path is enough.
+    if ($params->{msa_file}) {
+        push @cmd, "--msa", "/dev/null";
     }
 
     print STDERR "Preflight command: @cmd\n" if $ENV{P3_DEBUG};
@@ -260,58 +260,80 @@ sub run_app {
     # 1. Download input files from workspace
     # -----------------------------------------------------------------
 
-    # Resolve input: either input_file (workspace) or text_input (inline)
-    my @input_flags;  # list of [flag, path] pairs for predict-structure
+    # Resolve inputs. Multiple sources can combine in a single job:
+    #   - input_file:  protein FASTA (workspace upload)
+    #   - dna_file:    DNA FASTA (workspace upload)
+    #   - rna_file:    RNA FASTA (workspace upload)
+    #   - text_input:  inline sequences with optional type
+    #   - ligand:      list of CCD codes (string list)
+    #   - smiles:      list of SMILES strings (string list)
+    my @input_flags;  # list of [flag, path-or-value] pairs for predict-structure
 
-    if ($params->{input_file}) {
-        print "Downloading input file: $params->{input_file}\n";
-        my $local_input = download_workspace_file($app, $params->{input_file}, $input_dir);
-        push @input_flags, ["--protein", $local_input];
+    # File-typed entity uploads
+    my %file_param_flag = (
+        input_file => "--protein",
+        dna_file   => "--dna",
+        rna_file   => "--rna",
+    );
+    for my $key (sort keys %file_param_flag) {
+        next unless $params->{$key};
+        print "Downloading $key: $params->{$key}\n";
+        my $local = download_workspace_file($app, $params->{$key}, $input_dir);
+        push @input_flags, [$file_param_flag{$key}, $local];
     }
-    elsif ($params->{text_input} && ref($params->{text_input}) eq 'ARRAY') {
-        # Group entries by type, write each group to a file
+
+    # Inline sequences (text_input) -- grouped by type into one file per group
+    if ($params->{text_input} && ref($params->{text_input}) eq 'ARRAY') {
         my %by_type;
         my $entry_idx = 0;
         for my $entry (@{$params->{text_input}}) {
             my $seq_type = $entry->{type} // "auto";
             my $seq_text = $entry->{sequence} // "";
             next unless $seq_text =~ /\S/;
-
-            # Add FASTA header if missing
             if ($seq_text !~ /^>/) {
                 $seq_text = ">sequence_${entry_idx}\n${seq_text}";
             }
             push @{$by_type{$seq_type}}, $seq_text;
             $entry_idx++;
         }
-
-        # Write grouped files and map to CLI flags
         my %type_flag = (
             protein => "--protein",
             dna     => "--dna",
             rna     => "--rna",
             auto    => "--sequence",
         );
-
         for my $type (keys %by_type) {
-            my $filename = "${type}.fasta";
-            my $filepath = "$input_dir/$filename";
+            my $filepath = "$input_dir/text_${type}.fasta";
             open(my $fh, ">", $filepath) or die "Cannot write $filepath: $!\n";
             print $fh join("\n", @{$by_type{$type}}) . "\n";
             close($fh);
-
-            my $flag = $type_flag{$type} // "--sequence";
-            push @input_flags, [$flag, $filepath];
+            push @input_flags, [$type_flag{$type} // "--sequence", $filepath];
             print "Wrote text_input ($type): $filepath\n";
         }
     }
-    else {
-        die "Either input_file or text_input is required\n";
+
+    # Inline string lists (CCD ligands, SMILES)
+    if ($params->{ligand} && ref($params->{ligand}) eq 'ARRAY') {
+        for my $code (@{$params->{ligand}}) {
+            next unless defined $code && $code =~ /\S/;
+            push @input_flags, ["--ligand", $code];
+        }
+    }
+    if ($params->{smiles} && ref($params->{smiles}) eq 'ARRAY') {
+        for my $smi (@{$params->{smiles}}) {
+            next unless defined $smi && $smi =~ /\S/;
+            push @input_flags, ["--smiles", $smi];
+        }
     }
 
-    # Optional MSA file
+    @input_flags
+        or die "No inputs supplied. Provide at least one of: input_file, "
+             . "dna_file, rna_file, text_input, ligand, smiles.\n";
+
+    # Optional MSA file. Presence drives the mode -- there is no separate
+    # msa_mode parameter (BV-BRC policy: external MSA servers are disabled).
     my $local_msa;
-    if ($params->{msa_mode} && $params->{msa_mode} eq "upload" && $params->{msa_file}) {
+    if ($params->{msa_file}) {
         print "Downloading MSA file: $params->{msa_file}\n";
         $local_msa = download_workspace_file($app, $params->{msa_file}, $input_dir);
     }
@@ -445,16 +467,21 @@ sub build_command {
     }
 
     # --- MSA options ---
+    #
+    # Presence of $local_msa drives the mode (no separate msa_mode flag).
+    # BV-BRC policy: external MSA servers are disabled. Boltz / OpenFold
+    # / Chai without an MSA fall back to a dummy single-sequence -> unusable
+    # predictions, so we hard-error before invocation.
 
-    my $msa_mode = $params->{msa_mode} // "none";
-
-    if ($msa_mode eq "server") {
-        push @cmd, "--use-msa-server";
-        if (my $url = $params->{msa_server_url}) {
-            push @cmd, "--msa-server-url", $url;
-        }
-    } elsif ($msa_mode eq "upload" && $local_msa) {
+    if ($local_msa) {
         push @cmd, "--msa", $local_msa;
+    }
+
+    if ($tool =~ /^(boltz|openfold|chai)$/ && !$local_msa) {
+        die "$tool requires an MSA upload (msa_file). "
+          . "External MSA servers are disabled by BV-BRC policy. "
+          . "For MSA-free prediction use esmfold; for local-database MSA "
+          . "use alphafold.\n";
     }
 
     # --- Tool-specific options ---

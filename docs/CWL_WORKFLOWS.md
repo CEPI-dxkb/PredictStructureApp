@@ -97,8 +97,9 @@ msa:
   path: /abs/path/to/test_data/msa/crambin.a3m
 ```
 
-For multi-entity inputs, populate `dna`, `rna`, `ligand`, `smiles`,
-or `glycan` arrays the same way as `protein`.
+For multi-entity inputs, populate `dna`, `rna`, `ligand`, or `smiles`
+arrays the same way as `protein`. Use `ligand` (CCD codes) for glycans
+like NAG/MAN — there is no separate glycan entity type.
 
 ## Running
 

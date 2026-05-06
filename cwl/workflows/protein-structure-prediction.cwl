@@ -51,13 +51,8 @@ inputs:
       - "null"
       - type: array
         items: string
-    doc: "SMILES strings for small molecules"
-  glycan:
-    type:
-      - "null"
-      - type: array
-        items: string
-    doc: "Glycan identifiers"
+    doc: "SMILES strings for arbitrary small molecules. Use `ligand` for
+          CCD-coded compounds including glycans (NAG, MAN, etc.)."
 
   # --- Shared options ---
   output_dir:
@@ -184,7 +179,6 @@ steps:
       rna: rna
       ligand: ligand
       smiles: smiles
-      glycan: glycan
       output_dir: output_dir
       num_samples: num_samples
       num_recycles: num_recycles

@@ -337,8 +337,8 @@ class CWLBackend:
                     for p in paths
                 ]
 
-        # Inline entity inputs (ligand, smiles, glycan → string arrays)
-        for entity_type in ("ligand", "smiles", "glycan"):
+        # Inline entity inputs (ligand CCD codes, SMILES strings → string arrays)
+        for entity_type in ("ligand", "smiles"):
             values = entity_inputs.get(entity_type, ())
             if values:
                 job[entity_type] = list(values)

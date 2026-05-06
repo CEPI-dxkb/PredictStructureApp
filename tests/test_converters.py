@@ -229,14 +229,6 @@ class TestEntitiesToOpenFoldJson:
         assert chains[1]["molecule_type"] == "ligand"
         assert chains[1]["smiles"] == "CCO"
 
-    def test_glycan_raises(self, tmp_output):
-        from predict_structure.converters import entities_to_openfold_json
-
-        el = EntityList()
-        el.add(EntityType.GLYCAN, "MAN")
-        with pytest.raises(ValueError, match="OpenFold 3 does not yet support glycan"):
-            entities_to_openfold_json(el, tmp_output / "query.json")
-
     def test_with_msa(self, protein_entity_list, sample_a3m, tmp_output):
         from predict_structure.converters import entities_to_openfold_json
         import json

@@ -2,7 +2,7 @@
     "id": "PredictStructure",
     "script": "App-PredictStructure",
     "label": "Protein Structure Prediction",
-    "description": "Predict protein structures using Boltz-2, OpenFold 3, Chai-1, AlphaFold 2, or ESMFold. Provides a unified interface with automatic parameter mapping, format conversion, output normalization, and confidence scoring.",
+    "description": "Predict biomolecular structures (proteins, complexes, protein-DNA/RNA, protein-ligand) using Boltz-2, OpenFold 3, Chai-1, AlphaFold 2, or ESMFold. Provides a unified interface with automatic parameter mapping, format conversion, output normalization, and confidence scoring. Advanced knobs (num_samples, num_recycles, seed, output_format, all tool-specific parameters) use sensible defaults from the predict-structure CLI; expose them via the PredictStructureFull spec or direct CLI / CWL invocation.",
     "default_memory": "64G",
     "default_cpu": 8,
     "default_runtime": 14400,
@@ -14,213 +14,71 @@
             "default": "auto",
             "required": 1,
             "label": "Prediction Tool",
-            "desc": "Structure prediction engine. 'auto' discovers the best available tool based on input format, device, and installed software. Boltz-2, OpenFold 3, and Chai-1 are diffusion-based with highest accuracy. OpenFold 3 is an open-source AF3 reproduction supporting protein/DNA/RNA/ligand complexes. AlphaFold 2 uses co-evolutionary features (requires database). ESMFold is fastest (single-sequence, no MSA, CPU-capable)."
+            "desc": "Structure prediction engine. 'auto' picks the best available tool from the inputs. Boltz-2, OpenFold 3, and Chai-1 are diffusion-based and support protein/DNA/RNA/ligand complexes. AlphaFold 2 builds an MSA from local databases (protein-only). ESMFold is fastest (single-sequence, protein-only, CPU-capable). MSA file is required for boltz/openfold/chai by BV-BRC policy."
         },
         {
             "id": "input_file",
             "type": "wsfile",
             "required": 0,
-            "label": "Input File",
-            "desc": "Protein sequence in FASTA format (.fasta, .fa). Maximum 26 sequences and 10,000 total residues per job. Boltz also accepts YAML for full feature support (ligands, constraints, templates). Alternative to text_input."
+            "label": "Protein FASTA",
+            "desc": "Protein sequence(s) in FASTA format (.fasta, .fa). Multi-chain complexes: include multiple sequences in one file. Maximum 26 sequences and 10,000 total residues per job. Boltz also accepts a YAML manifest for full feature support."
         },
         {
-            "id": "text_input",
+            "id": "dna_file",
+            "type": "wsfile",
+            "required": 0,
+            "label": "DNA FASTA",
+            "desc": "DNA sequence(s) in FASTA format. Tools that support DNA: Boltz-2, OpenFold 3, Chai-1."
+        },
+        {
+            "id": "rna_file",
+            "type": "wsfile",
+            "required": 0,
+            "label": "RNA FASTA",
+            "desc": "RNA sequence(s) in FASTA format. Tools that support RNA: Boltz-2, OpenFold 3, Chai-1."
+        },
+        {
+            "id": "ligand",
             "type": "list",
             "required": 0,
-            "label": "Sequence Text Input",
-            "desc": "One or more sequences as text. Each entry has an optional type (protein, dna, rna, or auto for auto-detection) and a sequence in FASTA format. Alternative to input_file.",
+            "label": "Ligands (CCD codes)",
+            "desc": "Ligand CCD codes, 1-3 alphanumeric chars each (e.g. ATP, NAD). Glycans use their CCD codes here too (NAG, MAN, BMA, etc.) — no separate glycan input. Tools with ligand support: Boltz-2, OpenFold 3, Chai-1.",
             "item": {
-                "id": "entry",
-                "type": "object",
-                "properties": [
-                    {
-                        "id": "type",
-                        "type": "enum",
-                        "enum": ["auto", "protein", "dna", "rna"],
-                        "default": "auto",
-                        "label": "Sequence Type",
-                        "desc": "Molecule type. Use 'auto' to auto-detect from sequence characters."
-                    },
-                    {
-                        "id": "sequence",
-                        "type": "string",
-                        "required": 1,
-                        "label": "Sequence",
-                        "desc": "Sequence in FASTA format (with >header line) or bare sequence."
-                    }
-                ]
+                "id": "ccd_code",
+                "type": "string"
             }
         },
         {
-            "id": "num_samples",
-            "type": "int",
-            "default": 1,
+            "id": "smiles",
+            "type": "list",
             "required": 0,
-            "label": "Number of Samples",
-            "desc": "Number of structure samples to generate. Applies to Boltz and Chai only. More samples give diversity at the cost of runtime."
-        },
-        {
-            "id": "num_recycles",
-            "type": "int",
-            "default": 3,
-            "required": 0,
-            "label": "Recycling Iterations",
-            "desc": "Number of recycling iterations for structure refinement. Maps to tool-specific recycling parameters."
-        },
-        {
-            "id": "seed",
-            "type": "int",
-            "default": 42,
-            "required": 0,
-            "label": "Random Seed",
-            "desc": "Random seed for reproducibility."
-        },
-        {
-            "id": "output_format",
-            "type": "enum",
-            "enum": ["pdb", "mmcif"],
-            "default": "pdb",
-            "required": 0,
-            "label": "Output Format",
-            "desc": "Primary structure output format. Both PDB and mmCIF are always generated; this controls which is primary."
-        },
-        {
-            "id": "msa_mode",
-            "type": "enum",
-            "enum": ["none", "server", "upload"],
-            "default": "none",
-            "required": 0,
-            "label": "MSA Mode",
-            "desc": "Multiple Sequence Alignment strategy. 'none' for single-sequence (ESMFold default). 'server' to generate MSA via ColabFold MMseqs2 (Boltz, Chai). 'upload' to provide a pre-computed MSA file."
+            "label": "SMILES Strings",
+            "desc": "SMILES strings for arbitrary small molecules (use 'ligand' for CCD-coded compounds). Tools with SMILES support: Boltz-2, OpenFold 3, Chai-1.",
+            "item": {
+                "id": "smiles_str",
+                "type": "string"
+            }
         },
         {
             "id": "msa_file",
             "type": "wsfile",
             "required": 0,
             "label": "MSA File",
-            "desc": "Pre-computed MSA file (.a3m, .sto). Required when msa_mode is 'upload'. Auto-converted to tool-native format (Parquet for Chai, injected into YAML for Boltz)."
+            "desc": "Pre-computed Multiple Sequence Alignment (.a3m, .sto). Required for Boltz, OpenFold, and Chai (their dummy single-sequence fallback produces unusable predictions; external MSA servers are disabled by BV-BRC policy). ESMFold ignores MSA; AlphaFold builds its own from local databases. Auto-converted to tool-native format (Parquet for Chai, injected into YAML for Boltz, JSON for OpenFold)."
         },
-
-        {
-            "id": "sampling_steps",
-            "type": "int",
-            "default": 200,
-            "required": 0,
-            "label": "Diffusion Sampling Steps",
-            "desc": "Number of diffusion sampling steps. Applies to Boltz and Chai only. Higher values may improve quality at increased runtime. Default: 200."
-        },
-        {
-            "id": "msa_server_url",
-            "type": "string",
-            "required": 0,
-            "label": "MSA Server URL",
-            "desc": "Custom ColabFold MMseqs2 server URL. Overrides the default public server. Implies msa_mode='server'. Boltz and Chai only."
-        },
-        {
-            "id": "use_potentials",
-            "type": "bool",
-            "default": false,
-            "required": 0,
-            "label": "Use Inference Potentials",
-            "desc": "Apply inference-time potentials to improve physical plausibility of predicted structures. Boltz only. Default: false."
-        },
-
-        {
-            "id": "af2_data_dir",
-            "type": "string",
-            "required": 0,
-            "default": "/databases",
-            "label": "AlphaFold Database Directory",
-            "desc": "Path to AlphaFold2 genetic databases (~2TB). Required when tool is 'alphafold'. Contains uniref90, mgnify, pdb70/pdb_seqres, BFD/small_bfd."
-        },
-        {
-            "id": "af2_model_preset",
-            "type": "enum",
-            "enum": ["monomer", "monomer_ptm", "monomer_casp14", "multimer"],
-            "default": "monomer",
-            "required": 0,
-            "label": "AlphaFold Model Preset",
-            "desc": "AlphaFold2 model configuration. 'monomer' for single chains, 'multimer' for complexes. AlphaFold only."
-        },
-        {
-            "id": "af2_db_preset",
-            "type": "enum",
-            "enum": ["reduced_dbs", "full_dbs"],
-            "default": "reduced_dbs",
-            "required": 0,
-            "label": "AlphaFold Database Preset",
-            "desc": "Database configuration. 'reduced_dbs' uses small_bfd (~17GB), 'full_dbs' uses BFD+uniref30 (~1.8TB). AlphaFold only."
-        },
-        {
-            "id": "af2_max_template_date",
-            "type": "string",
-            "default": "2022-01-01",
-            "required": 0,
-            "label": "AlphaFold Max Template Date",
-            "desc": "Maximum PDB template release date (YYYY-MM-DD). Templates after this date are excluded to prevent data leakage. AlphaFold only."
-        },
-
-        {
-            "id": "fp16",
-            "type": "bool",
-            "default": false,
-            "required": 0,
-            "label": "Half-Precision Inference",
-            "desc": "Use FP16 (half-precision) inference to reduce memory usage and increase speed. ESMFold only."
-        },
-        {
-            "id": "chunk_size",
-            "type": "int",
-            "required": 0,
-            "label": "Chunk Size",
-            "desc": "Chunk size for processing long sequences. Smaller values use less GPU memory. ESMFold only."
-        },
-        {
-            "id": "max_tokens_per_batch",
-            "type": "int",
-            "required": 0,
-            "label": "Max Tokens per Batch",
-            "desc": "Maximum number of tokens (amino acids) per batch for multi-sequence input. ESMFold only."
-        },
-
-        {
-            "id": "num_diffusion_samples",
-            "type": "int",
-            "default": 5,
-            "required": 0,
-            "label": "Diffusion Samples",
-            "desc": "Number of diffusion samples per query. OpenFold 3 only. Default: 5."
-        },
-        {
-            "id": "num_model_seeds",
-            "type": "int",
-            "default": 1,
-            "required": 0,
-            "label": "Model Seeds",
-            "desc": "Number of independent model seeds. OpenFold 3 only. Default: 1."
-        },
-        {
-            "id": "use_templates",
-            "type": "bool",
-            "default": true,
-            "required": 0,
-            "label": "Use Templates",
-            "desc": "Use PDB template structures for improved accuracy. OpenFold 3 only. Default: true."
-        },
-
         {
             "id": "output_path",
             "type": "folder",
             "required": 1,
             "label": "Output Folder",
-            "desc": "Workspace folder for prediction results. Output includes model structures (PDB/mmCIF), confidence.json, and metadata.json."
+            "desc": "Workspace folder for prediction results. Output includes the rank-1 PDB, an HTML report, results.json (CWL-style outputs map), and structured subdirs for inputs/, predictions/, reports/, metadata/, and raw/."
         },
         {
             "id": "output_file",
             "type": "wsfile",
             "required": 0,
-            "label": "Output File",
-            "desc": "Optional workspace output file path."
+            "label": "Output File Prefix",
+            "desc": "Optional output filename prefix; only used when P3_DEBUG_RUN_SUBFOLDER=1."
         }
     ]
 }

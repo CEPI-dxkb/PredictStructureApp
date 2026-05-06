@@ -73,7 +73,7 @@ class BaseAdapter(ABC):
         for entity in entity_list:
             expected_chars = _VALID_CHARS.get(entity.entity_type)
             if expected_chars is None:
-                continue  # ligand, SMILES, glycan — no character validation
+                continue  # ligand CCD / SMILES — no sequence-character validation
             upper = set(entity.value.upper())
             invalid = upper - expected_chars
             if invalid:
