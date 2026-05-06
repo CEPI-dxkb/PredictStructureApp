@@ -75,6 +75,136 @@ sub _init_debug {
 }
 
 # ---------------------------------------------------------------------------
+# Input validation (fail fast before expensive downloads / GPU work)
+# ---------------------------------------------------------------------------
+
+sub _validate_params {
+    my ($params) = @_;
+
+    # At least one entity source must be present
+    my $has_file  = $params->{input_file} || $params->{dna_file} || $params->{rna_file};
+    my $has_text  = $params->{text_input} && ref($params->{text_input}) eq 'ARRAY'
+                    && @{$params->{text_input}};
+    my $has_ligand = $params->{ligand} && ref($params->{ligand}) eq 'ARRAY'
+                     && @{$params->{ligand}};
+    my $has_smiles = $params->{smiles} && ref($params->{smiles}) eq 'ARRAY'
+                     && @{$params->{smiles}};
+    unless ($has_file || $has_text || $has_ligand || $has_smiles) {
+        die "No inputs supplied. Provide at least one of: input_file, "
+          . "dna_file, rna_file, text_input, ligand, smiles.\n";
+    }
+
+    # output_path is required
+    die "output_path is required.\n" unless $params->{output_path};
+
+    # Validate text_input entries
+    if ($has_text) {
+        my $idx = 0;
+        my %valid_types = map { $_ => 1 } qw(auto protein dna rna);
+        for my $entry (@{$params->{text_input}}) {
+            my $seq = $entry->{sequence} // "";
+            die "text_input entry $idx has an empty sequence.\n"
+                unless $seq =~ /\S/;
+            my $type = $entry->{type} // "auto";
+            die "text_input entry $idx has invalid type '$type'; "
+              . "allowed: auto, protein, dna, rna.\n"
+                unless $valid_types{$type};
+            $idx++;
+        }
+    }
+
+    # Validate CCD ligand codes (1-3 alphanumeric)
+    if ($has_ligand) {
+        for my $code (@{$params->{ligand}}) {
+            next unless defined $code;
+            die "Invalid ligand CCD code '$code': must be 1-3 alphanumeric "
+              . "characters (e.g. ATP, NAG, MAN).\n"
+                unless $code =~ /^[A-Za-z0-9]{1,3}$/;
+        }
+    }
+
+    # Validate SMILES strings (non-empty, basic sanity)
+    if ($has_smiles) {
+        for my $smi (@{$params->{smiles}}) {
+            next unless defined $smi;
+            die "Empty SMILES string.\n" unless $smi =~ /\S/;
+        }
+    }
+
+    # MSA policy: boltz/openfold/chai require msa_file
+    my $tool = $params->{tool} // "auto";
+    if ($tool =~ /^(boltz|openfold|chai)$/ && !$params->{msa_file}) {
+        die "$tool requires an MSA file (msa_file). "
+          . "External MSA servers are disabled by BV-BRC policy. "
+          . "For MSA-free prediction use esmfold; for local-database MSA "
+          . "use alphafold.\n";
+    }
+
+    print "Input validation passed\n" if $ENV{P3_DEBUG};
+}
+
+
+sub _validate_file_format {
+    my ($path, $label, $expected_fmt) = @_;
+    # $expected_fmt: "fasta" | "msa" | undef (skip content check)
+
+    unless (-f $path && -s $path) {
+        die "$label: file is missing or empty ($path).\n";
+    }
+
+    return unless $expected_fmt;
+
+    # Read the first 10 lines for format sniffing
+    open(my $fh, "<", $path) or die "$label: cannot open $path: $!\n";
+    my @lines;
+    while (my $line = <$fh>) {
+        push @lines, $line;
+        last if @lines >= 10;
+    }
+    close($fh);
+
+    my $first_content = "";
+    for my $l (@lines) {
+        next if $l =~ /^\s*$/;
+        $first_content = $l;
+        last;
+    }
+    chomp $first_content;
+
+    my $ext = ($path =~ /\.([^.]+)$/) ? lc($1) : "";
+
+    if ($expected_fmt eq "fasta") {
+        # Boltz YAML pass-through: .yaml/.yml files bypass FASTA check
+        if ($ext =~ /^(yaml|yml)$/) {
+            my $joined = join("", @lines);
+            die "$label: expected Boltz YAML manifest (must contain "
+              . "'version' and 'sequences'), got: '$first_content'\n"
+                unless $joined =~ /version/ && $joined =~ /sequences/;
+        } else {
+            die "$label: expected FASTA format (first non-blank line "
+              . "must start with '>'), got: '$first_content'\n"
+                unless $first_content =~ /^>/;
+        }
+    }
+
+    if ($expected_fmt eq "msa") {
+        if ($ext eq "sto") {
+            die "$label: expected Stockholm format (first line must be "
+              . "'# STOCKHOLM'), got: '$first_content'\n"
+                unless $first_content =~ /^#\s*STOCKHOLM/;
+        } else {
+            # a3m and other MSA formats: first non-comment line starts with >
+            die "$label: expected MSA format (first non-comment line "
+              . "must start with '>' or '#'), got: '$first_content'\n"
+                unless $first_content =~ /^[>#]/;
+        }
+    }
+
+    print "$label format OK ($expected_fmt, ext=$ext)\n" if $ENV{P3_DEBUG};
+}
+
+
+# ---------------------------------------------------------------------------
 # Preflight: resource estimation
 # ---------------------------------------------------------------------------
 
@@ -92,6 +222,7 @@ sub preflight {
     my ($app, $app_def, $raw_params, $params) = @_;
 
     _init_debug($params);
+    _validate_params($params);
 
     my $tool = $params->{tool} // "auto";
 
@@ -266,6 +397,8 @@ sub run_app {
             if defined $params->{$key};
     }
 
+    _validate_params($params);
+
     # Create working directories
     my $work_dir = $ENV{P3_WORKDIR} // $ENV{TMPDIR} // "/tmp";
     my $input_dir  = "$work_dir/input";
@@ -310,6 +443,7 @@ sub run_app {
         next unless $params->{$key};
         print "Downloading $key: $params->{$key}\n";
         my $local = download_workspace_file($app, $params->{$key}, $input_dir);
+        _validate_file_format($local, $key, "fasta");
         push @input_flags, [$file_param_flag{$key}, $local];
     }
 
@@ -367,6 +501,7 @@ sub run_app {
     if ($params->{msa_file}) {
         print "Downloading MSA file: $params->{msa_file}\n";
         $local_msa = download_workspace_file($app, $params->{msa_file}, $input_dir);
+        _validate_file_format($local_msa, "msa_file", "msa");
     }
 
     # -----------------------------------------------------------------
