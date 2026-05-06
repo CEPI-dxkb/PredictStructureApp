@@ -683,7 +683,10 @@ def run_prediction(
         )
         sys.exit(1)
 
-    _finalize_output(output_path, tool_name, shared, elapsed)
+    _finalize_output(
+        output_path, tool_name, shared, elapsed,
+        entity_list=entity_list, started_at=started_at,
+    )
 
     click.echo(f"Prediction complete: {output_path}")
 

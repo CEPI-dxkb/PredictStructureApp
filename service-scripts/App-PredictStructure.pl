@@ -244,7 +244,7 @@ sub run_app {
     # scripts/instantiate_params.py and the pytest fixtures; doing it
     # here too means manual `perl App-PredictStructure.pl ... params.json`
     # invocations work without preprocessing.
-    for my $key (qw(output_path input_file msa_file)) {
+    for my $key (qw(output_path input_file dna_file rna_file msa_file)) {
         $params->{$key} = _expand_ws_placeholders($params->{$key})
             if defined $params->{$key};
     }

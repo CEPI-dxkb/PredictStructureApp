@@ -1,0 +1,6 @@
+{
+  "tool": "boltz",
+  "input_file": "${WS_HOME}/AppTests/_inputs/simple_protein.fasta",
+  "dna_file": "${WS_HOME}/AppTests/_inputs/dna.fasta",
+  "output_path": "${WS_HOME}/AppTests/v012_error_no_msa"
+}
