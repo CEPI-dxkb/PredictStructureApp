@@ -160,16 +160,28 @@ def write_metadata_json(
         Path to metadata.json.
     """
     completed = completed_at or datetime.now(timezone.utc).isoformat()
+    # Derive requested_tool from the CLI command: if the subcommand was
+    # "auto", the user asked for auto-selection and `tool` is the resolved
+    # result. Otherwise requested == resolved.
+    cmd_list = list(command)
+    requested = tool
+    valid_tools = {"auto", "boltz", "openfold", "chai", "alphafold", "esmfold"}
+    for arg in cmd_list:
+        if arg in valid_tools:
+            requested = arg
+            break
+
     data = {
         "schema_version": METADATA_SCHEMA_VERSION,
         "tool": tool,
+        "requested_tool": requested,
         "version": version,
         "tool_version": tool_version,
         "status": status,
         "started_at": started_at,
         "completed_at": completed,
         "runtime_seconds": round(runtime_seconds, 1),
-        "command": list(command),
+        "command": cmd_list,
         "container_image": container_image,
         "backend": backend,
         "params": params,
