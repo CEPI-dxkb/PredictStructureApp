@@ -941,26 +941,32 @@ sub upload_results {
         return;
     }
 
-    my @mapping = (
-        '--map-suffix' => "txt=txt",
-        '--map-suffix' => "pdb=pdb",
-        '--map-suffix' => "cif=cif",
-        '--map-suffix' => "mmcif=mmcif",
-        '--map-suffix' => "json=json",
-        '--map-suffix' => "html=html",
-        '--map-suffix' => "npz=unspecified",
-        '--map-suffix' => "png=png",
-        '--map-suffix' => "svg=svg",
-        '--map-suffix' => "csv=csv",
-        '--map-suffix' => "fasta=contigs",
-        '--map-suffix' => "fa=contigs",
-        '--map-suffix' => "faa=feature_protein_fasta",
+    my %type_map = (
+        txt   => "txt",
+        pdb   => "pdb",
+        cif   => "cif",
+        mmcif => "mmcif",
+        json  => "json",
+        html  => "html",
+        npz   => "unspecified",
+        png   => "png",
+        svg   => "svg",
+        csv   => "csv",
+        fasta => "contigs",
+        fa    => "contigs",
+        faa   => "feature_protein_fasta",
     );
 
-    my @cmd = ("p3-cp", "--overwrite", "-r", @mapping, "$local_dir/", "ws:$ws_path");
-    print "Upload: @cmd\n";
-    my $rc = system(@cmd);
-    $rc == 0 or die "Error copying data to workspace\n";
+    # Use the workspace client's upload_folder directly with /. to copy
+    # the CONTENTS of local_dir into ws_path (not the directory itself).
+    # p3-cp -r always nests; upload_folder with /. doesn't.
+    print "Uploading $local_dir/. → $ws_path\n";
+    try {
+        $app->workspace->upload_folder("$local_dir/.", $ws_path,
+            { type_map => \%type_map, overwrite => 1 });
+    } catch {
+        die "Error uploading results to workspace: $_\n";
+    };
 }
 
 # ---------------------------------------------------------------------------
