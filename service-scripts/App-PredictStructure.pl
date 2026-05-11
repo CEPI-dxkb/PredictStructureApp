@@ -54,11 +54,8 @@ use Bio::KBase::AppService::AppScript;
 $ENV{P3_LOG_LEVEL} //= 'INFO';
 
 my $script = Bio::KBase::AppService::AppScript->new(\&run_app, \&preflight);
-# Opt out of the framework's automatic result-folder creation. It would
-# create <output_path>/.<output_file>/ (or <output_path>/ with no
-# output_file), which makes p3-cp -r on upload nest our results under an
-# extra <output>/ subdir. We manage the upload path ourselves.
-$script->donot_create_result_folder(1);
+# Let the framework create the result folder at ${output_path}/.${output_file}/
+# so the workspace output lands at the expected location.
 $script->run(\@ARGV);
 
 # ---------------------------------------------------------------------------
@@ -94,8 +91,10 @@ sub _validate_params {
           . "dna_file, rna_file, text_input, ligand, smiles.\n";
     }
 
-    # output_path is required
+    # output_path and output_file are both required. The framework creates
+    # the result folder at ${output_path}/.${output_file}/ in the workspace.
     die "output_path is required.\n" unless $params->{output_path};
+    die "output_file is required.\n" unless $params->{output_file};
 
     # Validate text_input entries
     if ($has_text) {
@@ -643,18 +642,6 @@ sub run_app {
     $output_folder =~ s/\/+$//;
     $output_folder =~ s/\/\.$//;
 
-    # By default results are uploaded flat into $output_folder so the
-    # caller controls the final layout (typically via a versioned
-    # output_path). Set P3_DEBUG_RUN_SUBFOLDER=1 to nest each run under a
-    # timestamped subfolder (useful when debugging multiple runs sharing
-    # one output_path).
-    if ($ENV{P3_DEBUG_RUN_SUBFOLDER}) {
-        my $output_base = $params->{output_file} // "predict_structure_result";
-        my $timestamp = POSIX::strftime("%Y%m%d_%H%M%S", localtime);
-        my $task_id = $app->{task_id} // "unknown";
-        my $run_folder = "${output_base}_${timestamp}_${task_id}";
-        $output_folder = "$output_folder/$run_folder";
-    }
 
     # 4a. Rewrite location URLs in results.json + metadata.json from
     # relative paths to ws:// URLs that match the upload destination.
@@ -690,7 +677,10 @@ sub build_command {
     my $bin = find_predict_structure_binary();
     my $tool = $params->{tool} // "auto";
 
-    my @cmd = ($bin, $tool);
+    # --verbose is a top-level Click option (must come BEFORE the subcommand)
+    my @cmd = ($bin);
+    push @cmd, "--verbose" if $ENV{P3_DEBUG};
+    push @cmd, $tool;
 
     # Add input flags (e.g. --protein file.fasta, --dna dna.fasta, --sequence auto.fasta)
     for my $pair (@$input_flags) {
@@ -701,9 +691,6 @@ sub build_command {
 
     # Always use subprocess backend inside the container
     push @cmd, "--backend", "subprocess";
-
-    # Verbose logging when debug is on
-    push @cmd, "--verbose" if $ENV{P3_DEBUG};
 
     # --- Shared options ---
 

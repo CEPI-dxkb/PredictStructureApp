@@ -84,9 +84,9 @@
         {
             "id": "output_file",
             "type": "wsfile",
-            "required": 0,
-            "label": "Output File Prefix",
-            "desc": "Optional output filename prefix; only used when P3_DEBUG_RUN_SUBFOLDER=1."
+            "required": 1,
+            "label": "Output Name",
+            "desc": "Job output name. Results land at ${output_path}/.${output_file}/ in the workspace."
         }
     ]
 }
