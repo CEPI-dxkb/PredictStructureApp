@@ -654,11 +654,8 @@ sub run_app {
             . ($rw_rc >> 8) . "); locations will remain relative\n";
     }
 
-    # Upload the CONTENTS of output_dir (not the directory itself) into
-    # the workspace result folder. The trailing /. tells p3-cp -r to
-    # copy children rather than nesting an extra output/ subdirectory.
     print "Uploading results to workspace: $output_folder\n";
-    upload_results($app, "$output_dir/.", $output_folder);
+    upload_results($app, $output_dir, $output_folder);
 
     print "PredictStructure job completed\n";
     return 0;
