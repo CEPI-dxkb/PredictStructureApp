@@ -1,0 +1,114 @@
+{
+  "id": "PredictStructure_alphafold",
+  "label": "Predict Structure - Alphafold Mode",
+  "description": "Parameters for alphafold mode. Load this when the user selects tool=alphafold.",
+  "parameters": [
+    {
+      "id": "tool",
+      "type": "enum",
+      "enum": [
+        "auto",
+        "boltz",
+        "openfold",
+        "chai",
+        "alphafold",
+        "esmfold"
+      ],
+      "default": "auto",
+      "required": 1,
+      "label": "Prediction Tool",
+      "desc": "Structure prediction engine. 'auto' picks Boltz (highest quality) by default; MSA fetched via ColabFold server automatically."
+    },
+    {
+      "id": "input_file",
+      "type": "wsfile",
+      "required": 0,
+      "label": "Protein FASTA",
+      "desc": "Protein sequence(s) in FASTA format. Multi-chain complexes: include multiple sequences in one file."
+    },
+    {
+      "id": "output_path",
+      "type": "folder",
+      "required": 1,
+      "label": "Output Folder",
+      "desc": "Workspace folder for prediction results."
+    },
+    {
+      "id": "output_file",
+      "type": "wsfile",
+      "required": 1,
+      "label": "Job Name",
+      "desc": "Output name. Results land at output_path/.output_file/ in the workspace."
+    },
+    {
+      "id": "output_format",
+      "type": "enum",
+      "enum": [
+        "pdb",
+        "mmcif"
+      ],
+      "default": "pdb",
+      "required": 0,
+      "label": "Output Format",
+      "desc": "Primary structure output format. Both PDB and mmCIF are always generated."
+    },
+    {
+      "id": "seed",
+      "type": "int",
+      "default": 42,
+      "required": 0,
+      "label": "Random Seed",
+      "desc": "Random seed for reproducibility."
+    },
+    {
+      "id": "debug",
+      "type": "bool",
+      "default": false,
+      "required": 0,
+      "label": "Debug Mode",
+      "desc": "Enable verbose debug logging."
+    },
+    {
+      "id": "af2_data_dir",
+      "type": "string",
+      "default": "/databases",
+      "required": 0,
+      "label": "AlphaFold Database Directory",
+      "desc": "Path to AlphaFold2 genetic databases (~2TB)."
+    },
+    {
+      "id": "af2_model_preset",
+      "type": "enum",
+      "enum": [
+        "monomer",
+        "monomer_ptm",
+        "monomer_casp14",
+        "multimer"
+      ],
+      "default": "monomer",
+      "required": 0,
+      "label": "AlphaFold Model Preset",
+      "desc": "Model configuration. 'monomer' for single chains, 'multimer' for complexes."
+    },
+    {
+      "id": "af2_db_preset",
+      "type": "enum",
+      "enum": [
+        "reduced_dbs",
+        "full_dbs"
+      ],
+      "default": "reduced_dbs",
+      "required": 0,
+      "label": "AlphaFold Database Preset",
+      "desc": "Database configuration. 'reduced_dbs' (~17GB) vs 'full_dbs' (~1.8TB)."
+    },
+    {
+      "id": "af2_max_template_date",
+      "type": "string",
+      "default": "2022-01-01",
+      "required": 0,
+      "label": "Max Template Date",
+      "desc": "Maximum PDB template release date (YYYY-MM-DD)."
+    }
+  ]
+}
