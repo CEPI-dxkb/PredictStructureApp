@@ -130,14 +130,9 @@ sub _validate_params {
         }
     }
 
-    # MSA policy: boltz/openfold/chai require msa_file
-    my $tool = $params->{tool} // "auto";
-    if ($tool =~ /^(boltz|openfold|chai)$/ && !$params->{msa_file}) {
-        die "$tool requires an MSA file (msa_file). "
-          . "External MSA servers are disabled by BV-BRC policy. "
-          . "For MSA-free prediction use esmfold; for local-database MSA "
-          . "use alphafold.\n";
-    }
+    # Note: boltz/openfold/chai no longer require msa_file — if no MSA
+    # is uploaded, build_command enables the ColabFold MSA server
+    # automatically (--use-msa-server).
 
     print "Input validation passed\n" if $ENV{P3_DEBUG};
 }
@@ -261,12 +256,14 @@ sub preflight {
         push @cmd, "--device", "cpu";
     }
 
-    # Add MSA context for auto-resolution: presence of msa_file signals to
-    # the auto-selector that an MSA will be available, so it can pick a
-    # tool that requires one (boltz/openfold/chai). The actual file isn't
-    # downloaded here -- a placeholder path is enough.
+    # MSA context for auto-resolution. If the user uploaded an MSA file,
+    # signal its presence. Otherwise, signal that the MSA server is
+    # available — this lets auto-select pick boltz/openfold/chai even
+    # without an uploaded file.
     if ($params->{msa_file}) {
         push @cmd, "--msa", "/dev/null";
+    } else {
+        push @cmd, "--use-msa-server";
     }
 
     print STDERR "Preflight command: @cmd\n" if $ENV{P3_DEBUG};
@@ -712,20 +709,15 @@ sub build_command {
 
     # --- MSA options ---
     #
-    # Presence of $local_msa drives the mode (no separate msa_mode flag).
-    # BV-BRC policy: external MSA servers are disabled. Boltz / OpenFold
-    # / Chai without an MSA fall back to a dummy single-sequence -> unusable
-    # predictions, so we hard-error before invocation.
+    # If the user uploaded an MSA file, pass it directly. Otherwise, for
+    # tools that benefit from MSA (boltz/openfold/chai), enable the
+    # ColabFold MSA server so they fetch alignments automatically.
+    # ESMFold ignores MSA; AlphaFold builds its own from local databases.
 
     if ($local_msa) {
         push @cmd, "--msa", $local_msa;
-    }
-
-    if ($tool =~ /^(boltz|openfold|chai)$/ && !$local_msa) {
-        die "$tool requires an MSA upload (msa_file). "
-          . "External MSA servers are disabled by BV-BRC policy. "
-          . "For MSA-free prediction use esmfold; for local-database MSA "
-          . "use alphafold.\n";
+    } elsif ($tool =~ /^(boltz|openfold|chai)$/) {
+        push @cmd, "--use-msa-server";
     }
 
     # --- Tool-specific options ---

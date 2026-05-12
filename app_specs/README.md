@@ -86,11 +86,16 @@ TTCCPSIVARSNFNVCRLPgtPEALCATYTGCIIIPGATCPGDYAN
 
 **Validation:** The AppScript peeks at the first 5 lines (via `p3-cat | head`) in both preflight and run_app before downloading. A3M files must start with `>` or `#`; Stockholm files must start with `# STOCKHOLM`.
 
-### MSA policy
+### MSA handling
 
-External MSA servers (`use_msa_server` / `msa_server_url`) are **disabled** in the BV-BRC AppScript per project policy. The Perl script (`service-scripts/App-PredictStructure.pl`) ignores those flags and refuses to run Boltz / OpenFold / Chai without `msa_file`. AlphaFold builds its own MSA from local databases; ESMFold needs no MSA.
+MSA is resolved automatically by the AppScript:
 
-If `msa_file` is present, MSA-upload mode is active. Absent → single-sequence (only valid for ESMFold) or local-database (AlphaFold).
+- **`msa_file` uploaded** → passed directly to the tool (`--msa <file>`)
+- **No `msa_file`** → the ColabFold MSA server is enabled automatically for Boltz / OpenFold / Chai (`--use-msa-server`). The tool fetches alignments on the fly.
+- **AlphaFold** → builds its own MSA from local databases (ignores both `msa_file` and the server)
+- **ESMFold** → single-sequence, no MSA used
+
+Users do NOT need to upload an MSA file for Boltz / OpenFold / Chai — the server provides one by default. Uploading a pre-computed MSA is optional (it skips the server fetch and may be faster for large proteins).
 
 ## Input validation (fail-fast)
 
