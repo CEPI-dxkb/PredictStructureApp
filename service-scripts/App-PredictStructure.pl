@@ -716,7 +716,9 @@ sub build_command {
 
     if ($local_msa) {
         push @cmd, "--msa", $local_msa;
-    } elsif ($tool =~ /^(boltz|openfold|chai)$/) {
+    } elsif ($tool !~ /^(esmfold|alphafold)$/) {
+        # Enable ColabFold MSA server for boltz/openfold/chai and auto.
+        # ESMFold ignores MSA; AlphaFold builds its own from local DBs.
         push @cmd, "--use-msa-server";
     }
 
