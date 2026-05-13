@@ -106,44 +106,50 @@ Notes:
 ├── raw/, raw_output/, msa/
 ```
 
-### AlphaFold (22198168) — FAIL
+### AlphaFold (22198168) — FAIL (missing databases on mango)
 
 ```
 /awilke@bvbrc/home/AppTests/.test6_alphafold_20260513_134611/
 └── JobFailed.txt
 ```
 
-Ran on mango (CUDA 12.6). Error: `Prediction failed with exit code: 1`.
-Pending full stderr from `gum:/disks/p3/task_status/22198168/stderr`.
+Ran on mango. Stderr:
+```
+Could not find HHsearch database /databases/pdb70/pdb70
+ValueError: Could not find HHsearch database /databases/pdb70/pdb70
+```
 
-Likely causes: CUDA driver mismatch or missing AlphaFold databases on mango.
+**Root cause:** AlphaFold databases are not mounted at `/databases` on the mango worker. The Perl passes `--af2-data-dir /databases` (app_spec default). Not a code or container bug -- infrastructure mount issue.
 
-### Auto (22198169) — FAIL
+**Fix:** Mount the AlphaFold genetic databases on mango, or schedule AlphaFold jobs to workers that have them.
+
+### Auto (22198169) — FAIL (read-only Boltz cache on peach)
 
 ```
 /awilke@bvbrc/home/AppTests/.test6_auto_20260513_134611/
 └── JobFailed.txt
 ```
 
-Ran on peach. Auto selects Boltz with `--use-msa-server`. Error: `Prediction failed with exit code: 1`.
-Pending full stderr from `gum:/disks/p3/task_status/22198169/stderr`.
-
-Likely cause: peach has an older CUDA driver incompatible with Boltz's torch+cu130.
-
-## Commands to retrieve pending logs
-
-Run on gum:
-
-```bash
-for tid in 22198168 22198169; do
-    echo "======== Task $tid ========"
-    echo "--- stdout (tail) ---"
-    tail -30 /disks/p3/task_status/$tid/stdout
-    echo "--- stderr (tail) ---"
-    tail -30 /disks/p3/task_status/$tid/stderr
-    echo ""
-done
+Ran on peach. Auto selected Boltz with `--use-msa-server`. Stdout:
 ```
+Downloading the CCD data to /local_databases/boltz/mols.tar.
+```
+
+Stderr:
+```
+PermissionError: [Errno 13] Permission denied: '/local_databases/boltz/mols.tar'
+```
+
+**Root cause:** `/local_databases/boltz/` is mounted read-only on peach. Boltz tries to download/update `mols.tar` (CCD chemical data) and gets permission denied. On coconut the data was already cached and writable.
+
+**Fix:** Either make `/local_databases/boltz/` writable on peach, or ensure `mols.tar` is pre-cached before the mount is set to read-only.
+
+## Infrastructure action items
+
+| Worker | Issue | Fix |
+|---|---|---|
+| mango | AlphaFold databases not mounted at `/databases` | Mount AF2 genetic databases (pdb70, uniref90, etc.) |
+| peach | `/local_databases/boltz/` read-only | Make writable or pre-cache `mols.tar` + `ccd.pkl` |
 
 ## Key findings
 
@@ -151,9 +157,13 @@ done
 
 2. **4/6 tools pass.** ESMFold, Boltz, OpenFold, Chai all produce the full unified output layout in the workspace.
 
-3. **Failures are host-specific.** AlphaFold (mango) and Auto->Boltz (peach) fail on workers with older CUDA drivers. Chai works on mango because `torch+cu121` is compatible with CUDA 12.6.
+3. **Failures are infrastructure, not code.** Both failures are worker-specific mount issues:
+   - AlphaFold: `/databases/pdb70/` not mounted on mango
+   - Auto->Boltz: `/local_databases/boltz/` read-only on peach (Boltz tries to write `mols.tar`)
 
 4. **Unified output layout verified.** All passing tools produce: top-level model_1.pdb + report.html + results.json, plus inputs/, predictions/, reports/, metadata/, raw/ subdirs.
+
+5. **No CUDA driver issues on this run.** All failures are unrelated to the original nvrtc/driver problem from issue #38. The container fix is confirmed working.
 
 ## Related
 
