@@ -262,10 +262,11 @@ apptainer exec /scout/containers/folding_prod.sif \
 | Issue | Affected | Status |
 |---|---|---|
 | Boltz `torch+cu130` needs CUDA 13.0+ | mango, peach | Open (#38); fix: rebuild with `torch+cu124` |
-| `/local_databases/boltz/` must be writable | peach | Boltz writes `mols.tar` on first run |
-| AlphaFold DB path was `/databases` (wrong) | All hosts | Fixed in `edbc138`; correct: `/local_databases/alphafold/databases` |
+| `/local_databases/boltz/` must be writable | peach | Fixed 2026-05-14: changed to `drwxr-xr-x p3:p3`. Boltz writes `mols.tar` on first run; `mols.tar` (637MB) + `ccd.pkl` (345MB) now pre-cached. **Verify**: re-run Boltz on peach to confirm the write issue is resolved. |
+| AlphaFold DB path was `/databases` (wrong) | All hosts | Fixed in `edbc138`; correct: `/local_databases/alphafold/databases`. **Verify**: re-run AlphaFold on mango/peach to confirm DBs are synced. |
 | `libnvrtc-builtins.so.13.0` not on `LD_LIBRARY_PATH` | Older SIFs | Fixed in `folding_260512.4.sif` |
 | Non-ASCII in app_spec breaks MySQL | Scheduler | Fixed in `v0.15.1` |
+| Container cache out of sync | Scheduler | Fixed 2026-05-14: updated to `folding_260513.1.sif` in ApplicationDefaultContainer. |
 
 ## Related docs
 
