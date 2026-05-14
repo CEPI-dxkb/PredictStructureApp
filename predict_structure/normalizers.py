@@ -96,17 +96,24 @@ def predictions_dir(output_dir: Path) -> Path:
 
 
 def promote_best_model(output_dir: Path) -> Path | None:
-    """Copy ``predictions/model_1.pdb`` to ``<output_dir>/model_1.pdb``.
+    """Copy ``predictions/model_1.{pdb,cif}`` to ``<output_dir>/``.
 
-    The top-level copy is the user-facing convenience: a UI grabs
+    The top-level copies are user-facing convenience: a UI grabs
     ``model_1.pdb`` directly without descending into ``predictions/``.
-    Returns the top-level path, or None if no rank-1 PDB exists yet.
+    The CIF sibling is promoted too so that downstream tools (e.g.
+    protein_compare) can fall back to mmCIF when PDB fixed-column
+    format can't represent the structure (4-char residue names).
+    Returns the top-level PDB path, or None if no rank-1 PDB exists yet.
     """
     src = output_dir / PREDICTIONS_SUBDIR / "model_1.pdb"
     if not src.is_file():
         return None
     dst = output_dir / "model_1.pdb"
     shutil.copy2(str(src), str(dst))
+    # Also promote the mmCIF sibling if it exists
+    cif_src = src.with_suffix(".cif")
+    if cif_src.is_file():
+        shutil.copy2(str(cif_src), str(output_dir / "model_1.cif"))
     return dst
 
 
