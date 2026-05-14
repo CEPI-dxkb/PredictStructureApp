@@ -70,9 +70,10 @@ Replace `/scout/containers/folding_prod.sif` with the target SIF path (e.g., `/s
 
 | Variable | Value | Tool | Who sets it |
 |---|---|---|---|
-| `HF_HOME` | `/local_databases/cache` | ESMFold | Perl auto-detects; SIF `%environment`; or set manually |
+| `HF_HOME` | `/local_databases/cache` | ESMFold | Perl auto-detects; SIF `%environment` sets `/local_databases/esmfold`; Perl prefers `/local_databases/cache` if writable |
 | `BOLTZ_CACHE` | `/local_databases/boltz` | Boltz | SIF `%environment` |
 | `CHAI_DOWNLOADS_DIR` | `/local_databases/chai` | Chai | SIF `%environment` |
+| `OPENFOLD_DATA_DIR` | `/local_databases/openfold` | OpenFold | SIF `%environment` |
 | `P3_WORKDIR` | `/work` (or `.`) | AppScript | Set manually for local tests |
 | `PREDICT_STRUCTURE_SKIP_UPLOAD` | `1` | CWL only | Skip workspace upload for CWL execution |
 
@@ -190,10 +191,12 @@ Response: `result[0].hostname` and `result[0].exitcode`.
 
 ```bash
 apptainer exec /scout/containers/folding_prod.sif bash -c '
+  echo "=== top level ==="
   p3-ls /awilke@bvbrc/home/AppTests/.<output_file>/
-  p3-ls /awilke@bvbrc/home/AppTests/.<output_file>/predictions/
-  p3-ls /awilke@bvbrc/home/AppTests/.<output_file>/metadata/
-  p3-ls /awilke@bvbrc/home/AppTests/.<output_file>/reports/
+  for sub in predictions metadata reports inputs; do
+    echo "--- $sub/ ---"
+    p3-ls /awilke@bvbrc/home/AppTests/.<output_file>/$sub/ 2>&1
+  done
 '
 ```
 
