@@ -119,6 +119,6 @@ class BoltzAdapter(BaseAdapter):
             "policy_data": {
                 "gpu_count": 1,
                 "partition": "gpu2",
-                "constraint": "V100|H100|H200",
+                "constraint": "H200",  # Boltz torch+cu130 needs CUDA 13.0+ (H200 only)
             },
         }
