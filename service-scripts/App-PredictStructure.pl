@@ -235,15 +235,9 @@ sub preflight {
     _init_debug($params);
     _validate_params($params);
 
-    # Peek at workspace files to catch format errors before resource
-    # estimation. Uses p3-cat | head (only streams first few lines).
-    for my $key (qw(input_file dna_file rna_file)) {
-        next unless $params->{$key};
-        _validate_file_format($params->{$key}, $key, "fasta");
-    }
-    if ($params->{msa_file}) {
-        _validate_file_format($params->{msa_file}, "msa_file", "msa");
-    }
+    # Note: file-format validation (p3-cat peek) is NOT done here.
+    # Preflight runs on the scheduler node where workspace files are
+    # not accessible. The peek runs in run_app (on the worker) instead.
 
     my $tool = $params->{tool} // "auto";
 
@@ -740,7 +734,7 @@ sub build_command {
 
     # AlphaFold-specific
     if ($tool eq "alphafold") {
-        my $data_dir = $params->{af2_data_dir} // "/databases";
+        my $data_dir = $params->{af2_data_dir} // "/local_databases/alphafold/databases";
         push @cmd, "--af2-data-dir", $data_dir;
 
         if (my $preset = $params->{af2_model_preset}) {

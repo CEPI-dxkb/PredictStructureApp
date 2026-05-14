@@ -110,7 +110,7 @@
      "label": "Use Templates", "desc": "Use PDB template structures for improved accuracy.",
      "section": "openfold", "tools": ["openfold"], "tier": 3},
 
-    {"id": "af2_data_dir", "type": "string", "default": "/databases", "required": 0,
+    {"id": "af2_data_dir", "type": "string", "default": "/local_databases/alphafold/databases", "required": 0,
      "label": "AlphaFold Database Directory", "desc": "Path to AlphaFold2 genetic databases (~2TB).",
      "section": "alphafold", "tools": ["alphafold"], "tier": 3},
 

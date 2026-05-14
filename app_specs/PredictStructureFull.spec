@@ -223,7 +223,7 @@
         {
             "id": "af2_data_dir",
             "type": "string",
-            "default": "/databases",
+            "default": "/local_databases/alphafold/databases",
             "required": 0,
             "label": "AlphaFold Database Directory",
             "desc": "Path to AlphaFold2 genetic databases (~2TB). AlphaFold only."
