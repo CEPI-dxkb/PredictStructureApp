@@ -101,8 +101,8 @@ def promote_best_model(output_dir: Path) -> Path | None:
     The top-level copies are user-facing convenience: a UI grabs
     ``model_1.pdb`` directly without descending into ``predictions/``.
     The CIF sibling is promoted too so that downstream tools (e.g.
-    protein_compare) can fall back to mmCIF when PDB fixed-column
-    format can't represent the structure (4-char residue names).
+    protein_compare) can fall back to mmCIF when Boltz PDB output
+    has corrupted ligand lines (upstream issues #298, #630).
     Returns the top-level PDB path, or None if no rank-1 PDB exists yet.
     """
     src = output_dir / PREDICTIONS_SUBDIR / "model_1.pdb"
@@ -333,9 +333,10 @@ def _extract_bfactors(pdb_path: Path) -> tuple[list[float], list[float]]:
     """Extract per-residue and per-atom B-factors from a structure file.
 
     Accepts PDB or mmCIF. Prefers the mmCIF sibling (same stem + .cif)
-    because BioPython's PDB parser crashes on 4-character residue names
-    like ``LIG1`` that Boltz uses for SMILES ligands. Falls back to the
-    PDB if no mmCIF sibling exists.
+    because Boltz PDB output for ligand-containing structures has
+    corrupted line layout that crashes BioPython's PDB parser
+    (upstream Boltz issues #298, #630). Falls back to PDB if no
+    mmCIF sibling exists.
 
     Hetatms (ligands, waters) are excluded from both lists. Only the first
     model is read.
@@ -348,8 +349,8 @@ def _extract_bfactors(pdb_path: Path) -> tuple[list[float], list[float]]:
     Returns:
         (per_residue_bfactors, per_atom_bfactors)
     """
-    # Prefer mmCIF (handles arbitrary residue name lengths) over PDB
-    # (fixed-column format breaks on 4-char names like LIG1).
+    # Prefer mmCIF over PDB — Boltz PDB writer produces corrupted
+    # lines when ligands are present (upstream #298, #630).
     cif_path = pdb_path.with_suffix(".cif")
     if cif_path.is_file():
         parser = MMCIFParser(QUIET=True)
