@@ -25,6 +25,7 @@ from pathlib import Path
 
 import numpy as np
 from Bio.PDB import PDBParser
+from Bio.PDB.MMCIFParser import MMCIFParser
 
 from predict_structure.converters import a3m_depth, mmcif_to_pdb, pdb_to_mmcif
 from predict_structure.entities import EntityList, EntityType
@@ -322,7 +323,12 @@ def _describe_msa_input(msa_path: Path, inputs_subdir: Path) -> dict:
 
 
 def _extract_bfactors(pdb_path: Path) -> tuple[list[float], list[float]]:
-    """Extract per-residue and per-atom B-factors from a PDB file in one pass.
+    """Extract per-residue and per-atom B-factors from a structure file.
+
+    Accepts PDB or mmCIF. Prefers the mmCIF sibling (same stem + .cif)
+    because BioPython's PDB parser crashes on 4-character residue names
+    like ``LIG1`` that Boltz uses for SMILES ligands. Falls back to the
+    PDB if no mmCIF sibling exists.
 
     Hetatms (ligands, waters) are excluded from both lists. Only the first
     model is read.
@@ -335,8 +341,15 @@ def _extract_bfactors(pdb_path: Path) -> tuple[list[float], list[float]]:
     Returns:
         (per_residue_bfactors, per_atom_bfactors)
     """
-    parser = PDBParser(QUIET=True)
-    structure = parser.get_structure("s", str(pdb_path))
+    # Prefer mmCIF (handles arbitrary residue name lengths) over PDB
+    # (fixed-column format breaks on 4-char names like LIG1).
+    cif_path = pdb_path.with_suffix(".cif")
+    if cif_path.is_file():
+        parser = MMCIFParser(QUIET=True)
+        structure = parser.get_structure("s", str(cif_path))
+    else:
+        parser = PDBParser(QUIET=True)
+        structure = parser.get_structure("s", str(pdb_path))
     per_residue: list[float] = []
     all_atom: list[float] = []
     for model in structure:
