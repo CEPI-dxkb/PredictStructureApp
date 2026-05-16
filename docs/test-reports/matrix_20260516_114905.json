@@ -1,0 +1,74 @@
+[
+  {
+    "task_id": null,
+    "label": "N01_neg_no_input",
+    "error": "500 Server Error: Internal Server Error for url: https://p3.theseed.org/services/app_service"
+  },
+  {
+    "task_id": null,
+    "label": "N02_neg_bad_ccd",
+    "error": "500 Server Error: Internal Server Error for url: https://p3.theseed.org/services/app_service"
+  },
+  {
+    "task_id": 22201192,
+    "label": "N03_neg_bad_format",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/not_fasta.txt",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "tool": "boltz"
+    },
+    "output_file": "matrix_N03_neg_bad_format_20260516_114905",
+    "status": "failed",
+    "elapsed": "00:00:07",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22201193,
+    "label": "N04_neg_esm_dna",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "esmfold",
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta"
+    },
+    "output_file": "matrix_N04_neg_esm_dna_20260516_114905",
+    "status": "failed",
+    "elapsed": "00:00:07",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22201194,
+    "label": "N06_neg_esm_ligand",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "esmfold",
+      "ligand": [
+        "ATP"
+      ]
+    },
+    "output_file": "matrix_N06_neg_esm_ligand_20260516_114905",
+    "status": "failed",
+    "elapsed": "00:00:08",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22201195,
+    "label": "N07_neg_bad_smiles",
+    "params": {
+      "smiles": [
+        "not_valid_smiles_xyz"
+      ],
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "tool": "boltz"
+    },
+    "output_file": "matrix_N07_neg_bad_smiles_20260516_114905",
+    "status": "failed",
+    "elapsed": "00:00:25",
+    "host": "coconut"
+  },
+  {
+    "task_id": null,
+    "label": "N08_neg_auto_no_input",
+    "error": "500 Server Error: Internal Server Error for url: https://p3.theseed.org/services/app_service"
+  }
+]

@@ -1,0 +1,132 @@
+[
+  {
+    "task_id": 22200695,
+    "label": "boltz_01",
+    "params": {
+      "tool": "boltz",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_boltz_boltz_01_20260515_160410",
+    "status": "completed",
+    "elapsed": "00:01:39",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200696,
+    "label": "boltz_02",
+    "params": {
+      "tool": "boltz",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_boltz_boltz_02_20260515_160410",
+    "status": "completed",
+    "elapsed": "00:01:32",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200697,
+    "label": "boltz_03",
+    "params": {
+      "tool": "boltz",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_boltz_boltz_03_20260515_160410",
+    "status": "completed",
+    "elapsed": "00:02:04",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200698,
+    "label": "boltz_04",
+    "params": {
+      "tool": "boltz",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_boltz_boltz_04_20260515_160410",
+    "status": "completed",
+    "elapsed": "00:02:18",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200699,
+    "label": "boltz_05",
+    "params": {
+      "tool": "boltz",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_boltz_boltz_05_20260515_160410",
+    "status": "completed",
+    "elapsed": "00:02:12",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200700,
+    "label": "boltz_06",
+    "params": {
+      "tool": "boltz",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_boltz_boltz_06_20260515_160410",
+    "status": "completed",
+    "elapsed": "00:01:58",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200701,
+    "label": "boltz_07",
+    "params": {
+      "tool": "boltz",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_boltz_boltz_07_20260515_160410",
+    "status": "completed",
+    "elapsed": "00:01:26",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200702,
+    "label": "boltz_08",
+    "params": {
+      "tool": "boltz",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_boltz_boltz_08_20260515_160410",
+    "status": "completed",
+    "elapsed": "00:01:25",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200703,
+    "label": "boltz_09",
+    "params": {
+      "tool": "boltz",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_boltz_boltz_09_20260515_160410",
+    "status": "completed",
+    "elapsed": "00:01:25",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200704,
+    "label": "boltz_10",
+    "params": {
+      "tool": "boltz",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_boltz_boltz_10_20260515_160410",
+    "status": "completed",
+    "elapsed": "00:01:20",
+    "host": "coconut"
+  }
+]

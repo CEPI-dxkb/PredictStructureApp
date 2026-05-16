@@ -1,0 +1,15 @@
+[
+  {
+    "task_id": 22201198,
+    "label": "E02_esmfold_dna_reject",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta",
+      "tool": "esmfold"
+    },
+    "output_file": "matrix_E02_esmfold_dna_reject_20260516_121810",
+    "status": "failed",
+    "elapsed": "00:00:10",
+    "host": "coconut"
+  }
+]

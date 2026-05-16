@@ -1,0 +1,553 @@
+[
+  {
+    "task_id": 22200976,
+    "label": "E01_esmfold",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "esmfold"
+    },
+    "output_file": "matrix_E01_esmfold_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:00:50",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200977,
+    "label": "B01_boltz_msa_upload",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_B01_boltz_msa_upload_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:25",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200978,
+    "label": "B02_boltz_msa_server",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz"
+    },
+    "output_file": "matrix_B02_boltz_msa_server_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:19",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200979,
+    "label": "B03_boltz_dna",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_B03_boltz_dna_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:22",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200980,
+    "label": "B04_boltz_rna",
+    "params": {
+      "rna_file": "/awilke@bvbrc/home/AppTests/inputs/rna.fasta",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_B04_boltz_rna_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:33",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200981,
+    "label": "B05_boltz_ligand",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "ligand": [
+        "ATP"
+      ],
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_B05_boltz_ligand_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:21",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200982,
+    "label": "B06_boltz_smiles",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "smiles": [
+        "CCO"
+      ],
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_B06_boltz_smiles_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:18",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200983,
+    "label": "B07_boltz_dna_ligand",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta",
+      "ligand": [
+        "ATP"
+      ],
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_B07_boltz_dna_ligand_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:17",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200984,
+    "label": "B08_boltz_multi_ligand",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "ligand": [
+        "ATP",
+        "NAD"
+      ],
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_B08_boltz_multi_ligand_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:28",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200985,
+    "label": "B09_boltz_multi_smiles",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "smiles": [
+        "CCO",
+        "c1ccccc1"
+      ],
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_B09_boltz_multi_smiles_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:24",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200986,
+    "label": "O01_openfold_msa_upload",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "openfold",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_O01_openfold_msa_upload_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:51",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200987,
+    "label": "O02_openfold_msa_server",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "openfold"
+    },
+    "output_file": "matrix_O02_openfold_msa_server_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:50",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200988,
+    "label": "O03_openfold_dna",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta",
+      "tool": "openfold",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_O03_openfold_dna_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:48",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200989,
+    "label": "O04_openfold_rna",
+    "params": {
+      "rna_file": "/awilke@bvbrc/home/AppTests/inputs/rna.fasta",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "openfold",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_O04_openfold_rna_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:46",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200990,
+    "label": "O05_openfold_ligand",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "ligand": [
+        "ATP"
+      ],
+      "tool": "openfold",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_O05_openfold_ligand_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:49",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200991,
+    "label": "O06_openfold_smiles",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "smiles": [
+        "CCO"
+      ],
+      "tool": "openfold",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_O06_openfold_smiles_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:47",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200992,
+    "label": "C01_chai_msa_upload",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "chai",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_C01_chai_msa_upload_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:58",
+    "host": "peach"
+  },
+  {
+    "task_id": 22200993,
+    "label": "C02_chai_msa_server",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "chai"
+    },
+    "output_file": "matrix_C02_chai_msa_server_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:02:02",
+    "host": "peach"
+  },
+  {
+    "task_id": 22200994,
+    "label": "C03_chai_dna",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta",
+      "tool": "chai",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_C03_chai_dna_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:02:06",
+    "host": "peach"
+  },
+  {
+    "task_id": 22200995,
+    "label": "C04_chai_rna",
+    "params": {
+      "rna_file": "/awilke@bvbrc/home/AppTests/inputs/rna.fasta",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "chai",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_C04_chai_rna_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:28",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200996,
+    "label": "C05_chai_ligand",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "ligand": [
+        "ATP"
+      ],
+      "tool": "chai",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_C05_chai_ligand_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:22",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200997,
+    "label": "C06_chai_smiles",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "smiles": [
+        "CCO"
+      ],
+      "tool": "chai",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_C06_chai_smiles_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:20",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200998,
+    "label": "A01_alphafold",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "alphafold"
+    },
+    "output_file": "matrix_A01_alphafold_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:23:38",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200999,
+    "label": "X01_auto_server",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "auto"
+    },
+    "output_file": "matrix_X01_auto_server_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:21",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22201000,
+    "label": "X02_auto_msa_upload",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "auto",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_X02_auto_msa_upload_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:21",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22201001,
+    "label": "X03_auto_dna",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta",
+      "tool": "auto",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_X03_auto_dna_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:25",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22201002,
+    "label": "X04_auto_ligand",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "ligand": [
+        "ATP"
+      ],
+      "tool": "auto",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_X04_auto_ligand_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:13",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22201003,
+    "label": "P01_boltz_2samples",
+    "params": {
+      "num_samples": 2,
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P01_boltz_2samples_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:20",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22201004,
+    "label": "P02_boltz_recycles",
+    "params": {
+      "num_recycles": 5,
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P02_boltz_recycles_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:31",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22201005,
+    "label": "P03_boltz_mmcif",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "output_format": "mmcif",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P03_boltz_mmcif_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:20",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22201006,
+    "label": "P04_boltz_debug",
+    "params": {
+      "debug": true,
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P04_boltz_debug_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:23",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22201007,
+    "label": "P05_openfold_2samples",
+    "params": {
+      "num_samples": 2,
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "openfold",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P05_openfold_2samples_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:47",
+    "host": "mango"
+  },
+  {
+    "task_id": 22201008,
+    "label": "P06_openfold_recycles",
+    "params": {
+      "num_recycles": 3,
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "openfold",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P06_openfold_recycles_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:44",
+    "host": "mango"
+  },
+  {
+    "task_id": 22201009,
+    "label": "P07_chai_2samples",
+    "params": {
+      "num_samples": 2,
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "chai",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P07_chai_2samples_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:02:00",
+    "host": "peach"
+  },
+  {
+    "task_id": 22201010,
+    "label": "P08_chai_recycles",
+    "params": {
+      "num_recycles": 5,
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "chai",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P08_chai_recycles_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:02:07",
+    "host": "peach"
+  },
+  {
+    "task_id": 22201011,
+    "label": "P09_esmfold_debug",
+    "params": {
+      "debug": true,
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "esmfold"
+    },
+    "output_file": "matrix_P09_esmfold_debug_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:00:43",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22201012,
+    "label": "P10_esmfold_recycles",
+    "params": {
+      "num_recycles": 2,
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "esmfold"
+    },
+    "output_file": "matrix_P10_esmfold_recycles_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:00:45",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22201013,
+    "label": "P11_boltz_seed",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "seed": 42,
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P11_boltz_seed_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:24",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22201014,
+    "label": "P12_chai_seed",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "seed": 42,
+      "tool": "chai",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P12_chai_seed_20260515_222953",
+    "status": "completed",
+    "elapsed": "00:01:17",
+    "host": "mango"
+  }
+]
