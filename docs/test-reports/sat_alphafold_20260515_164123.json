@@ -1,0 +1,122 @@
+[
+  {
+    "task_id": 22200738,
+    "label": "alphafold_01",
+    "params": {
+      "tool": "alphafold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "sat_alphafold_alphafold_01_20260515_164123",
+    "status": "completed",
+    "elapsed": "00:24:45",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200739,
+    "label": "alphafold_02",
+    "params": {
+      "tool": "alphafold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "sat_alphafold_alphafold_02_20260515_164123",
+    "status": "completed",
+    "elapsed": "00:24:20",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200740,
+    "label": "alphafold_03",
+    "params": {
+      "tool": "alphafold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "sat_alphafold_alphafold_03_20260515_164123",
+    "status": "completed",
+    "elapsed": "00:22:15",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200741,
+    "label": "alphafold_04",
+    "params": {
+      "tool": "alphafold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "sat_alphafold_alphafold_04_20260515_164123",
+    "status": "completed",
+    "elapsed": "00:22:24",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200742,
+    "label": "alphafold_05",
+    "params": {
+      "tool": "alphafold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "sat_alphafold_alphafold_05_20260515_164123",
+    "status": "completed",
+    "elapsed": "00:27:23",
+    "host": "peach"
+  },
+  {
+    "task_id": 22200743,
+    "label": "alphafold_06",
+    "params": {
+      "tool": "alphafold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "sat_alphafold_alphafold_06_20260515_164123",
+    "status": "completed",
+    "elapsed": "00:21:39",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200744,
+    "label": "alphafold_07",
+    "params": {
+      "tool": "alphafold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "sat_alphafold_alphafold_07_20260515_164123",
+    "status": "completed",
+    "elapsed": "00:22:11",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200745,
+    "label": "alphafold_08",
+    "params": {
+      "tool": "alphafold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "sat_alphafold_alphafold_08_20260515_164123",
+    "status": "completed",
+    "elapsed": "00:24:31",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200746,
+    "label": "alphafold_09",
+    "params": {
+      "tool": "alphafold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "sat_alphafold_alphafold_09_20260515_164123",
+    "status": "completed",
+    "elapsed": "00:23:52",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200747,
+    "label": "alphafold_10",
+    "params": {
+      "tool": "alphafold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "sat_alphafold_alphafold_10_20260515_164123",
+    "status": "completed",
+    "elapsed": "00:24:01",
+    "host": "peach"
+  }
+]

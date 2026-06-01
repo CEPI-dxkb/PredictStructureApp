@@ -44,6 +44,11 @@ class BaseAdapter(ABC):
     #: Whether this tool requires a GPU
     requires_gpu: bool = True
 
+    #: Minimum free VRAM (MiB) needed at job start. Used by the GPU
+    #: precheck in cli.run_prediction to fail fast when the assigned
+    #: GPU is already busy. Conservative; overestimate over underestimate.
+    min_gpu_memory_mb: int = 8000
+
     #: Entity types supported by this tool
     supported_entities: frozenset[EntityType] = frozenset({EntityType.PROTEIN})
 

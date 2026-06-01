@@ -27,6 +27,7 @@ class AlphaFoldAdapter(BaseAdapter):
     tool_name: str = "alphafold"
     supports_msa: bool = True
     requires_gpu: bool = True
+    min_gpu_memory_mb: int = 14000
     supported_entities: frozenset[EntityType] = frozenset({EntityType.PROTEIN})
 
     def __init__(self) -> None:
