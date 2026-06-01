@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git Worktrees
+
+Always create git worktrees in the `.worktree/` subdirectory of this repo:
+
+```bash
+git worktree add .worktree/<branch-name>
+```
+
 ## Environment
 
 Always use the `predict-structure` conda environment for this project:
