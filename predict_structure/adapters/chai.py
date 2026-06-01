@@ -26,6 +26,7 @@ class ChaiAdapter(BaseAdapter):
     tool_name: str = "chai"
     supports_msa: bool = True
     requires_gpu: bool = True
+    min_gpu_memory_mb: int = 12000
     supported_entities: frozenset[EntityType] = frozenset({
         EntityType.PROTEIN, EntityType.DNA, EntityType.RNA,
         EntityType.LIGAND, EntityType.SMILES,

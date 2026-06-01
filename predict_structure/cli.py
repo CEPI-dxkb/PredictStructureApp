@@ -39,8 +39,42 @@ from predict_structure.entities import (
     is_boltz_yaml,
     parse_fasta_entities,
 )
+from predict_structure.gpu_check import check_gpu_memory
+from predict_structure.msa_check import MsaFormatError, check_msa_input
 from predict_structure.normalizers import stage_inputs, write_metadata_json
 from predict_structure.results import write_results_json, write_ro_crate
+
+
+# Wrapper-side log written into output_dir so failures aren't silent
+# when the tool subprocess exits non-zero. Slurm captures full tool
+# stderr separately; this file is the wrapper's view and travels with
+# the output directory on workspace upload.
+RUN_LOG_NAME = "predict_structure.log"
+
+
+def _attach_run_log(output_dir: Path) -> logging.FileHandler:
+    """Add a FileHandler at output_dir/predict_structure.log to the root logger.
+
+    Logs at INFO and above regardless of the CLI verbosity flag, so a
+    failed run always leaves a useful trace even when ``--verbose`` was
+    not passed. Caller is responsible for ``logging.getLogger().removeHandler``
+    if the handler needs to be detached (we leave it attached for the
+    lifetime of the run).
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(output_dir / RUN_LOG_NAME, mode="a", encoding="utf-8")
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s: %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S%z",
+    ))
+    root = logging.getLogger()
+    # Ensure root level lets INFO through to the FileHandler even when
+    # the console handler is at WARNING.
+    if root.level == logging.NOTSET or root.level > logging.INFO:
+        root.setLevel(logging.INFO)
+    root.addHandler(handler)
+    return handler
 
 
 # ---------------------------------------------------------------------------
@@ -490,14 +524,26 @@ def run_prediction(
             (e.g. ``{"protein": ("/path/to/file.fasta",), ...}``).
         **shared: Shared CLI options (output_dir, backend, etc.).
     """
-    logger.info("Tool: %s", tool_name)
-    logger.info("Entities: %s", [(e.entity_type.value, e.name) for e in entity_list])
-    logger.info("Backend: %s | Device: %s", shared.get("backend"), shared.get("device"))
-
     output_path = Path(shared["output_dir"])
     output_path.mkdir(parents=True, exist_ok=True)
     raw_dir = output_path / "raw_output"
     raw_dir.mkdir(parents=True, exist_ok=True)
+
+    # Attach the run log file as early as possible so the wrapper's
+    # decisions (GPU precheck, command, exit code) are persisted even
+    # when the tool subprocess exits silently. CUDA_VISIBLE_DEVICES is
+    # the slurm-assigned GPU(s) — useful when debugging mango-style
+    # contention.
+    _attach_run_log(output_path)
+    logger.info("predict-structure %s starting", __version__)
+    logger.info("Tool: %s", tool_name)
+    logger.info("Entities: %s", [(e.entity_type.value, e.name) for e in entity_list])
+    logger.info("Backend: %s | Device: %s", shared.get("backend"), shared.get("device"))
+    import os as _os
+    logger.info("HOST=%s CUDA_VISIBLE_DEVICES=%s SLURM_JOB_ID=%s",
+                _os.uname().nodename,
+                _os.environ.get("CUDA_VISIBLE_DEVICES", "<unset>"),
+                _os.environ.get("SLURM_JOB_ID", "<unset>"))
 
     # 1. Resolve adapter and backend
     adapter = get_adapter(tool_name)
@@ -523,6 +569,17 @@ def run_prediction(
     adapter.validate_entities(entity_list)
     adapter.validate_sequences(entity_list)
     logger.info("Entity validation passed")
+
+    # Validate MSA format before any expensive work. Catches wrong-format
+    # files (single-seq FASTA, Stockholm for a tool that wants A3M, empty,
+    # binary). Cheap — sniffs the first 4 KiB and the suffix.
+    msa_input_path = Path(shared["msa"]) if shared.get("msa") else None
+    try:
+        check_msa_input(msa_input_path, tool_name)
+    except MsaFormatError as exc:
+        logger.error("MSA validation failed: %s", exc)
+        click.echo(f"Invalid MSA input: {exc}", err=True)
+        sys.exit(2)
 
     # -----------------------------------------------------------------
     # CWL unified path: bypass adapter.build_command() and build the
@@ -656,11 +713,32 @@ def run_prediction(
         click.echo("\n".join(str(l) for l in debug_lines))
         return
 
+    # VRAM precheck: catch GPUs whose VRAM is already pinned by another
+    # process (e.g. external inference servers slurm GRES doesn't track).
+    # Only runs on host-local backends — the cwl/gowe path executes on a
+    # different host and does its own checks downstream.
+    if (adapter.requires_gpu
+            and shared.get("device") != "cpu"
+            and backend in ("subprocess", "apptainer", "docker")):
+        result = check_gpu_memory(adapter.min_gpu_memory_mb)
+        if result.ok:
+            logger.info("GPU precheck: %s", result.message)
+        else:
+            logger.error("GPU precheck failed:\n%s", result.message)
+            click.echo(
+                "Prediction aborted: insufficient GPU VRAM before launch.\n"
+                f"{result.message}\n"
+                f"Run log: {output_path / RUN_LOG_NAME}",
+                err=True,
+            )
+            sys.exit(2)
+
     from datetime import datetime, timezone
     started_at = datetime.now(timezone.utc).isoformat()
     start = time.time()
     rc = execution_backend.run(cmd, **run_kwargs)
     elapsed = time.time() - start
+    logger.info("Tool subprocess exited rc=%d after %.1fs", rc, elapsed)
 
     if rc != 0:
         # Check if the tool produced output despite the error (e.g. AF2
@@ -672,7 +750,26 @@ def run_prediction(
                 "attempting normalization", rc
             )
         else:
-            click.echo(f"Prediction failed with exit code {rc}", err=True)
+            # Build a diagnostic block: post-mortem VRAM + likely cause hint.
+            # Helps when the upstream slurm stderr isn't accessible
+            # (e.g. workspace only shows JobFailed.txt).
+            diag_lines = [
+                f"Tool exited with code {rc} after {elapsed:.1f}s with no output.",
+            ]
+            if (adapter.requires_gpu
+                    and shared.get("device") != "cpu"
+                    and backend in ("subprocess", "apptainer", "docker")):
+                post = check_gpu_memory(adapter.min_gpu_memory_mb)
+                diag_lines.append(f"Post-mortem GPU state: {post.message}")
+                if not post.ok:
+                    diag_lines.append(
+                        "Likely CUDA OOM during tool execution — VRAM "
+                        "below threshold at exit."
+                    )
+            for line in diag_lines:
+                logger.error(line)
+            click.echo("\n".join(diag_lines), err=True)
+            click.echo(f"Run log: {output_path / RUN_LOG_NAME}", err=True)
             sys.exit(rc)
 
     # 7. Normalize output

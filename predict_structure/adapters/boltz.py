@@ -27,6 +27,7 @@ class BoltzAdapter(BaseAdapter):
     tool_name: str = "boltz"
     supports_msa: bool = True
     requires_gpu: bool = True
+    min_gpu_memory_mb: int = 24000
     supported_entities: frozenset[EntityType] = frozenset({
         EntityType.PROTEIN, EntityType.DNA, EntityType.RNA,
         EntityType.LIGAND, EntityType.SMILES,
