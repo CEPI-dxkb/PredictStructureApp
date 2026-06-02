@@ -68,8 +68,36 @@ def test_multiple_visible_gpus_all_must_pass(fake_gpus, monkeypatch):
     assert "GPU1=5000" in r.message
 
 
-def test_uuid_visible_devices_falls_back_to_gpu0(fake_gpus, monkeypatch):
-    fake_gpus([GpuStatus(0, 80000, 95000), GpuStatus(1, 5000, 95000)])
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "GPU-deadbeef-...")
-    r = check_gpu_memory(12000)
-    assert r.ok  # falls back to checking GPU 0
+def test_uuid_visible_devices_resolves_assigned_gpu(fake_gpus, monkeypatch):
+    # Regression: physical GPU0 is busy (vLLM), but the SLURM-assigned
+    # GPU is a free card further down the bus, named by UUID. The
+    # precheck must probe the assigned GPU, not index 0.
+    fake_gpus([
+        GpuStatus(0, 5000, 95000, "GPU-busy0000-0000"),
+        GpuStatus(6, 95000, 95000, "GPU-8a75dad1-393e-8006-585f-b185e9fa7bc3"),
+    ])
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES",
+                       "GPU-8a75dad1-393e-8006-585f-b185e9fa7bc3")
+    r = check_gpu_memory(30000)
+    assert r.ok  # assigned GPU6 has 95000 free
+    assert "GPU6=95000MiB free" in r.message
+
+
+def test_uuid_visible_devices_fails_when_assigned_gpu_busy(fake_gpus, monkeypatch):
+    fake_gpus([
+        GpuStatus(0, 95000, 95000, "GPU-free0000-0000"),
+        GpuStatus(6, 5000, 95000, "GPU-8a75dad1-393e-8006-585f-b185e9fa7bc3"),
+    ])
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES",
+                       "GPU-8a75dad1-393e-8006-585f-b185e9fa7bc3")
+    r = check_gpu_memory(30000)
+    assert not r.ok
+    assert "GPU6=5000/95000" in r.message
+
+
+def test_uuid_visible_devices_unknown_uuid_skips(fake_gpus, monkeypatch):
+    fake_gpus([GpuStatus(0, 5000, 95000, "GPU-aaaa-0000")])
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "GPU-nomatch-9999")
+    r = check_gpu_memory(30000)
+    assert r.ok  # no matching GPU — skip precheck rather than false-fail
+    assert "no matching GPU" in r.message

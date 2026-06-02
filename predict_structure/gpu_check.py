@@ -28,6 +28,7 @@ class GpuStatus:
     index: int
     free_mb: int
     total_mb: int
+    uuid: str = ""
 
 
 @dataclass
@@ -38,24 +39,44 @@ class GpuCheckResult:
     threshold_mb: int
 
 
-def _visible_indices() -> list[int] | None:
-    """Parse CUDA_VISIBLE_DEVICES into a list of integer indices.
+def _visible_tokens() -> list[str] | None:
+    """Parse CUDA_VISIBLE_DEVICES into a list of raw device tokens.
 
-    Returns None if the env var is unset (caller should check all GPUs)
-    or contains UUIDs / non-integer entries we can't map back to nvidia-smi
-    indices.
+    Tokens are either integer indices ("0", "1") or GPU UUIDs
+    ("GPU-8a75dad1-..."); Slurm GRES commonly sets the UUID form.
+    Returns None if the env var is unset/empty (caller should fall back
+    to a best-effort GPU-0 proxy).
     """
     raw = os.environ.get("CUDA_VISIBLE_DEVICES")
     if raw is None or raw == "":
         return None
     parts = [p.strip() for p in raw.split(",") if p.strip()]
-    if not parts:
-        return None
-    try:
-        return [int(p) for p in parts]
-    except ValueError:
-        # GPU-UUID-... style — caller will fall back to checking all
-        return None
+    return parts or None
+
+
+def _match_visible(tokens: list[str], all_gpus: list[GpuStatus]) -> list[GpuStatus]:
+    """Resolve CUDA_VISIBLE_DEVICES tokens to GpuStatus entries.
+
+    Integer tokens match by nvidia-smi index; UUID tokens (and any
+    non-integer token) match by GPU UUID. Unmatched tokens are silently
+    dropped — the caller treats an empty result as "skip precheck."
+    """
+    by_index = {g.index: g for g in all_gpus}
+    matched: list[GpuStatus] = []
+    for tok in tokens:
+        try:
+            g = by_index.get(int(tok))
+            if g is not None:
+                matched.append(g)
+            continue
+        except ValueError:
+            pass
+        # UUID form: nvidia-smi reports the full "GPU-<uuid>" string.
+        for g in all_gpus:
+            if g.uuid and (g.uuid == tok or g.uuid.startswith(tok) or tok.startswith(g.uuid)):
+                matched.append(g)
+                break
+    return matched
 
 
 def _query_nvidia_smi() -> list[GpuStatus]:
@@ -69,7 +90,7 @@ def _query_nvidia_smi() -> list[GpuStatus]:
     try:
         proc = subprocess.run(
             ["nvidia-smi",
-             "--query-gpu=index,memory.free,memory.total",
+             "--query-gpu=index,memory.free,memory.total,uuid",
              "--format=csv,noheader,nounits"],
             capture_output=True, text=True, timeout=10, check=False,
         )
@@ -82,8 +103,8 @@ def _query_nvidia_smi() -> list[GpuStatus]:
     gpus: list[GpuStatus] = []
     for line in proc.stdout.splitlines():
         try:
-            idx, free, total = (s.strip() for s in line.split(","))
-            gpus.append(GpuStatus(int(idx), int(free), int(total)))
+            idx, free, total, uuid = (s.strip() for s in line.split(",", 3))
+            gpus.append(GpuStatus(int(idx), int(free), int(total), uuid))
         except ValueError:
             continue
     return gpus
@@ -130,15 +151,16 @@ def check_gpu_memory(min_free_mb: int) -> GpuCheckResult:
             message="nvidia-smi unavailable — skipping VRAM precheck",
         )
 
-    visible = _visible_indices()
+    visible = _visible_tokens()
     if visible is None:
-        # CUDA_VISIBLE_DEVICES unset or UUID-based. Tool will pick the
-        # first CUDA device — check GPU 0 as a best-effort proxy.
+        # CUDA_VISIBLE_DEVICES unset. Tool will pick the first CUDA
+        # device — check GPU 0 as a best-effort proxy.
         target_gpus = [g for g in all_gpus if g.index == 0] or all_gpus[:1]
     else:
-        # Slurm/CUDA semantics: the integers in CUDA_VISIBLE_DEVICES are
-        # absolute nvidia-smi indices (when slurm sets it via GRES).
-        target_gpus = [g for g in all_gpus if g.index in set(visible)]
+        # CUDA_VISIBLE_DEVICES holds either nvidia-smi indices or, as
+        # Slurm GRES sets it, GPU UUIDs. Resolve both forms so we probe
+        # the *assigned* GPU, not physical index 0.
+        target_gpus = _match_visible(visible, all_gpus)
         if not target_gpus:
             return GpuCheckResult(
                 ok=True, gpus=[], threshold_mb=min_free_mb,
