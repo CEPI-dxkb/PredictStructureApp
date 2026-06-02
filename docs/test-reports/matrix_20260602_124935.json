@@ -1,0 +1,67 @@
+[
+  {
+    "task_id": 22417618,
+    "label": "E01_esmfold",
+    "params": {
+      "tool": "esmfold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "matrix_E01_esmfold_20260602_124935",
+    "status": "completed",
+    "elapsed": "00:00:45",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22417619,
+    "label": "B01_boltz_msa_upload",
+    "params": {
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "tool": "boltz",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "matrix_B01_boltz_msa_upload_20260602_124935",
+    "status": "completed",
+    "elapsed": "00:01:21",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22417620,
+    "label": "B02_boltz_msa_server",
+    "params": {
+      "tool": "boltz",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "matrix_B02_boltz_msa_server_20260602_124935",
+    "status": "completed",
+    "elapsed": "00:01:15",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22417621,
+    "label": "B03_boltz_dna",
+    "params": {
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "tool": "boltz",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "matrix_B03_boltz_dna_20260602_124935",
+    "status": "completed",
+    "elapsed": "00:01:22",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22417622,
+    "label": "B04_boltz_rna",
+    "params": {
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "tool": "boltz",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "rna_file": "/awilke@bvbrc/home/AppTests/inputs/rna.fasta"
+    },
+    "output_file": "matrix_B04_boltz_rna_20260602_124935",
+    "status": "completed",
+    "elapsed": "00:01:25",
+    "host": "coconut"
+  }
+]
