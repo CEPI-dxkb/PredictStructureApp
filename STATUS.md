@@ -1,9 +1,8 @@
 # Project Status
 
-**Last updated:** 2026-05-29
-**Current version:** v0.16.1 (HEAD: 260dcc1, 2 commits ahead of tag)
-**Production container:** `folding_260522.1.sif`
-**Working tree:** modified (container def fixes, STATUS.md)
+**Last updated:** 2026-06-02
+**Current version:** v0.16.1 (HEAD: a1a853c, merged PR #42)
+**Production container:** `folding_260602.1.sif`
 
 ## What's done
 
@@ -23,13 +22,43 @@
 - **Singularity CE 3.10 on gum** -- Initial deploy failed with `bad superblock for squashfs`. Fixed by deleting corrupt cache entry on gum and re-pulling.
 - **Boltz weights missing** -- `/local_databases` moved to separate 4TB volume; Boltz cache was empty. Re-downloaded mols.tar + boltz2_conf.ckpt + boltz2_aff.ckpt (5.8 GB).
 
+### PR #42: GPU VRAM precheck, MSA validation, run logging (merged 2026-06-01)
+
+- **GPU VRAM precheck** (`gpu_check.py`) -- queries `nvidia-smi` before tool launch, fails fast when GPU VRAM is consumed by non-slurm processes. Per-tool thresholds on each adapter.
+- **MSA format validation** (`msa_check.py`) -- sniffs first 4 KiB to detect format mismatches before expensive tool execution.
+- **Run log** -- writes `predict_structure.log` to output dir with host, CUDA device, slurm job ID, command, exit code, and post-mortem VRAM state on failure.
+
 ### Testing infrastructure (committed post-tag, at 260dcc1)
 
 - **scripts/submit_api_tests.py** -- Automated BV-BRC API test runner (submit, poll, host tracking, reporting)
 - **test_data/service_params/api_test_matrix.json** -- v2 matrix: 49 cases (29 tool x entity, 12 param variations, 8 negative)
 - **docs/Testreport-20260515.1.md** -- Full test results for folding_260515.2.sif
 
-### Test results (folding_260522.1.sif, 2026-05-28)
+### Test results (folding_260602.1.sif, 2026-06-02)
+
+| Category | Cases | Pass | Fail | Notes |
+|---|---|---|---|---|
+| Positive (tool x entity) | 29 | 29 | 0 | All tools pass on both hosts |
+| Parameter variations | 12 | 12 | 0 | |
+| Negative (validation) | 5 | 5 | 0 | N03-N07 expected fail |
+| AlphaFold | 1 | 1 | 0 | A01 on mango, 21:46 |
+| **Total** | **47** | **47** | **0** | |
+
+### Host coverage (folding_260602.1.sif)
+
+| Host | Jobs | Tools |
+|---|---|---|
+| coconut | 27 | ESMFold, Boltz, OpenFold, Chai, auto |
+| mango | 12 | OpenFold, Chai, AlphaFold |
+
+### folding_260601.1.sif — broken build (2026-06-01)
+
+- All OpenFold, Chai, and AlphaFold jobs failed on mango in ~9 seconds
+- Boltz and ESMFold on coconut passed (coconut-only tools unaffected)
+- Root cause: container-level breakage on CUDA 12.6 hosts
+- Fixed in folding_260602.1.sif
+
+### Previous test results (folding_260522.1.sif, 2026-05-28)
 
 | Category | Cases | Pass | Fail | Notes |
 |---|---|---|---|---|
@@ -37,62 +66,6 @@
 | Parameter variations | 12 | 12 | 0 | |
 | Negative (validation) | 10 | 10 | 0 | N01/N02/N08 = API 500 (preflight); N03-N07 = expected fail |
 | **Total** | **49** | **48** | **1** | |
-
-### Detailed results (folding_260522.1.sif)
-
-| Test | Tool | Status | Elapsed | Host |
-|---|---|---|---|---|
-| E01 esmfold | ESMFold | PASS | 0:43 | coconut |
-| E02 esmfold+DNA reject | ESMFold | PASS (expected fail) | 0:08 | coconut |
-| B01 boltz MSA upload | Boltz | PASS | 1:18 | coconut |
-| B02 boltz MSA server | Boltz | PASS | 1:17 | coconut |
-| B03 boltz DNA | Boltz | PASS | 1:17 | coconut |
-| B04 boltz RNA | Boltz | PASS | 1:17 | coconut |
-| B05 boltz ligand | Boltz | PASS | 1:14 | coconut |
-| B06 boltz SMILES | Boltz | PASS | 1:11 | coconut |
-| B07 boltz DNA+ligand | Boltz | PASS | 1:23 | coconut |
-| B08 boltz multi-ligand | Boltz | PASS | 1:14 | coconut |
-| B09 boltz multi-SMILES | Boltz | PASS | 1:18 | coconut |
-| O01 openfold MSA upload | OpenFold | PASS | 1:50 | mango |
-| O02 openfold MSA server | OpenFold | PASS | 1:48 | mango |
-| O03 openfold DNA | OpenFold | PASS | 1:51 | mango |
-| O04 openfold RNA | OpenFold | PASS | 1:49 | mango |
-| O05 openfold ligand | OpenFold | PASS | 1:50 | mango |
-| O06 openfold SMILES | OpenFold | PASS | 1:48 | mango |
-| C01 chai MSA upload | Chai | PASS | 8:31 | peach |
-| C02 chai MSA server | Chai | PASS | 1:31 | coconut |
-| C03 chai DNA | Chai | PASS | 1:23 | mango |
-| C04 chai RNA | Chai | **FAIL** | 1:01 | mango |
-| C05 chai ligand | Chai | PASS | 1:25 | coconut |
-| C06 chai SMILES | Chai | PASS | 1:27 | coconut |
-| A01 alphafold | AlphaFold | PASS | 23:02 | mango |
-| A02 alphafold+DNA reject | AlphaFold | PASS (expected fail) | 0:07 | mango |
-| X01 auto server | auto→Boltz | PASS | 1:16 | coconut |
-| X02 auto MSA upload | auto→Boltz | PASS | 1:21 | coconut |
-| X03 auto DNA | auto→Boltz | PASS | 1:18 | coconut |
-| X04 auto ligand | auto→Boltz | PASS | 1:17 | coconut |
-| P01-P04 boltz params | Boltz | PASS (4/4) | 1:16-1:24 | coconut |
-| P05-P06 openfold params | OpenFold | PASS (2/2) | 1:49-2:04 | mango |
-| P07-P08 chai params | Chai | PASS (2/2) | 2:02-2:03 | peach |
-| P09-P10 esmfold params | ESMFold | PASS (2/2) | 0:41-0:43 | coconut |
-| P11 boltz seed | Boltz | PASS | 1:16 | coconut |
-| P12 chai seed | Chai | PASS | 1:18 | mango |
-| N03-N07 negative | various | PASS (5/5 expected fail) | 0:06-0:24 | coconut/peach |
-
-### Host coverage (folding_260522.1.sif)
-
-| Host | Jobs | Tools |
-|---|---|---|
-| coconut | 29 | ESMFold, Boltz, Chai, auto |
-| mango | 13 | OpenFold, Chai, AlphaFold |
-| peach | 4 | Chai, AlphaFold (negative) |
-
-### C04_chai_rna failure analysis
-
-- Chai+RNA on mango: failed in both May 27 and May 28 test runs (1:01 elapsed, empty raw_output)
-- Chai+RNA on coconut: passes locally (prediction score=0.1902)
-- Other Chai jobs pass on mango (C03_dna, P12_seed)
-- Likely host-specific transient issue on mango; not a code bug
 
 ### Previous test results (folding_260515.2.sif, 2026-05-15/16)
 
@@ -137,7 +110,7 @@
 
 ## Infrastructure
 
-### Folding tools (production SIF: folding_260522.1.sif)
+### Folding tools (production SIF: folding_260602.1.sif)
 
 | Tool | Package | Version | PyTorch / Framework | ML Model | Checkpoint / Weights |
 |---|---|---|---|---|---|
@@ -164,8 +137,10 @@
 
 | SIF | Date | Status | Notes |
 |---|---|---|---|
-| folding_260522.1.sif | 2026-05-22 | **Production** | Fixed 90-environment.sh, env vars; 48/49 tests pass |
-| folding_260515.2.sif | 2026-05-15 | Previous prod | v0.16.1, 101/101 tests pass; broken 90-environment.sh |
+| folding_260602.1.sif | 2026-06-02 | **Production** | GPU precheck, MSA validation, run log; 47/47 tests pass |
+| folding_260601.1.sif | 2026-06-01 | Bad build | Broken on mango (CUDA 12.6); all OF/Chai/AF jobs failed in ~9s |
+| folding_260522.1.sif | 2026-05-22 | Previous prod | Fixed 90-environment.sh, env vars; 48/49 tests pass |
+| folding_260515.2.sif | 2026-05-15 | Retired | v0.16.1, 101/101 tests pass; broken 90-environment.sh |
 | folding_260515.1.sif | 2026-05-15 | Bad build | Stale predict_structure code (cached wheel) |
 | folding_260514.4.sif | 2026-05-14 | Bad build | Scheduler instant-fail (container cache issue) |
 | folding_260514.2.sif | 2026-05-14 | Bad build | Stale predict_structure code (cached wheel) |
@@ -175,9 +150,9 @@
 
 | Path | Purpose |
 |---|---|
-| /scout/containers/folding_prod.sif | Production symlink → folding_260522.1.sif |
-| /scout/containers/folding_260522.1.sif | Current production SIF |
-| /vol/patric3/production/containers/folding_260522.1.sif | BV-BRC production copy |
+| /scout/containers/folding_prod.sif | Production symlink → folding_260602.1.sif |
+| /scout/containers/folding_260602.1.sif | Current production SIF |
+| /vol/patric3/production/containers/folding_260602.1.sif | BV-BRC production copy |
 | /disks/patric-common/container-cache/ | BV-BRC scheduler container cache |
 | /local_databases/ | All tool weights + caches (bind-mounted) |
 | ~/.patric_token | BV-BRC auth token |
@@ -186,7 +161,7 @@
 
 | Repo | Version | Branch | Last commit | Pushed? |
 |---|---|---|---|---|
-| PredictStructureApp | v0.16.1+2 | main | 260dcc1 (test infra) | YES |
+| PredictStructureApp | v0.16.1+ | main | a1a853c (PR #42 merged) | YES |
 | protein_compare | v0.2.1 | main | 3918cbd (comment fix) | NO (SSH) |
 
 ## How to resume
