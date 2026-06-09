@@ -1,6 +1,38 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository. It defines **how to operate in this repo** — conventions, commands, architecture, and the project file system.
+
+## Project File System
+
+The project's working state lives in companion files. Each answers exactly one question. Keep information where its *question* belongs.
+
+| File | Question | Durability | Altitude |
+|---|---|---|---|
+| **CLAUDE.md** | *How do we operate here?* | Timeless (conventions) | Foundation |
+| **MEMORY.md** | *What have we decided / learned?* | Timeless (accumulates) | High |
+| **PLAN.md** | *Where are we going, and by what route?* | Deliberate (versioned) | High |
+| **TODO.md** | *What are the exact next checkboxes?* | Volatile (changes constantly) | Mid |
+| **STATUS.md** | *If I open this cold, where am I?* | Transient (overwritten = now) | Ground |
+
+Additionally, Claude Code maintains **auto-memory** (`~/.claude/projects/.../memory/`) — Claude's private cross-session notebook for user preferences, feedback corrections, and ephemeral project context. Auto-memory is loaded automatically and is *not* committed to the repo.
+
+### When to use which
+
+**MEMORY.md vs auto-memory** — MEMORY.md is the project's institutional knowledge: decisions, rules, lessons learned. It's committed to git, readable by humans, and travels with the repo. Auto-memory is Claude's private notebook: user preferences, behavioral feedback, external references. If a teammate should know it, it goes in MEMORY.md. If only Claude needs it, auto-memory.
+
+**PLAN.md vs plan mode** — PLAN.md is the multi-session project roadmap: phases, milestones, approach, sequencing rationale. It's versioned and committed. Plan mode (`.claude/plans/`) is a single-task implementation blueprint: specific files to change, exact steps. If it matters next week, PLAN.md. If it's done when the PR merges, plan mode.
+
+**TODO.md vs tasks** — TODO.md is the persistent tactical checklist derived from the current PLAN phase. Claude Code tasks (`/tasks`) are in-conversation progress tracking. TODO.md survives across sessions; tasks don't.
+
+**STATUS.md** — The handoff snapshot. Enough to resume cold on a different machine. Contains: next action, what's in-progress, blockers, and project state (version, container, test results, infrastructure).
+
+### Session protocol
+
+**At session start:** Read CLAUDE.md → STATUS.md → PLAN.md → TODO.md → skim MEMORY.md → confirm git state.
+
+**During the session:** Check off TODO items as you go. Append decisions/lessons to MEMORY.md immediately. If strategy shifts, update PLAN.md and bump its version.
+
+**At session end:** Reconcile TODO with reality. Update STATUS.md narrative. Commit and push.
 
 ## Git Worktrees
 
