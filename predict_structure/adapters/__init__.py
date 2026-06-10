@@ -7,6 +7,7 @@ from predict_structure.adapters.boltz import BoltzAdapter
 from predict_structure.adapters.chai import ChaiAdapter
 from predict_structure.adapters.alphafold import AlphaFoldAdapter
 from predict_structure.adapters.esmfold import ESMFoldAdapter
+from predict_structure.adapters.esmfold2 import ESMFold2Adapter
 from predict_structure.adapters.openfold import OpenFoldAdapter
 
 ADAPTERS: dict[str, type[BaseAdapter]] = {
@@ -14,6 +15,7 @@ ADAPTERS: dict[str, type[BaseAdapter]] = {
     "chai": ChaiAdapter,
     "alphafold": AlphaFoldAdapter,
     "esmfold": ESMFoldAdapter,
+    "esmfold2": ESMFold2Adapter,
     "openfold": OpenFoldAdapter,
 }
 
@@ -42,6 +44,7 @@ __all__ = [
     "ChaiAdapter",
     "AlphaFoldAdapter",
     "ESMFoldAdapter",
+    "ESMFold2Adapter",
     "OpenFoldAdapter",
     "ADAPTERS",
     "get_adapter",

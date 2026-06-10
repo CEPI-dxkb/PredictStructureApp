@@ -228,10 +228,13 @@ class ESMFold2Adapter(BaseAdapter):
         return output_dir
 
     def preflight(self) -> dict[str, Any]:
+        # Sizing from benchmarks (docs/esmfold2-benchmarks.md): peak host RSS
+        # ~16G GPU / ~28G CPU-fp32; VRAM <=17G; warm runs <60s. Values give
+        # headroom for far larger inputs than the <=450-residue cases tested.
         return {
             "cpu": 8,
-            "memory": "64G",
-            "runtime": 7200,
+            "memory": "32G",
+            "runtime": 3600,
             "storage": "50G",
             "policy_data": {
                 "gpu_count": 1,
