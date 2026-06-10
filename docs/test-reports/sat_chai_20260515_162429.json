@@ -1,0 +1,132 @@
+[
+  {
+    "task_id": 22200716,
+    "label": "chai_01",
+    "params": {
+      "tool": "chai",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_chai_chai_01_20260515_162429",
+    "status": "completed",
+    "elapsed": "00:01:41",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200717,
+    "label": "chai_02",
+    "params": {
+      "tool": "chai",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_chai_chai_02_20260515_162429",
+    "status": "completed",
+    "elapsed": "00:01:36",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200718,
+    "label": "chai_03",
+    "params": {
+      "tool": "chai",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_chai_chai_03_20260515_162429",
+    "status": "completed",
+    "elapsed": "00:01:25",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200719,
+    "label": "chai_04",
+    "params": {
+      "tool": "chai",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_chai_chai_04_20260515_162429",
+    "status": "completed",
+    "elapsed": "00:01:21",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200720,
+    "label": "chai_05",
+    "params": {
+      "tool": "chai",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_chai_chai_05_20260515_162429",
+    "status": "completed",
+    "elapsed": "00:05:17",
+    "host": "peach"
+  },
+  {
+    "task_id": 22200721,
+    "label": "chai_06",
+    "params": {
+      "tool": "chai",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_chai_chai_06_20260515_162429",
+    "status": "completed",
+    "elapsed": "00:01:22",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200722,
+    "label": "chai_07",
+    "params": {
+      "tool": "chai",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_chai_chai_07_20260515_162429",
+    "status": "completed",
+    "elapsed": "00:01:20",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200723,
+    "label": "chai_08",
+    "params": {
+      "tool": "chai",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_chai_chai_08_20260515_162429",
+    "status": "completed",
+    "elapsed": "00:01:37",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200724,
+    "label": "chai_09",
+    "params": {
+      "tool": "chai",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_chai_chai_09_20260515_162429",
+    "status": "completed",
+    "elapsed": "00:01:38",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200725,
+    "label": "chai_10",
+    "params": {
+      "tool": "chai",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_chai_chai_10_20260515_162429",
+    "status": "completed",
+    "elapsed": "00:01:19",
+    "host": "mango"
+  }
+]

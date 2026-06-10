@@ -25,6 +25,7 @@ from pathlib import Path
 
 import numpy as np
 from Bio.PDB import PDBParser
+from Bio.PDB.MMCIFParser import MMCIFParser
 
 from predict_structure.converters import a3m_depth, mmcif_to_pdb, pdb_to_mmcif
 from predict_structure.entities import EntityList, EntityType
@@ -95,17 +96,24 @@ def predictions_dir(output_dir: Path) -> Path:
 
 
 def promote_best_model(output_dir: Path) -> Path | None:
-    """Copy ``predictions/model_1.pdb`` to ``<output_dir>/model_1.pdb``.
+    """Copy ``predictions/model_1.{pdb,cif}`` to ``<output_dir>/``.
 
-    The top-level copy is the user-facing convenience: a UI grabs
+    The top-level copies are user-facing convenience: a UI grabs
     ``model_1.pdb`` directly without descending into ``predictions/``.
-    Returns the top-level path, or None if no rank-1 PDB exists yet.
+    The CIF sibling is promoted too so that downstream tools (e.g.
+    protein_compare) can fall back to mmCIF when Boltz PDB output
+    has corrupted ligand lines (upstream issues #298, #630).
+    Returns the top-level PDB path, or None if no rank-1 PDB exists yet.
     """
     src = output_dir / PREDICTIONS_SUBDIR / "model_1.pdb"
     if not src.is_file():
         return None
     dst = output_dir / "model_1.pdb"
     shutil.copy2(str(src), str(dst))
+    # Also promote the mmCIF sibling if it exists
+    cif_src = src.with_suffix(".cif")
+    if cif_src.is_file():
+        shutil.copy2(str(cif_src), str(output_dir / "model_1.cif"))
     return dst
 
 
@@ -322,7 +330,13 @@ def _describe_msa_input(msa_path: Path, inputs_subdir: Path) -> dict:
 
 
 def _extract_bfactors(pdb_path: Path) -> tuple[list[float], list[float]]:
-    """Extract per-residue and per-atom B-factors from a PDB file in one pass.
+    """Extract per-residue and per-atom B-factors from a structure file.
+
+    Accepts PDB or mmCIF. Prefers the mmCIF sibling (same stem + .cif)
+    because Boltz PDB output for ligand-containing structures has
+    corrupted line layout that crashes BioPython's PDB parser
+    (upstream Boltz issues #298, #630). Falls back to PDB if no
+    mmCIF sibling exists.
 
     Hetatms (ligands, waters) are excluded from both lists. Only the first
     model is read.
@@ -335,8 +349,15 @@ def _extract_bfactors(pdb_path: Path) -> tuple[list[float], list[float]]:
     Returns:
         (per_residue_bfactors, per_atom_bfactors)
     """
-    parser = PDBParser(QUIET=True)
-    structure = parser.get_structure("s", str(pdb_path))
+    # Prefer mmCIF over PDB — Boltz PDB writer produces corrupted
+    # lines when ligands are present (upstream #298, #630).
+    cif_path = pdb_path.with_suffix(".cif")
+    if cif_path.is_file():
+        parser = MMCIFParser(QUIET=True)
+        structure = parser.get_structure("s", str(cif_path))
+    else:
+        parser = PDBParser(QUIET=True)
+        structure = parser.get_structure("s", str(pdb_path))
     per_residue: list[float] = []
     all_atom: list[float] = []
     for model in structure:

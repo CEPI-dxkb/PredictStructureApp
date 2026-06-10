@@ -1,0 +1,193 @@
+{
+  "id": "PredictStructure_chai",
+  "label": "Predict Structure - Chai Mode",
+  "description": "Parameters for chai mode. Load this when the user selects tool=chai.",
+  "parameters": [
+    {
+      "id": "tool",
+      "type": "enum",
+      "enum": [
+        "auto",
+        "boltz",
+        "openfold",
+        "chai",
+        "alphafold",
+        "esmfold"
+      ],
+      "default": "auto",
+      "required": 1,
+      "label": "Prediction Tool",
+      "desc": "Structure prediction engine. 'auto' picks Boltz (highest quality) by default; MSA fetched via ColabFold server automatically."
+    },
+    {
+      "id": "input_file",
+      "type": "wsfile",
+      "required": 0,
+      "label": "Protein FASTA",
+      "desc": "Protein sequence(s) in FASTA format. Multi-chain complexes: include multiple sequences in one file."
+    },
+    {
+      "id": "dna_file",
+      "type": "wsfile",
+      "required": 0,
+      "label": "DNA FASTA",
+      "desc": "DNA sequence(s) in FASTA format."
+    },
+    {
+      "id": "rna_file",
+      "type": "wsfile",
+      "required": 0,
+      "label": "RNA FASTA",
+      "desc": "RNA sequence(s) in FASTA format."
+    },
+    {
+      "id": "ligand",
+      "type": "list",
+      "required": 0,
+      "label": "Ligands (CCD codes)",
+      "desc": "Ligand CCD codes, 1-3 alphanumeric (e.g. ATP, NAG). Glycans use CCD codes here too.",
+      "item": {
+        "id": "ccd_code",
+        "type": "string"
+      }
+    },
+    {
+      "id": "smiles",
+      "type": "list",
+      "required": 0,
+      "label": "SMILES Strings",
+      "desc": "SMILES strings for arbitrary small molecules.",
+      "item": {
+        "id": "smiles_str",
+        "type": "string"
+      }
+    },
+    {
+      "id": "msa_file",
+      "type": "wsfile",
+      "required": 0,
+      "label": "MSA File",
+      "desc": "Pre-computed MSA (.a3m, .sto). Optional -- ColabFold server fetches MSA automatically if not provided. Upload overrides the server."
+    },
+    {
+      "id": "output_path",
+      "type": "folder",
+      "required": 1,
+      "label": "Output Folder",
+      "desc": "Workspace folder for prediction results."
+    },
+    {
+      "id": "output_file",
+      "type": "wsfile",
+      "required": 1,
+      "label": "Job Name",
+      "desc": "Output name. Results land at output_path/.output_file/ in the workspace."
+    },
+    {
+      "id": "num_samples",
+      "type": "int",
+      "default": 1,
+      "required": 0,
+      "label": "Number of Samples",
+      "desc": "Structure samples to generate. More samples give diversity at the cost of runtime."
+    },
+    {
+      "id": "output_format",
+      "type": "enum",
+      "enum": [
+        "pdb",
+        "mmcif"
+      ],
+      "default": "pdb",
+      "required": 0,
+      "label": "Output Format",
+      "desc": "Primary structure output format. Both PDB and mmCIF are always generated."
+    },
+    {
+      "id": "num_recycles",
+      "type": "int",
+      "default": 3,
+      "required": 0,
+      "label": "Recycling Iterations",
+      "desc": "Recycling iterations for structure refinement."
+    },
+    {
+      "id": "seed",
+      "type": "int",
+      "default": 42,
+      "required": 0,
+      "label": "Random Seed",
+      "desc": "Random seed for reproducibility."
+    },
+    {
+      "id": "debug",
+      "type": "bool",
+      "default": false,
+      "required": 0,
+      "label": "Debug Mode",
+      "desc": "Enable verbose debug logging."
+    },
+    {
+      "id": "sampling_steps",
+      "type": "int",
+      "default": 200,
+      "required": 0,
+      "label": "Diffusion Sampling Steps",
+      "desc": "Number of diffusion sampling steps. Higher values may improve quality."
+    },
+    {
+      "id": "no_esm_embeddings",
+      "type": "bool",
+      "default": false,
+      "required": 0,
+      "label": "Disable ESM2 Embeddings",
+      "desc": "Disable ESM2 language model embeddings."
+    },
+    {
+      "id": "use_templates_server",
+      "type": "bool",
+      "default": false,
+      "required": 0,
+      "label": "Use PDB Template Server",
+      "desc": "Fetch PDB templates from Chai's template server."
+    },
+    {
+      "id": "constraint_path",
+      "type": "wsfile",
+      "required": 0,
+      "label": "Constraint File",
+      "desc": "Constraint JSON file for guided prediction."
+    },
+    {
+      "id": "template_hits_path",
+      "type": "wsfile",
+      "required": 0,
+      "label": "Template Hits File",
+      "desc": "Pre-computed template hits file."
+    },
+    {
+      "id": "num_trunk_samples",
+      "type": "int",
+      "default": 1,
+      "required": 0,
+      "label": "Trunk Samples",
+      "desc": "Trunk samples per prediction."
+    },
+    {
+      "id": "recycle_msa_subsample",
+      "type": "int",
+      "default": 0,
+      "required": 0,
+      "label": "Recycle MSA Subsample",
+      "desc": "MSA rows to subsample per recycle (0 = use all)."
+    },
+    {
+      "id": "no_low_memory",
+      "type": "bool",
+      "default": false,
+      "required": 0,
+      "label": "Disable Low-Memory Mode",
+      "desc": "Disable low-memory mode (uses more GPU RAM for speed)."
+    }
+  ]
+}

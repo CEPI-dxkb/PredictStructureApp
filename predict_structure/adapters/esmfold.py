@@ -25,6 +25,7 @@ class ESMFoldAdapter(BaseAdapter):
     tool_name: str = "esmfold"
     supports_msa: bool = False
     requires_gpu: bool = False
+    min_gpu_memory_mb: int = 4000
     supported_entities: frozenset[EntityType] = frozenset({EntityType.PROTEIN})
 
     def prepare_input(

@@ -2,14 +2,23 @@
 
 BV-BRC application specifications for the unified PredictStructure service.
 
-Two specs live here, with different roles:
+Files in this directory:
 
-| File | Loaded by BV-BRC AppService | Purpose |
-|---|:-:|---|
-| [`PredictStructure.json`](PredictStructure.json) | ✅ yes (active form) | Minimal user-facing spec — drives the BV-BRC web UI form. Currently the spec used in production. |
-| [`PredictStructureFull.spec`](PredictStructureFull.spec) | ❌ no | Reference / documentation — exposes every option the `predict-structure` CLI supports. |
+| File | Purpose |
+|---|---|
+| [`PredictStructure.json`](PredictStructure.json) | Active app spec (registered with BV-BRC AppService via `*.json` glob). Minimal -- auto mode only. |
+| [`PredictStructureFull.spec`](PredictStructureFull.spec) | Reference doc -- all 38 CLI options. `.spec` extension keeps it out of the service registry. |
+| [`PredictStructureMerged.spec`](PredictStructureMerged.spec) | All options with `section`, `tools`, and `tier` annotations for UI rendering. |
+| [`modes/auto.json`](modes/auto.json) | Per-tool mode spec for auto (11 params) |
+| [`modes/boltz.json`](modes/boltz.json) | Per-tool mode spec for Boltz (15 params) |
+| [`modes/openfold.json`](modes/openfold.json) | Per-tool mode spec for OpenFold (16 params) |
+| [`modes/chai.json`](modes/chai.json) | Per-tool mode spec for Chai (22 params) |
+| [`modes/alphafold.json`](modes/alphafold.json) | Per-tool mode spec for AlphaFold (11 params) |
+| [`modes/esmfold.json`](modes/esmfold.json) | Per-tool mode spec for ESMFold (10 params) |
 
-Why two? `Bio::KBase::AppService::AppSpecs::enumerate` (in the BV-BRC framework) auto-discovers app definitions via `glob("$dir/*.json")`. Only `.json` is registered as a live app; `.spec` is just a comment file in this directory and stays out of the service registry. That gives us a place to document the full surface area without registering a second app.
+Only `PredictStructure.json` is auto-registered by the BV-BRC framework (`glob("$dir/*.json")`). Everything else is reference / UI guidance. The `modes/` files are loaded by the UI when the user switches tools; the merged spec provides the annotated superset.
+
+Full UI guidance: [`docs/UI_OPTIONS.md`](../docs/UI_OPTIONS.md)
 
 ## `PredictStructure.json` — basic, UI-facing (9 parameters)
 
@@ -86,11 +95,16 @@ TTCCPSIVARSNFNVCRLPgtPEALCATYTGCIIIPGATCPGDYAN
 
 **Validation:** The AppScript peeks at the first 5 lines (via `p3-cat | head`) in both preflight and run_app before downloading. A3M files must start with `>` or `#`; Stockholm files must start with `# STOCKHOLM`.
 
-### MSA policy
+### MSA handling
 
-External MSA servers (`use_msa_server` / `msa_server_url`) are **disabled** in the BV-BRC AppScript per project policy. The Perl script (`service-scripts/App-PredictStructure.pl`) ignores those flags and refuses to run Boltz / OpenFold / Chai without `msa_file`. AlphaFold builds its own MSA from local databases; ESMFold needs no MSA.
+MSA is resolved automatically by the AppScript:
 
-If `msa_file` is present, MSA-upload mode is active. Absent → single-sequence (only valid for ESMFold) or local-database (AlphaFold).
+- **`msa_file` uploaded** → passed directly to the tool (`--msa <file>`)
+- **No `msa_file`** → the ColabFold MSA server is enabled automatically for Boltz / OpenFold / Chai (`--use-msa-server`). The tool fetches alignments on the fly.
+- **AlphaFold** → builds its own MSA from local databases (ignores both `msa_file` and the server)
+- **ESMFold** → single-sequence, no MSA used
+
+Users do NOT need to upload an MSA file for Boltz / OpenFold / Chai — the server provides one by default. Uploading a pre-computed MSA is optional (it skips the server fetch and may be faster for large proteins).
 
 ## Input validation (fail-fast)
 

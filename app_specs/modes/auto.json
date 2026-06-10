@@ -1,0 +1,107 @@
+{
+  "id": "PredictStructure_auto",
+  "label": "Predict Structure - Auto Mode",
+  "description": "Parameters for auto mode. Load this when the user selects tool=auto.",
+  "parameters": [
+    {
+      "id": "tool",
+      "type": "enum",
+      "enum": [
+        "auto",
+        "boltz",
+        "openfold",
+        "chai",
+        "alphafold",
+        "esmfold"
+      ],
+      "default": "auto",
+      "required": 1,
+      "label": "Prediction Tool",
+      "desc": "Structure prediction engine. 'auto' picks Boltz (highest quality) by default; MSA fetched via ColabFold server automatically."
+    },
+    {
+      "id": "input_file",
+      "type": "wsfile",
+      "required": 0,
+      "label": "Protein FASTA",
+      "desc": "Protein sequence(s) in FASTA format. Multi-chain complexes: include multiple sequences in one file."
+    },
+    {
+      "id": "dna_file",
+      "type": "wsfile",
+      "required": 0,
+      "label": "DNA FASTA",
+      "desc": "DNA sequence(s) in FASTA format."
+    },
+    {
+      "id": "rna_file",
+      "type": "wsfile",
+      "required": 0,
+      "label": "RNA FASTA",
+      "desc": "RNA sequence(s) in FASTA format."
+    },
+    {
+      "id": "ligand",
+      "type": "list",
+      "required": 0,
+      "label": "Ligands (CCD codes)",
+      "desc": "Ligand CCD codes, 1-3 alphanumeric (e.g. ATP, NAG). Glycans use CCD codes here too.",
+      "item": {
+        "id": "ccd_code",
+        "type": "string"
+      }
+    },
+    {
+      "id": "smiles",
+      "type": "list",
+      "required": 0,
+      "label": "SMILES Strings",
+      "desc": "SMILES strings for arbitrary small molecules.",
+      "item": {
+        "id": "smiles_str",
+        "type": "string"
+      }
+    },
+    {
+      "id": "msa_file",
+      "type": "wsfile",
+      "required": 0,
+      "label": "MSA File",
+      "desc": "Pre-computed MSA (.a3m, .sto). Optional -- ColabFold server fetches MSA automatically if not provided. Upload overrides the server."
+    },
+    {
+      "id": "output_path",
+      "type": "folder",
+      "required": 1,
+      "label": "Output Folder",
+      "desc": "Workspace folder for prediction results."
+    },
+    {
+      "id": "output_file",
+      "type": "wsfile",
+      "required": 1,
+      "label": "Job Name",
+      "desc": "Output name. Results land at output_path/.output_file/ in the workspace."
+    },
+    {
+      "id": "output_format",
+      "type": "enum",
+      "enum": [
+        "pdb",
+        "mmcif"
+      ],
+      "default": "pdb",
+      "required": 0,
+      "label": "Output Format",
+      "desc": "Primary structure output format. Both PDB and mmCIF are always generated."
+    },
+    {
+      "id": "debug",
+      "type": "bool",
+      "default": false,
+      "required": 0,
+      "label": "Debug Mode",
+      "desc": "Enable verbose debug logging."
+    }
+  ]
+}

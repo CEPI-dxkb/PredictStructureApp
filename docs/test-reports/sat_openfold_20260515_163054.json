@@ -1,0 +1,132 @@
+[
+  {
+    "task_id": 22200727,
+    "label": "openfold_01",
+    "params": {
+      "tool": "openfold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_openfold_openfold_01_20260515_163054",
+    "status": "completed",
+    "elapsed": "00:01:58",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200728,
+    "label": "openfold_02",
+    "params": {
+      "tool": "openfold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_openfold_openfold_02_20260515_163054",
+    "status": "completed",
+    "elapsed": "00:01:55",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200729,
+    "label": "openfold_03",
+    "params": {
+      "tool": "openfold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_openfold_openfold_03_20260515_163054",
+    "status": "completed",
+    "elapsed": "00:01:55",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200730,
+    "label": "openfold_04",
+    "params": {
+      "tool": "openfold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_openfold_openfold_04_20260515_163054",
+    "status": "completed",
+    "elapsed": "00:01:48",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200731,
+    "label": "openfold_05",
+    "params": {
+      "tool": "openfold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_openfold_openfold_05_20260515_163054",
+    "status": "completed",
+    "elapsed": "00:01:53",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200732,
+    "label": "openfold_06",
+    "params": {
+      "tool": "openfold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_openfold_openfold_06_20260515_163054",
+    "status": "completed",
+    "elapsed": "00:01:55",
+    "host": "coconut"
+  },
+  {
+    "task_id": 22200733,
+    "label": "openfold_07",
+    "params": {
+      "tool": "openfold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_openfold_openfold_07_20260515_163054",
+    "status": "completed",
+    "elapsed": "00:01:44",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200734,
+    "label": "openfold_08",
+    "params": {
+      "tool": "openfold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_openfold_openfold_08_20260515_163054",
+    "status": "completed",
+    "elapsed": "00:01:48",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200735,
+    "label": "openfold_09",
+    "params": {
+      "tool": "openfold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_openfold_openfold_09_20260515_163054",
+    "status": "completed",
+    "elapsed": "00:01:58",
+    "host": "mango"
+  },
+  {
+    "task_id": 22200736,
+    "label": "openfold_10",
+    "params": {
+      "tool": "openfold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "sat_openfold_openfold_10_20260515_163054",
+    "status": "completed",
+    "elapsed": "00:02:00",
+    "host": "coconut"
+  }
+]

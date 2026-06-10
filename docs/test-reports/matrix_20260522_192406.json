@@ -1,0 +1,12 @@
+[
+  {
+    "task_id": 22210220,
+    "label": "B01_boltz_msa_upload",
+    "params": {
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "matrix_B01_boltz_msa_upload_20260522_192406"
+  }
+]

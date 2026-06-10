@@ -27,6 +27,7 @@ class BoltzAdapter(BaseAdapter):
     tool_name: str = "boltz"
     supports_msa: bool = True
     requires_gpu: bool = True
+    min_gpu_memory_mb: int = 24000
     supported_entities: frozenset[EntityType] = frozenset({
         EntityType.PROTEIN, EntityType.DNA, EntityType.RNA,
         EntityType.LIGAND, EntityType.SMILES,
@@ -119,6 +120,6 @@ class BoltzAdapter(BaseAdapter):
             "policy_data": {
                 "gpu_count": 1,
                 "partition": "gpu2",
-                "constraint": "V100|H100|H200",
+                "constraint": "H200",  # Boltz torch+cu130 needs CUDA 13.0+ (H200 only)
             },
         }

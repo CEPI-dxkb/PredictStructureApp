@@ -14,7 +14,7 @@
             "default": "auto",
             "required": 1,
             "label": "Prediction Tool",
-            "desc": "Structure prediction engine. 'auto' picks the best available tool: with MSA → Boltz > OpenFold > Chai; without MSA → ESMFold (fast, single-sequence) > AlphaFold (slow, local-DB MSA). Boltz-2, OpenFold 3, and Chai-1 are diffusion-based and support protein/DNA/RNA/ligand complexes but require an uploaded MSA file (BV-BRC policy). ESMFold is fastest (single-sequence, protein-only, CPU-capable). ESMFold2 is diffusion-based and supports protein/DNA/RNA/ligand complexes without an MSA (single-sequence; GPU required). AlphaFold 2 builds its own MSA from local databases (protein-only, hours)."
+            "desc": "Structure prediction engine. 'auto' picks the best available tool: Boltz > OpenFold > Chai > ESMFold > AlphaFold. Boltz-2, OpenFold 3, and Chai-1 are diffusion-based and support protein/DNA/RNA/ligand complexes (MSA fetched automatically via ColabFold server; optional msa_file upload overrides). ESMFold is fastest (single-sequence, protein-only, CPU-capable). ESMFold2 is diffusion-based and supports protein/DNA/RNA/ligand complexes without an MSA (single-sequence; GPU required). AlphaFold 2 builds its own MSA from local databases (protein-only, hours)."
         },
         {
             "id": "input_file",
@@ -42,7 +42,7 @@
             "type": "list",
             "required": 0,
             "label": "Ligands (CCD codes)",
-            "desc": "Ligand CCD codes, 1-3 alphanumeric chars each (e.g. ATP, NAD). Glycans use their CCD codes here too (NAG, MAN, BMA, etc.) — no separate glycan input. Tools with ligand support: Boltz-2, OpenFold 3, Chai-1.",
+            "desc": "Ligand CCD codes, 1-3 alphanumeric chars each (e.g. ATP, NAD). Glycans use their CCD codes here too (NAG, MAN, BMA, etc.) -- no separate glycan input. Tools with ligand support: Boltz-2, OpenFold 3, Chai-1.",
             "item": {
                 "id": "ccd_code",
                 "type": "string"

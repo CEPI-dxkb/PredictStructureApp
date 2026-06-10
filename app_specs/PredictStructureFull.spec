@@ -14,7 +14,7 @@
             "default": "auto",
             "required": 1,
             "label": "Prediction Tool",
-            "desc": "Structure prediction engine. 'auto' picks the best available tool: with MSA → Boltz > OpenFold > Chai > ESMFold > AlphaFold; without MSA → ESMFold > AlphaFold."
+            "desc": "Structure prediction engine. 'auto' picks the best available tool: with MSA -> Boltz > OpenFold > Chai > ESMFold > AlphaFold; without MSA -> ESMFold > AlphaFold."
         },
 
         {
@@ -223,7 +223,7 @@
         {
             "id": "af2_data_dir",
             "type": "string",
-            "default": "/databases",
+            "default": "/local_databases/alphafold/databases",
             "required": 0,
             "label": "AlphaFold Database Directory",
             "desc": "Path to AlphaFold2 genetic databases (~2TB). AlphaFold only."

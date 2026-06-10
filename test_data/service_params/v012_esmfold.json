@@ -1,5 +1,5 @@
 {
   "tool": "esmfold",
-  "input_file": "${WS_HOME}/AppTests/_inputs/simple_protein.fasta",
+  "input_file": "${WS_HOME}/AppTests/inputs/simple_protein.fasta",
   "output_path": "${WS_HOME}/AppTests/v012_esmfold"
 }
