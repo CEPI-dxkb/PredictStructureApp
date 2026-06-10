@@ -84,6 +84,7 @@ tools:
 
   esmfold2:
     image: docker://dxkb/esmfold2-bvbrc:latest-gpu
+    cwl: cwl/tools/esmfold2.cwl
     conda_env: esmfold2
     data_dir: esmfold2
     # ESMFold2 ships only a Python API; execution goes through the in-repo

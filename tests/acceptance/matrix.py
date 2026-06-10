@@ -282,7 +282,7 @@ TIERS_BY_NAME: dict[str, Tier] = {t.name: t for t in ALL_TIERS}
 # limited entity-type support; AlphaFold builds its own MSA and rejects
 # non-protein entities -- those constraints are captured in
 # `tier_supported_for_tool` and `msa_args_for`.
-TOOLS_WITH_TIERS: tuple[str, ...] = ("boltz", "chai", "openfold", "alphafold", "esmfold")
+TOOLS_WITH_TIERS: tuple[str, ...] = ("boltz", "chai", "openfold", "alphafold", "esmfold", "esmfold2")
 
 
 def msa_args_for(tool: str, tier: Tier) -> list[str]:
@@ -299,7 +299,7 @@ def msa_args_for(tool: str, tier: Tier) -> list[str]:
 
     If the tier has no MSA fixture (T4 multimer, or no-MSA variant), [].
     """
-    if tool in {"alphafold", "esmfold"}:
+    if tool in {"alphafold", "esmfold", "esmfold2"}:
         return []
     if tier.msa is None:
         return []

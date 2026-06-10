@@ -36,7 +36,7 @@ pytestmark = [pytest.mark.phase2, pytest.mark.gpu, pytest.mark.container]
 
 TEST_DATA_HOST = Path(__file__).parent.parent.parent / "test_data"
 
-TOOLS = ["boltz", "openfold", "chai", "alphafold", "esmfold"]
+TOOLS = ["boltz", "openfold", "chai", "alphafold", "esmfold", "esmfold2"]
 
 
 def _default_binds(tmp_path: Path) -> tuple[dict[str, str], Path]:
