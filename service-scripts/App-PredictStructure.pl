@@ -337,6 +337,21 @@ sub _default_preflight {
         };
     }
 
+    # ESMFold2 is GPU-only (bf16 model); mirrors ESMFold2Adapter.preflight().
+    if ($tool eq "esmfold2") {
+        return {
+            cpu     => 8,
+            memory  => "32G",
+            runtime => 3600,
+            storage => "50G",
+            policy_data => {
+                gpu_count  => 1,
+                partition  => 'gpu2',
+                constraint => 'A100|H100|H200',
+            },
+        };
+    }
+
     return {
         cpu     => 8,
         memory  => "64G",
@@ -452,9 +467,9 @@ sub run_app {
 
     _validate_params($params);
 
-    # Ensure HuggingFace model cache is usable. ESMFold loads weights via
-    # the transformers library which writes to HF_HOME. The SIF bakes
-    # HF_HOME=/local_databases/esmfold, but on production workers where
+    # Ensure HuggingFace model cache is usable. ESMFold and ESMFold2 load
+    # weights via the transformers library which writes to HF_HOME. The SIF
+    # bakes HF_HOME=/local_databases/esmfold, but on production workers where
     # /local_databases isn't bind-mounted that path is read-only or
     # absent → OSError EROFS. We check the current HF_HOME (or the
     # default locations) and redirect to a writable path if needed.
@@ -464,7 +479,7 @@ sub run_app {
 
         if (!$hf_ok) {
             # Try the standard pre-cached locations
-            for my $candidate ("/local_databases/cache", "/local_databases/esmfold") {
+            for my $candidate ("/local_databases/cache", "/local_databases/esmfold", "/local_databases/esmfold2") {
                 if (-d $candidate && -w $candidate) {
                     $ENV{HF_HOME} = $candidate;
                     $hf_ok = 1;

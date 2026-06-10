@@ -1,7 +1,7 @@
 {
-  "tool": "openfold",
-  "output_path": "${WS_HOME}/AppTests/tier4_openfold",
-  "output_file": "tier4_openfold_test",
+  "tool": "esmfold2",
+  "output_path": "${WS_HOME}/AppTests/tier4_esmfold2",
+  "output_file": "tier4_esmfold2_test",
   "num_recycles": 3,
   "output_format": "pdb",
   "msa_mode": "none",
