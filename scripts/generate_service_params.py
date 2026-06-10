@@ -77,11 +77,13 @@ NEEDS_MSA_FILE = {"boltz", "chai", "openfold"}    # for non-AF/ESM tools
 # Skip AlphaFold for tier params here; Phase 1/2 cover AF.
 
 TOOLS_PER_TIER: dict[str, tuple[str, ...]] = {
-    "tier1": ("boltz", "chai", "openfold", "esmfold"),
-    "tier2": ("boltz", "chai", "openfold", "esmfold"),
-    "tier3": ("boltz", "chai", "openfold"),
-    "tier4": ("boltz", "chai", "openfold", "esmfold"),
-    "tier5": ("boltz", "chai", "openfold"),  # esmfold doable but slow; skip
+    "tier1": ("boltz", "chai", "openfold", "esmfold", "esmfold2"),
+    "tier2": ("boltz", "chai", "openfold", "esmfold", "esmfold2"),
+    # esmfold2 (unlike protein-only esmfold) handles protein/DNA/RNA/ligand complexes.
+    "tier3": ("boltz", "chai", "openfold", "esmfold2"),
+    "tier4": ("boltz", "chai", "openfold", "esmfold", "esmfold2"),
+    # esmfold doable but slow (CPU); esmfold2 is GPU-fast even at 434 aa.
+    "tier5": ("boltz", "chai", "openfold", "esmfold2"),
 }
 
 

@@ -173,7 +173,7 @@ def write_metadata_json(
     # result. Otherwise requested == resolved.
     cmd_list = list(command)
     requested = tool
-    valid_tools = {"auto", "boltz", "openfold", "chai", "alphafold", "esmfold"}
+    valid_tools = {"auto", "boltz", "openfold", "chai", "alphafold", "esmfold", "esmfold2"}
     for arg in cmd_list:
         if arg in valid_tools:
             requested = arg

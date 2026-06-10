@@ -1,7 +1,7 @@
 {
-  "tool": "chai",
-  "output_path": "${WS_HOME}/AppTests/tier3_chai",
-  "output_file": "tier3_chai_test",
+  "tool": "esmfold2",
+  "output_path": "${WS_HOME}/AppTests/tier3_esmfold2",
+  "output_file": "tier3_esmfold2_test",
   "num_recycles": 3,
   "output_format": "pdb",
   "msa_mode": "none",
@@ -15,7 +15,5 @@
       "type": "dna",
       "sequence": "ATGCGTACGTAGCTAGCTAGCGT"
     }
-  ],
-  "sampling_steps": 200,
-  "num_samples": 1
+  ]
 }

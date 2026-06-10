@@ -392,7 +392,7 @@ class TestAdapterRegistry:
     def test_get_adapter_all_tools(self):
         from predict_structure.adapters import get_adapter
 
-        for tool in ["boltz", "chai", "alphafold", "esmfold", "openfold"]:
+        for tool in ["boltz", "chai", "alphafold", "esmfold", "esmfold2", "openfold"]:
             adapter = get_adapter(tool)
             assert adapter.tool_name == tool
 

@@ -82,6 +82,18 @@ tools:
     command:
       - /opt/conda-esmfold/bin/esm-fold-hf
 
+  esmfold2:
+    image: docker://dxkb/esmfold2-bvbrc:latest-gpu
+    cwl: cwl/tools/esmfold2.cwl
+    conda_env: esmfold2
+    data_dir: esmfold2
+    # ESMFold2 ships only a Python API; execution goes through the in-repo
+    # runner module rather than an upstream CLI.
+    command:
+      - /opt/conda-esmfold2/bin/python
+      - -m
+      - predict_structure.runners.esmfold2
+
   openfold:
     image: docker://openfoldconsortium/openfold3:stable
     cwl: cwl/tools/openfold.cwl

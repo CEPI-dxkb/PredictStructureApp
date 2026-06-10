@@ -1,0 +1,109 @@
+# Apptainer definition for a standalone ESMFold2 test container.
+#
+# Self-contained: bootstraps from a public CUDA base (apptainer pulls the
+# layers directly, no Docker daemon required), installs Miniforge, a single
+# /opt/conda-esmfold2 env with PyTorch + Biohub `esm` (which provides the
+# `transformers.models.esmfold2` API) + the predict-structure package, and
+# exposes the unified CLI. The ESMFold2 adapter's runner subprocess
+# (`/opt/conda-esmfold2/bin/python -m predict_structure.runners.esmfold2`)
+# shares this same env, so everything it imports is present.
+#
+# Build (output to /scout/containers; use a build scratch dir with space):
+#   APPTAINER_TMPDIR=/disks/tmp apptainer build --fakeroot \
+#     /scout/containers/esmfold2-test.sif container/esmfold2.def
+#
+# Run a prediction (model weights download to the bound HF cache on first use):
+#   mkdir -p /scout/containers/hf-cache
+#   apptainer run --nv \
+#     --bind /scout/containers/hf-cache:/cache/huggingface \
+#     --bind $PWD:/work --pwd /work \
+#     /scout/containers/esmfold2-test.sif \
+#     esmfold2 --protein test_data/simple_protein.fasta -o /work/of2-out --num-samples 1
+
+# Base: plain Ubuntu. PyTorch's PyPI wheels bundle their own CUDA runtime +
+# cuDNN (torch 2.12 → cu130), so no CUDA toolkit is needed in the image; the
+# host driver is provided at runtime via `apptainer run --nv`. This keeps the
+# SIF small. (A CUDA base image's toolkit would be dead weight at runtime.)
+Bootstrap: docker
+From: ubuntu:22.04
+
+%labels
+    Author CEPI-dxkb
+    Description Standalone ESMFold2 (biohub/ESMFold2) structure prediction
+    CUDA-Runtime PyTorch-bundled (cu130); host driver via --nv
+
+%files
+    pyproject.toml /app/predict-structure/pyproject.toml
+    README.md /app/predict-structure/README.md
+    predict_structure /app/predict-structure/predict_structure
+    test_data /app/predict-structure/test_data
+
+%environment
+    export PATH="/usr/local/bin:/opt/conda-esmfold2/bin:/opt/miniforge/bin:$PATH"
+    export PYTHONNOUSERSITE=1
+    export PYTHONUNBUFFERED=1
+    # ESMFold2 weights (biohub/ESMFold2) download here on first run.
+    # Bind a writable host directory to /cache/huggingface at runtime.
+    export HF_HOME=/cache/huggingface
+
+%post -c /bin/bash
+    set -e
+    set -o pipefail
+    export DEBIAN_FRONTEND=noninteractive
+    export PYTHONNOUSERSITE=1
+
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        git wget ca-certificates build-essential
+    rm -rf /var/lib/apt/lists/*
+
+    # ─── Miniforge ────────────────────────────────────────────────────
+    wget -q -O /tmp/miniforge.sh \
+        https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+    bash /tmp/miniforge.sh -b -p /opt/miniforge
+    rm -f /tmp/miniforge.sh
+    . /opt/miniforge/etc/profile.d/conda.sh
+
+    # ─── ESMFold2 env (Python 3.12) ───────────────────────────────────
+    # Biohub `esm` requires >=3.12,<3.13.
+    conda create -p /opt/conda-esmfold2 --yes --quiet python=3.12
+    conda activate /opt/conda-esmfold2
+
+    # PyTorch (default PyPI wheels are CUDA-enabled).
+    pip install --no-cache-dir 'torch>=2.6'
+
+    # Biohub ESMFold2: ships the model + the transformers esmfold2 module.
+    # PyPI release pending; install from GitHub per the model card.
+    pip install --no-cache-dir 'esm @ git+https://github.com/Biohub/esm.git@main'
+
+    # predict-structure CLI + runner (non-editable: this pip predates PEP 660
+    # editable support for pyproject-only projects).
+    pip install --no-cache-dir /app/predict-structure
+    ln -sf /opt/conda-esmfold2/bin/predict-structure /usr/local/bin/predict-structure
+
+    conda deactivate
+
+    # ─── Cleanup ──────────────────────────────────────────────────────
+    conda clean --all --force-pkgs-dirs --yes
+    pip cache purge 2>/dev/null || true
+
+    mkdir -p /input /output /cache/huggingface
+    chmod -R 777 /cache
+    ldconfig
+
+%runscript
+    exec /opt/conda-esmfold2/bin/predict-structure "$@"
+
+%help
+    Standalone ESMFold2 structure-prediction container.
+
+    Usage:
+      apptainer run --nv \
+        --bind <host-cache>:/cache/huggingface \
+        --bind $PWD:/work --pwd /work \
+        esmfold2-test.sif \
+        esmfold2 --protein input.fasta -o /work/out --num-samples 1
+
+    ESMFold2 (biohub/ESMFold2) is a diffusion model accepting protein, DNA,
+    RNA, and CCD/SMILES ligand entities in a single complex; no MSA required.
+    Model weights download to the bound /cache/huggingface on first run.

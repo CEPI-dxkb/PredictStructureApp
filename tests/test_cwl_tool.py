@@ -21,6 +21,7 @@ PER_TOOL_CWLS = {
     "chai": CWL_DIR / "chai.cwl",
     "alphafold": CWL_DIR / "alphafold.cwl",
     "esmfold": CWL_DIR / "esmfold.cwl",
+    "esmfold2": CWL_DIR / "esmfold2.cwl",
 }
 
 # Expected input file key per tool (matching _INPUT_FILE_KEY in cwl.py)
@@ -29,6 +30,7 @@ INPUT_KEY = {
     "chai": "input_fasta",
     "alphafold": "fasta_paths",
     "esmfold": "sequences",
+    "esmfold2": "spec",
 }
 
 

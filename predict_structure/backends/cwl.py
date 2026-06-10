@@ -91,11 +91,23 @@ _ESMFOLD_MAP: dict[str, str | None] = {
     "--fp16": "fp16",
 }
 
+_ESMFOLD2_MAP: dict[str, str | None] = {
+    "--spec": None,  # handled as input_file
+    "--output-dir": "output_dir",
+    "--num-loops": "num_loops",
+    "--num-sampling-steps": "num_sampling_steps",
+    "--num-diffusion-samples": "num_diffusion_samples",
+    "--checkpoint": "checkpoint",
+    "--seed": "seed",
+    "--cpu-only": "cpu_only",
+}
+
 _TOOL_MAPS: dict[str, dict[str, str | None]] = {
     "boltz": _BOLTZ_MAP,
     "chai": _CHAI_MAP,
     "alphafold": _ALPHAFOLD_MAP,
     "esmfold": _ESMFOLD_MAP,
+    "esmfold2": _ESMFOLD2_MAP,
 }
 
 # CWL input name for the input file per tool
@@ -104,6 +116,7 @@ _INPUT_FILE_KEY: dict[str, str] = {
     "chai": "input_fasta",
     "alphafold": "fasta_paths",
     "esmfold": "sequences",
+    "esmfold2": "spec",
 }
 
 # CWL input name for the output directory per tool
@@ -112,6 +125,7 @@ _OUTPUT_DIR_KEY: dict[str, str] = {
     "chai": "output_directory",
     "alphafold": "output_dir",
     "esmfold": "output_dir",
+    "esmfold2": "output_dir",
 }
 
 # Boolean flags per tool (presence = true)
@@ -120,6 +134,7 @@ _BOOLEAN_FLAGS_PER_TOOL: dict[str, set[str]] = {
     "chai": {"--use-msa-server", "--use-templates-server", "--no-use-esm-embeddings", "--no-low-memory"},
     "alphafold": set(),
     "esmfold": {"--cpu-only", "--fp16"},
+    "esmfold2": {"--cpu-only"},
 }
 
 # Integer-valued flags per tool
@@ -128,6 +143,7 @@ _INT_FLAGS_PER_TOOL: dict[str, set[str]] = {
     "chai": {"--num-diffn-samples", "--num-trunk-recycles", "--num-diffn-timesteps", "--num-trunk-samples", "--seed", "--recycle-msa-subsample"},
     "alphafold": {"--random_seed"},
     "esmfold": {"--num-recycles", "--chunk-size", "--max-tokens-per-batch"},
+    "esmfold2": {"--num-loops", "--num-sampling-steps", "--num-diffusion-samples", "--seed"},
 }
 
 # Flags whose value is = appended (e.g. --use_gpu_relax=true)
@@ -581,6 +597,14 @@ class CWLBackend:
                 if arg == "-i" and i + 1 < len(command):
                     input_file = Path(command[i + 1])
                 elif arg == "-o" and i + 1 < len(command):
+                    output_dir = Path(command[i + 1])
+
+        elif tool_name == "esmfold2":
+            # python -m predict_structure.runners.esmfold2 --spec <input> --output-dir <output>
+            for i, arg in enumerate(command):
+                if arg == "--spec" and i + 1 < len(command):
+                    input_file = Path(command[i + 1])
+                elif arg == "--output-dir" and i + 1 < len(command):
                     output_dir = Path(command[i + 1])
 
         return input_file, output_dir

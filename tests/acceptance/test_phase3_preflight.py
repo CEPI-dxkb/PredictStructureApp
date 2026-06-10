@@ -10,7 +10,7 @@ import pytest
 
 pytestmark = [pytest.mark.phase3, pytest.mark.container]
 
-TOOLS_GPU = ["boltz", "openfold", "chai", "alphafold"]
+TOOLS_GPU = ["boltz", "openfold", "chai", "alphafold", "esmfold2"]
 TOOLS_ALL = TOOLS_GPU + ["esmfold"]
 
 

@@ -1063,6 +1063,33 @@ def esmfold(protein, dna, rna, ligand, smiles,
 
 
 # ---------------------------------------------------------------------------
+# esmfold2 subcommand
+# ---------------------------------------------------------------------------
+
+@main.command()
+@shared_options
+@optgroup.group("ESMFold2 options")
+@optgroup.option("--sampling-steps", type=int, default=50, help="Diffusion sampling steps [default: 50]")
+@optgroup.option("--checkpoint", default="biohub/ESMFold2", help="HF checkpoint id or path [default: biohub/ESMFold2]")
+@backend_options
+def esmfold2(protein, dna, rna, ligand, smiles,
+             sampling_steps, checkpoint, **shared):
+    """Predict structure with ESMFold2 (diffusion, no MSA; protein/DNA/RNA/ligand complexes)."""
+    entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
+    extra = {
+        "sampling_steps": sampling_steps,
+        "checkpoint": checkpoint,
+    }
+    entity_inputs = {
+        "protein": protein, "dna": dna, "rna": rna,
+        "ligand": ligand, "smiles": smiles,
+        "sequence": shared.get("sequence_files", ()),
+    }
+    run_prediction("esmfold2", extra, entity_list=entity_list,
+                   entity_inputs=entity_inputs, **shared)
+
+
+# ---------------------------------------------------------------------------
 # openfold subcommand
 # ---------------------------------------------------------------------------
 
@@ -1117,6 +1144,7 @@ _AUTO_DEFAULTS: dict[str, dict] = {
         "af2_max_template_date": "2022-01-01",
     },
     "esmfold": {},
+    "esmfold2": {},
 }
 
 
@@ -1168,7 +1196,7 @@ def auto(protein, dna, rna, ligand, smiles, use_msa_server, **shared):
 # ---------------------------------------------------------------------------
 
 @main.command()
-@click.option("--tool", type=click.Choice(["auto", "boltz", "openfold", "chai", "alphafold", "esmfold"]),
+@click.option("--tool", type=click.Choice(["auto", "boltz", "openfold", "chai", "alphafold", "esmfold", "esmfold2"]),
               default="auto", help="Prediction tool (or 'auto' to resolve)")
 @click.option("--protein", type=click.Path(), default=None,
               help="Protein FASTA file (used for auto-resolution)")

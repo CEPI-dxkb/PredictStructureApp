@@ -12,7 +12,7 @@
     },
     "tool": {
       "type": "string",
-      "enum": ["boltz", "openfold", "chai", "alphafold", "esmfold"],
+      "enum": ["boltz", "openfold", "chai", "alphafold", "esmfold", "esmfold2"],
       "description": "Tool that produced the prediction."
     },
     "version": {
