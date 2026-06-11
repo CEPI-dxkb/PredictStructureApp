@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "predict-structure"
-version = "0.2.0"
+version = "0.17.0"
 description = "Unified protein structure prediction CLI for BV-BRC (Boltz-2, OpenFold 3, Chai-1, AlphaFold 2, ESMFold)"
 readme = "README.md"
 license = {text = "MIT"}
