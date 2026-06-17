@@ -14,7 +14,17 @@ When running Python, pytest, or pip commands, prefix with `conda run -n predict-
 
 ## Project Overview
 
-PredictStructureApp is a unified BV-BRC (Bacterial and Viral Bioinformatics Resource Center) module that provides a single interface for protein structure prediction using five tools: Boltz-2, OpenFold 3, Chai-1, AlphaFold 2, and ESMFold. It wraps per-tool containers behind a unified AppService interface and Python CLI with automatic parameter mapping and format conversion.
+PredictStructureApp is a unified BV-BRC (Bacterial and Viral Bioinformatics Resource Center) module that provides a single interface for protein structure prediction using six tools: Boltz-2, OpenFold 3, Chai-1, ESMFold, ESMFold2, and AlphaFold 2. It wraps per-tool containers behind a unified AppService interface and Python CLI with automatic parameter mapping and format conversion.
+
+> **Tool status.** `ADAPTERS` (in `predict_structure/adapters/__init__.py`) and the `valid_tools` set
+> (in `normalizers.py`) register **six** engines: `boltz, openfold, chai, alphafold, esmfold, esmfold2`.
+> - **ESMFold2** (`biohub/ESMFold2`, diffusion; protein/DNA/RNA/CCD/SMILES) is fully wired in
+>   `tools.yml` and **selectable** (`--tool esmfold2`), but is **not yet in the `auto` selector**
+>   (`cli.py:_auto_select_tool` iterates boltz→openfold→chai→esmfold→alphafold) and has **no entry**
+>   in `msa_check.py:_TOOL_MSA_SPECS` — treat it as **preview**.
+> - **AlphaFold 2** is retained as a **legacy fallback**: still the top monomer-accuracy engine with a
+>   rich MSA, but slow (MSA-build dominated), protein-only, non-commercial weights — superseded by the
+>   AF3-class diffusion engines for complexes. It is the lowest-priority pick in `auto`.
 
 ## Architecture
 
@@ -35,6 +45,9 @@ PredictStructureApp is a unified BV-BRC (Bacterial and Viral Bioinformatics Reso
 └─────────────────────────────────────────────────────────┘
 ```
 
+> The Adapter and Native-Tool layers above show the five original engines; a sixth, **ESMFold2**
+> (`docker://dxkb/esmfold2-bvbrc`), is also wired as a **preview** engine. See *Tool status* above.
+
 ### Delegation Pattern
 
 PredictStructureApp does NOT bundle all tools into a single Docker image. Instead, the BV-BRC service script (`App-PredictStructure.pl`) dispatches to the appropriate per-tool container. This keeps images small and independently updatable.
@@ -49,6 +62,7 @@ PredictStructureApp does NOT bundle all tools into a single Docker image. Instea
   - `adapters/alphafold.py`: FASTA pass-through, precomputed MSA directory structure
   - `adapters/openfold.py`: OpenFold 3 (AF3-class), JSON input format, rich confidence metrics
   - `adapters/esmfold.py`: HuggingFace transformers-based (not legacy esm-fold)
+  - `adapters/esmfold2.py`: ESMFold2 (`biohub/ESMFold2`), diffusion, all-atom complexes (protein/DNA/RNA/CCD/SMILES); Python-API only, executes via `runners/esmfold2.py` — **preview, not in the auto-selector**
   - `converters.py`: FASTA→YAML, A3M→Parquet, mmCIF→PDB format conversions
   - `normalizers.py`: Unified output directory layout and confidence JSON schema
   - `backends/docker.py`: Docker execution (subprocess + volume mounts)
@@ -210,8 +224,9 @@ output/
 | Boltz-2 | 8 | 64-96GB | A100/H100/H200 | 2-4h |
 | OpenFold 3 | 8 | 96GB | A100/H100/H200 (32GB+ VRAM) | 2-4h |
 | Chai-1 | 8 | 64GB | A100/H100/H200 | 2-3h |
-| AlphaFold 2 | 8 | 64GB | A100/H100/H200 | 2-8h |
+| AlphaFold 2 *(legacy)* | 8 | 64GB | A100/H100/H200 | 2-8h |
 | ESMFold | 8 | 32GB | Optional | 5-15m |
+| ESMFold2 *(preview)* | 8 | — | A100/H100/H200 | not yet published |
 
 GPU constraint: `A100|H100|H200` on `gpu2` partition.
 ESMFold can run on CPU (no GPU policy needed in preflight).
