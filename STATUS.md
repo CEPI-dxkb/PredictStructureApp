@@ -1,98 +1,69 @@
 # Project Status
 
-**Last updated:** 2026-06-02
-**Current version:** v0.16.1 (HEAD: a1a853c, merged PR #42)
-**Production container:** `folding_260602.1.sif`
+**Last updated:** 2026-06-22
+**Current version:** v0.17.0 (HEAD: f83c788, merged PR #70)
+**Production container:** `folding_260622.1.sif`
 
 ## What's done
 
-### v0.16.1 bug fixes (committed, pushed, tagged)
+### v0.17.0 — ESMFold2 adapter + report provenance (2026-06-09 → 2026-06-22)
 
-- **SMILES normalizer crash** -- Boltz PDB output for ligand-containing structures has corrupted line layout that crashes BioPython's PDB parser (upstream Boltz #298, #630). Fixed by preferring mmCIF over PDB in `_extract_bfactors()` and `promote_best_model()`.
-- **protein_compare report crash** -- Same root cause. Fixed in protein_compare v0.2.1: `StructureLoader.load()` prefers `.cif` sibling when loading `.pdb` files.
-- **Boltz GPU constraint** -- Changed preflight constraint from `V100|H100|H200` to `H200` only (cu130 needs CUDA 13.0+).
-- **AlphaFold DB path** -- Fixed `/databases` to `/local_databases/alphafold/databases`.
-- **CIF promotion** -- `promote_best_model()` copies `model_1.cif` alongside `.pdb` to top-level output.
+- **ESMFold2 adapter** (PR #44, merged) — new diffusion-based tool, multi-entity support
+- **Report provenance** (PR #70 + protein_compare PR #7) — HTML reports now include Job Provenance section showing tool, version, status, runtime, container, parameters, and inputs from `metadata.json`
+- **Version bump** — predict-structure 0.17.0, pyproject.toml synced
+- **11 PRs merged** (#57-68) — preflight fixes, container boltz CUDA-13 libs, alphafold multimer preset, chai token validation, openfold MSA server URL, ESMFold2 tests, CI container build, app_spec text_input, HF_HUB_OFFLINE, Phase1 test tiers
 
-### folding_260522.1.sif container fixes
-
-- **90-environment.sh crash** -- `[[ ]]` bash syntax in `#!/bin/sh` script with empty if-block bodies crashed the env script, preventing `source /opt/p3/deployment/user-env.sh` from running. `p3x-app-shepherd` and `p3x-run-preflight` were not on `$PATH`. Fixed by replacing conditional if-blocks with unconditional exports in `predict-structure-all.def` and `folding-from-base.def`.
-- **Wrong env var names** -- `OPENFOLD3_CACHE_DIR` renamed to `OPENFOLD_CACHE` (what OpenFold 3 actually reads). Removed `DISABLE_PANDERA_IMPORT_WARNING` (not read by Pandera).
-- **Wrong HF_HOME path** -- Changed from `/local_databases/huggingface` (or `/local_databases/cache`) to `/local_databases/esmfold` (actual location on disk). Fixed in all three container defs.
-- **Singularity CE 3.10 on gum** -- Initial deploy failed with `bad superblock for squashfs`. Fixed by deleting corrupt cache entry on gum and re-pulling.
-- **Boltz weights missing** -- `/local_databases` moved to separate 4TB volume; Boltz cache was empty. Re-downloaded mols.tar + boltz2_conf.ckpt + boltz2_aff.ckpt (5.8 GB).
-
-### PR #42: GPU VRAM precheck, MSA validation, run logging (merged 2026-06-01)
-
-- **GPU VRAM precheck** (`gpu_check.py`) -- queries `nvidia-smi` before tool launch, fails fast when GPU VRAM is consumed by non-slurm processes. Per-tool thresholds on each adapter.
-- **MSA format validation** (`msa_check.py`) -- sniffs first 4 KiB to detect format mismatches before expensive tool execution.
-- **Run log** -- writes `predict_structure.log` to output dir with host, CUDA device, slurm job ID, command, exit code, and post-mortem VRAM state on failure.
-
-### Testing infrastructure (committed post-tag, at 260dcc1)
-
-- **scripts/submit_api_tests.py** -- Automated BV-BRC API test runner (submit, poll, host tracking, reporting)
-- **test_data/service_params/api_test_matrix.json** -- v2 matrix: 49 cases (29 tool x entity, 12 param variations, 8 negative)
-- **docs/Testreport-20260515.1.md** -- Full test results for folding_260515.2.sif
-
-### Test results (folding_260602.1.sif, 2026-06-02)
+### Test results (folding_260622.1.sif, 2026-06-22)
 
 | Category | Cases | Pass | Fail | Notes |
 |---|---|---|---|---|
-| Positive (tool x entity) | 29 | 29 | 0 | All tools pass on both hosts |
+| Tool × entity | 24 | 24 | 0 | Boltz, OpenFold, Chai, ESMFold, auto |
+| Parameter variations | 14 | 14 | 0 | samples, recycles, mmcif, debug, seed |
+| **Total** | **38** | **38** | **0** | 7 initially timed out at submission, passed on resubmit |
+
+### Host coverage (folding_260622.1.sif)
+
+| Host | Jobs | Tools |
+|---|---|---|
+| coconut | 16 | Boltz, ESMFold, Chai, auto |
+| mango | 11 | OpenFold, Chai |
+| peach | 4 | Chai |
+
+### v0.16.1 bug fixes (tagged, in production since 2026-06-02)
+
+- **SMILES normalizer crash** — Boltz PDB output for ligand-containing structures has corrupted line layout that crashes BioPython's PDB parser (upstream Boltz #298, #630). Fixed by preferring mmCIF over PDB in `_extract_bfactors()` and `promote_best_model()`.
+- **protein_compare report crash** — Same root cause. Fixed in protein_compare v0.2.1: `StructureLoader.load()` prefers `.cif` sibling when loading `.pdb` files.
+- **Boltz GPU constraint** — Changed preflight constraint from `V100|H100|H200` to `H200` only (cu130 needs CUDA 13.0+).
+- **AlphaFold DB path** — Fixed `/databases` to `/local_databases/alphafold/databases`.
+- **CIF promotion** — `promote_best_model()` copies `model_1.cif` alongside `.pdb` to top-level output.
+
+### Previous test results (folding_260602.1.sif, 2026-06-02)
+
+| Category | Cases | Pass | Fail | Notes |
+|---|---|---|---|---|
+| Positive (tool × entity) | 29 | 29 | 0 | All tools pass on both hosts |
 | Parameter variations | 12 | 12 | 0 | |
 | Negative (validation) | 5 | 5 | 0 | N03-N07 expected fail |
 | AlphaFold | 1 | 1 | 0 | A01 on mango, 21:46 |
 | **Total** | **47** | **47** | **0** | |
 
-### Host coverage (folding_260602.1.sif)
-
-| Host | Jobs | Tools |
-|---|---|---|
-| coconut | 27 | ESMFold, Boltz, OpenFold, Chai, auto |
-| mango | 12 | OpenFold, Chai, AlphaFold |
-
-### folding_260601.1.sif — broken build (2026-06-01)
-
-- All OpenFold, Chai, and AlphaFold jobs failed on mango in ~9 seconds
-- Boltz and ESMFold on coconut passed (coconut-only tools unaffected)
-- Root cause: container-level breakage on CUDA 12.6 hosts
-- Fixed in folding_260602.1.sif
-
-### Previous test results (folding_260522.1.sif, 2026-05-28)
-
-| Category | Cases | Pass | Fail | Notes |
-|---|---|---|---|---|
-| Positive (tool x entity) | 27 | 26 | 1 | C04_chai_rna failed on mango only |
-| Parameter variations | 12 | 12 | 0 | |
-| Negative (validation) | 10 | 10 | 0 | N01/N02/N08 = API 500 (preflight); N03-N07 = expected fail |
-| **Total** | **49** | **48** | **1** | |
-
-### Previous test results (folding_260515.2.sif, 2026-05-15/16)
-
-| Category | Cases | Pass | Fail |
-|---|---|---|---|
-| Positive (tool x entity) | 29 | 29 | 0 |
-| Parameter variations | 12 | 12 | 0 |
-| Negative (validation) | 10 | 10 | 0 |
-| Saturation (10 per tool x 5) | 50 | 50 | 0 |
-| **Total** | **101** | **101** | **0** |
-
 ## What's pending
 
-### Immediate (before next release)
+### Uncommitted local changes
 
 | Item | Status | Notes |
 |---|---|---|
-| Push protein_compare v0.2.1 | Blocked | SSH key issue with git@github.com:wilke/protein_structure_analysis.git |
+| Container def fixes | Uncommitted | Dockerfile.predict-structure-all, folding-from-base.def, predict-structure-all.def |
+| Test reports | Untracked | matrix_20260622_151347.json, matrix_20260622_154644.json |
 
 ### Open issues
 
 | # | Issue | Status | Notes |
 |---|---|---|---|
 | 38 | Boltz only works on coconut | Open | torch+cu130 needs CUDA 13.0; rebuild with cu124 for mango/peach |
-| 39 | Add prediction provenance to report | Open | protein_compare enhancement |
-| 40 | ESMFold contacts HuggingFace Hub on every run | Open | Set HF_HUB_OFFLINE=1 in SIF %environment |
+| 40 | ESMFold contacts HuggingFace Hub on every run | **Fixed** | PR #58 merged — HF_HUB_OFFLINE=1 |
 | 41 | Boltz PDB ligand lines crash BioPython | **Fixed** | v0.16.1 + protein_compare v0.2.1 |
+| 69 | Add prediction provenance to report | **Fixed** | PR #70 + protein_compare PR #7 |
 
 ### Host coverage gaps
 
@@ -100,17 +71,18 @@
 |---|---|---|
 | ESMFold | mango, peach | No GPU constraint; scheduler always picks coconut |
 | OpenFold | peach | H100\|H200 constraint excludes V100 |
+| AlphaFold | Not tested | Not included in 260622 matrix run |
 
 ### Future work
 
-- Run negative test matrix via API (N01-N08 partially tested; N01/N02/N08 cause API 500 at preflight)
+- Run negative test matrix via API (N01-N08 partially tested)
 - Phase 4 submission script improvements: retry logic, workspace output verification
 - Issue #38: evaluate torch+cu124 rebuild for Boltz
-- Issue #40: HF_HUB_OFFLINE=1 for ESMFold
+- ESMFold2 remaining work: runner, registration, container, weights, testing (see PLAN.md Phase 5)
 
 ## Infrastructure
 
-### Folding tools (production SIF: folding_260602.1.sif)
+### Folding tools (production SIF: folding_260622.1.sif)
 
 | Tool | Package | Version | PyTorch / Framework | ML Model | Checkpoint / Weights |
 |---|---|---|---|---|---|
@@ -137,22 +109,19 @@
 
 | SIF | Date | Status | Notes |
 |---|---|---|---|
-| folding_260602.1.sif | 2026-06-02 | **Production** | GPU precheck, MSA validation, run log; 47/47 tests pass |
+| folding_260622.1.sif | 2026-06-22 | **Production** | v0.17.0, ESMFold2 adapter, 11 PRs merged; 38/38 tests pass |
+| folding_260602.1.sif | 2026-06-02 | Previous prod | v0.16.1, GPU precheck, MSA validation, run log; 47/47 tests pass |
 | folding_260601.1.sif | 2026-06-01 | Bad build | Broken on mango (CUDA 12.6); all OF/Chai/AF jobs failed in ~9s |
-| folding_260522.1.sif | 2026-05-22 | Previous prod | Fixed 90-environment.sh, env vars; 48/49 tests pass |
+| folding_260522.1.sif | 2026-05-22 | Retired | Fixed 90-environment.sh, env vars; 48/49 tests pass |
 | folding_260515.2.sif | 2026-05-15 | Retired | v0.16.1, 101/101 tests pass; broken 90-environment.sh |
-| folding_260515.1.sif | 2026-05-15 | Bad build | Stale predict_structure code (cached wheel) |
-| folding_260514.4.sif | 2026-05-14 | Bad build | Scheduler instant-fail (container cache issue) |
-| folding_260514.2.sif | 2026-05-14 | Bad build | Stale predict_structure code (cached wheel) |
-| folding_260513.1.sif | 2026-05-13 | Retired | v0.16.0, no SMILES fix |
 
 ### Key paths
 
 | Path | Purpose |
 |---|---|
-| /scout/containers/folding_prod.sif | Production symlink → folding_260602.1.sif |
-| /scout/containers/folding_260602.1.sif | Current production SIF |
-| /vol/patric3/production/containers/folding_260602.1.sif | BV-BRC production copy |
+| /scout/containers/folding_prod.sif | Production symlink → folding_260622.1.sif |
+| /scout/containers/folding_260622.1.sif | Current production SIF (34 GB) |
+| /vol/patric3/production/containers/folding_260622.1.sif | BV-BRC production copy |
 | /disks/patric-common/container-cache/ | BV-BRC scheduler container cache |
 | /local_databases/ | All tool weights + caches (bind-mounted) |
 | ~/.patric_token | BV-BRC auth token |
@@ -161,8 +130,8 @@
 
 | Repo | Version | Branch | Last commit | Pushed? |
 |---|---|---|---|---|
-| PredictStructureApp | v0.16.1+ | main | a1a853c (PR #42 merged) | YES |
-| protein_compare | v0.2.1 | main | 3918cbd (comment fix) | NO (SSH) |
+| PredictStructureApp | v0.17.0 | main | f83c788 (PR #70 merged) | YES |
+| protein_compare | v0.2.1 | main | c7cd9c6 (PR #7 merged) | YES |
 
 ## How to resume
 
