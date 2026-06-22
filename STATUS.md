@@ -1,8 +1,8 @@
 # Project Status
 
 **Last updated:** 2026-06-22
-**Current version:** v0.17.0 (HEAD: f83c788, merged PR #70)
-**Production container:** `folding_260622.1.sif`
+**Current version:** v0.17.0 (HEAD: 0578cf6)
+**Production container:** `folding_260622.2.sif`
 
 ## What's done
 
@@ -13,21 +13,21 @@
 - **Version bump** — predict-structure 0.17.0, pyproject.toml synced
 - **11 PRs merged** (#57-68) — preflight fixes, container boltz CUDA-13 libs, alphafold multimer preset, chai token validation, openfold MSA server URL, ESMFold2 tests, CI container build, app_spec text_input, HF_HUB_OFFLINE, Phase1 test tiers
 
-### Test results (folding_260622.1.sif, 2026-06-22)
+### Test results (folding_260622.2.sif, 2026-06-22)
 
 | Category | Cases | Pass | Fail | Notes |
 |---|---|---|---|---|
 | Tool × entity | 24 | 24 | 0 | Boltz, OpenFold, Chai, ESMFold, auto |
 | Parameter variations | 14 | 14 | 0 | samples, recycles, mmcif, debug, seed |
-| **Total** | **38** | **38** | **0** | 7 initially timed out at submission, passed on resubmit |
+| **Total** | **38** | **38** | **0** | All 3 GPU hosts exercised |
 
-### Host coverage (folding_260622.1.sif)
+### Host coverage (folding_260622.2.sif)
 
 | Host | Jobs | Tools |
 |---|---|---|
-| coconut | 16 | Boltz, ESMFold, Chai, auto |
-| mango | 11 | OpenFold, Chai |
-| peach | 4 | Chai |
+| coconut (H200) | 24 | Boltz, ESMFold, OpenFold (DNA/SMILES), auto |
+| mango (H100) | 10 | OpenFold (MSA/RNA/ligand), Chai (RNA/ligand), param variants |
+| peach (V100) | 4 | Chai (MSA upload/server/SMILES/seed) |
 
 ### v0.16.1 bug fixes (tagged, in production since 2026-06-02)
 
@@ -54,7 +54,6 @@
 | Item | Status | Notes |
 |---|---|---|
 | Container def fixes | Uncommitted | Dockerfile.predict-structure-all, folding-from-base.def, predict-structure-all.def |
-| Test reports | Untracked | matrix_20260622_151347.json, matrix_20260622_154644.json |
 
 ### Open issues
 
@@ -109,7 +108,8 @@
 
 | SIF | Date | Status | Notes |
 |---|---|---|---|
-| folding_260622.1.sif | 2026-06-22 | **Production** | v0.17.0, ESMFold2 adapter, 11 PRs merged; 38/38 tests pass |
+| folding_260622.2.sif | 2026-06-22 | **Production** | v0.17.0 + report provenance (PR #70); 38/38 tests pass |
+| folding_260622.1.sif | 2026-06-22 | Previous prod | v0.17.0, ESMFold2 adapter, 11 PRs merged; 38/38 tests pass |
 | folding_260602.1.sif | 2026-06-02 | Previous prod | v0.16.1, GPU precheck, MSA validation, run log; 47/47 tests pass |
 | folding_260601.1.sif | 2026-06-01 | Bad build | Broken on mango (CUDA 12.6); all OF/Chai/AF jobs failed in ~9s |
 | folding_260522.1.sif | 2026-05-22 | Retired | Fixed 90-environment.sh, env vars; 48/49 tests pass |
@@ -119,9 +119,9 @@
 
 | Path | Purpose |
 |---|---|
-| /scout/containers/folding_prod.sif | Production symlink → folding_260622.1.sif |
-| /scout/containers/folding_260622.1.sif | Current production SIF (34 GB) |
-| /vol/patric3/production/containers/folding_260622.1.sif | BV-BRC production copy |
+| /scout/containers/folding_prod.sif | Production symlink → folding_260622.2.sif |
+| /scout/containers/folding_260622.2.sif | Current production SIF (34 GB) |
+| /vol/patric3/production/containers/folding_260622.2.sif | BV-BRC production copy |
 | /disks/patric-common/container-cache/ | BV-BRC scheduler container cache |
 | /local_databases/ | All tool weights + caches (bind-mounted) |
 | ~/.patric_token | BV-BRC auth token |

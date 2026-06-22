@@ -1,0 +1,17 @@
+[
+  {
+    "task_id": null,
+    "label": "E01_esmfold",
+    "error": "HTTPSConnectionPool(host='p3.theseed.org', port=443): Read timed out. (read timeout=120)"
+  },
+  {
+    "task_id": null,
+    "label": "B07_boltz_dna_ligand",
+    "error": "HTTPSConnectionPool(host='p3.theseed.org', port=443): Read timed out. (read timeout=120)"
+  },
+  {
+    "task_id": null,
+    "label": "C02_chai_msa_server",
+    "error": "HTTPSConnectionPool(host='p3.theseed.org', port=443): Read timed out. (read timeout=120)"
+  }
+]
