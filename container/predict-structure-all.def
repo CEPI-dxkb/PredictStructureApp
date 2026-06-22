@@ -64,6 +64,15 @@ From: {{base}}
     fi
     export DISABLE_PANDERA_IMPORT_WARNING=True
 
+    # Issue #38: Boltz ships PyTorch with CUDA 13 libs under each conda env's
+    # nvidia/*/lib dir (e.g. nvidia/cu13/lib/libnvrtc-builtins.so.13.0). These
+    # are not on LD_LIBRARY_PATH, so Boltz crashes in torch.det() (nvrtc JIT).
+    # Auto-discover every conda env's bundled NVIDIA lib dir (robust to python
+    # version) and prepend it to LD_LIBRARY_PATH.
+    for d in /opt/conda-*/lib/python*/site-packages/nvidia/*/lib; do
+        [ -d "$d" ] && export LD_LIBRARY_PATH="$d:$LD_LIBRARY_PATH"
+    done
+
 %post -c /bin/bash
     set -e
     set -o pipefail
@@ -127,6 +136,23 @@ From: {{base}}
     cd /app/predict-structure
     /opt/conda-predict/bin/pip install --no-cache-dir -e ".[all]"
     ln -sf /opt/conda-predict/bin/predict-structure /usr/local/bin/predict-structure
+
+    # Issue #13: protein_compare is invoked by App-PredictStructure.pl
+    # run_report() via `python -m protein_compare characterize`, but it is a
+    # standalone package — NOT a predict-structure pyproject dependency. Install
+    # it into the same conda-predict env so it is co-available at runtime.
+    # NOTE: BV-BRC org URL per issue #13; confirm canonical source (see PR).
+    /opt/conda-predict/bin/pip install --no-cache-dir \
+        "protein_compare @ git+https://github.com/BV-BRC/protein_structure_analysis.git"
+
+    # Issue #13: system packages for DSSP + matplotlib/seaborn rendering used by
+    # protein_compare, plus the CCD compound dictionary DSSP needs.
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        dssp libgl1 libglib2.0-0 libfontconfig1
+    mkdir -p /var/cache/libcifpp
+    curl -fsSL -o /var/cache/libcifpp/components.cif \
+        https://files.wwpdb.org/pub/pdb/data/monomers/components.cif
 
     # ─── Cleanup ──────────────────────────────────────────────────────
     conda clean --all --force-pkgs-dirs --yes

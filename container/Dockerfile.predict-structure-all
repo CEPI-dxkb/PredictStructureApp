@@ -61,6 +61,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         tzdata \
         less \
         locales \
+        dssp \
+        libgl1 \
+        libfontconfig1 \
     && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -168,6 +171,18 @@ COPY predict_structure/ predict_structure/
 
 RUN /opt/conda-predict/bin/pip install --no-cache-dir -e ".[all]"
 
+# Issue #13: protein_compare is invoked by App-PredictStructure.pl run_report()
+# via `python -m protein_compare characterize`, but it is a standalone package —
+# NOT a predict-structure pyproject dependency. Install it into the same
+# conda-predict env so it is co-available at runtime. The DSSP CCD dictionary
+# (components.cif) it needs is fetched here as well.
+# NOTE: BV-BRC org URL per issue #13; confirm canonical source (see PR).
+RUN /opt/conda-predict/bin/pip install --no-cache-dir \
+        "protein_compare @ git+https://github.com/BV-BRC/protein_structure_analysis.git" && \
+    mkdir -p /var/cache/libcifpp && \
+    curl -fsSL -o /var/cache/libcifpp/components.cif \
+        https://files.wwpdb.org/pub/pdb/data/monomers/components.cif
+
 # Symlink into /usr/local/bin for easy access
 RUN ln -sf /opt/conda-predict/bin/predict-structure /usr/local/bin/predict-structure
 
@@ -197,6 +212,11 @@ ENV TF_FORCE_GPU_ALLOW_GROWTH=true
 ENV CUDA_MODULE_LOADING=EAGER
 ENV PYTHONPATH=/app/alphafold:$PYTHONPATH
 ENV PATH=/opt/conda-alphafold/bin:/opt/hhsuite/bin:$PATH
+# Issue #38: Boltz's conda env ships PyTorch with CUDA 13 libs; without this on
+# LD_LIBRARY_PATH it crashes in torch.det() (nvrtc JIT) looking for
+# libnvrtc-builtins.so.13.0. The boltz env is Python 3.11 (see RUN above).
+# ENV cannot loop, so set the explicit path here.
+ENV LD_LIBRARY_PATH=/opt/conda-boltz/lib/python3.11/site-packages/nvidia/cu13/lib:${LD_LIBRARY_PATH}
 # Cache dirs for tools that download models at runtime
 #ENV BOLTZ_CACHE=/cache
 #ENV CHAI_DOWNLOADS_DIR=/cache
