@@ -43,6 +43,10 @@ inputs:
         symbols: [pdb, mmcif]
     default: pdb
     doc: "Output structure format"
+  use_msa_server:
+    type: boolean?
+    default: true
+    doc: "Use remote MSA server for alignment generation"
   report_name:
     type: string
     default: report
@@ -68,6 +72,7 @@ steps:
       seed: seed
       device: device
       output_format: output_format
+      use_msa_server: use_msa_server
     out: [predictions]
 
   extract:
