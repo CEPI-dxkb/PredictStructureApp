@@ -32,6 +32,11 @@ class ChaiAdapter(BaseAdapter):
         EntityType.LIGAND, EntityType.SMILES,
     })
 
+    #: Chai-1's hard architectural limit on total tokens (amino acids,
+    #: nucleotides, and small-molecule atoms combined). Inputs above this
+    #: fail deep inside the tool, so we reject them up front.
+    CHAI_MAX_TOKENS: int = 2048
+
     def __init__(self) -> None:
         self._msa_dir: Path | None = None
 
@@ -44,6 +49,8 @@ class ChaiAdapter(BaseAdapter):
         **kwargs: Any,
     ) -> Path:
         """Convert entity list to Chai entity-typed FASTA; handle MSA."""
+        self._validate_token_limit(entity_list)
+
         if msa_path is not None:
             if msa_path.suffix.lower() == ".a3m":
                 msa_out_dir = output_dir / "msa"
@@ -58,6 +65,27 @@ class ChaiAdapter(BaseAdapter):
 
         output_dir.mkdir(parents=True, exist_ok=True)
         return entities_to_chai_fasta(entity_list, output_dir / "input.fasta")
+
+    def _validate_token_limit(self, entity_list: EntityList) -> None:
+        """Reject inputs that exceed Chai-1's 2048 total-token limit.
+
+        Chai-1 has a hard architectural limit of ``CHAI_MAX_TOKENS`` total
+        tokens (amino acids / nucleotides / small-molecule atoms combined).
+        Above this the tool fails deep in its own stack with an opaque
+        error, so guard up front with a clear, user-facing message.
+
+        Raises:
+            ValueError: If the total token count exceeds ``CHAI_MAX_TOKENS``.
+        """
+        total = entity_list.total_residues
+        if total > self.CHAI_MAX_TOKENS:
+            raise ValueError(
+                f"Chai-1 input has {total:,} total tokens, which exceeds its "
+                f"hard limit of {self.CHAI_MAX_TOKENS:,} tokens (amino acids, "
+                f"nucleotides, and small-molecule atoms combined). "
+                f"For larger inputs, use ESMFold2, Boltz, or OpenFold, which "
+                f"support longer sequences."
+            )
 
     def build_command(
         self,
