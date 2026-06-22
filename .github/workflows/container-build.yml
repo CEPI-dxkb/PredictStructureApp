@@ -1,0 +1,61 @@
+name: container-build
+
+# Validate that the slim predict-structure Docker image still builds and that
+# its entrypoints work, on every PR and on pushes to main. Adding a dependency
+# or editing the Dockerfile / pyproject.toml extras gets caught here.
+#
+# Scope: this only builds the SLIM dispatcher image
+# (container/Dockerfile.predict-structure). The all-in-one image
+# (Dockerfile.predict-structure-all) and the BV-BRC image
+# (Dockerfile.predict-structure-bvbrc) are NOT built here:
+#   - the all-in-one image bundles every prediction tool and will not fit in
+#     the ~14GB of disk available on hosted GitHub runners;
+#   - the BV-BRC image is FROM dxkb/predict-structure-all:latest-gpu and pulls
+#     from private CUDA/dev_container base images, so it needs GPU/large bases.
+# Building those (and the Apptainer .def images) is deferred to a
+# self-hosted / nightly runner.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs for the same ref (e.g. new push to an open PR).
+concurrency:
+  group: container-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-slim:
+    name: Build slim image and assert entrypoints
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build context is the repo root: the Dockerfile COPYs pyproject.toml,
+      # README.md, predict_structure/, app_specs/, cwl/ and test_data/.
+      # load: true makes the built image available to the local docker daemon
+      # for the assertion steps below (no registry push).
+      - name: Build slim image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: container/Dockerfile.predict-structure
+          tags: predict-structure:ci
+          load: true
+          push: false
+
+      - name: Assert CLI entrypoint (predict-structure --version)
+        run: docker run --rm predict-structure:ci predict-structure --version
+
+      - name: Assert package import (predict_structure)
+        run: docker run --rm predict-structure:ci python -c "import predict_structure"
+
+      # The slim Dockerfile installs ".[all]", which includes the provenance
+      # extra (rocrate>=0.9), so this import must succeed.
+      - name: Assert provenance import (rocrate)
+        run: docker run --rm predict-structure:ci python -c "import rocrate"
