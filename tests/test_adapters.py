@@ -203,6 +203,43 @@ class TestAlphaFoldAdapter:
         assert "--pdb_seqres_database_path" in cmd
         assert "--uniprot_database_path" in cmd
 
+    def test_build_command_auto_multimer_for_multichain(self, tmp_output, tmp_path):
+        """A 2-chain protein input with the default monomer preset auto-promotes
+        to multimer and emits the multimer database flags (issue #46)."""
+        from predict_structure.adapters.alphafold import AlphaFoldAdapter
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "MKTIIALSYIFCLVFA", name="chainA")
+        el.add(EntityType.PROTEIN, "GAVLIPFMWCSTNQYH", name="chainB")
+
+        adapter = AlphaFoldAdapter()
+        prepared = adapter.prepare_input(el, tmp_output)
+        # No af2_model_preset passed -> default monomer; should promote.
+        cmd = adapter.build_command(
+            prepared, tmp_output / "raw",
+            af2_data_dir=str(tmp_path / "databases"),
+        )
+
+        assert cmd[cmd.index("--model_preset") + 1] == "multimer"
+        assert "--pdb_seqres_database_path" in cmd
+        assert "--uniprot_database_path" in cmd
+        assert "--pdb70_database_path" not in cmd
+
+    def test_build_command_single_chain_stays_monomer(self, protein_entity_list, tmp_output, tmp_path):
+        """A single-chain protein input stays on the monomer preset (issue #46)."""
+        from predict_structure.adapters.alphafold import AlphaFoldAdapter
+
+        adapter = AlphaFoldAdapter()
+        prepared = adapter.prepare_input(protein_entity_list, tmp_output)
+        cmd = adapter.build_command(
+            prepared, tmp_output / "raw",
+            af2_data_dir=str(tmp_path / "databases"),
+        )
+
+        assert cmd[cmd.index("--model_preset") + 1] == "monomer"
+        assert "--pdb70_database_path" in cmd
+        assert "--pdb_seqres_database_path" not in cmd
+
     def test_validate_rejects_dna(self, dna_entity_list):
         from predict_structure.adapters.alphafold import AlphaFoldAdapter
 

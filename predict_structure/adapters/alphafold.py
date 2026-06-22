@@ -32,6 +32,9 @@ class AlphaFoldAdapter(BaseAdapter):
 
     def __init__(self) -> None:
         self._use_precomputed_msas: bool = False
+        #: Number of protein chains in the prepared input. Used by
+        #: build_command to auto-select the multimer preset when >1.
+        self._num_protein_chains: int = 0
 
     def prepare_input(
         self,
@@ -45,6 +48,14 @@ class AlphaFoldAdapter(BaseAdapter):
         if msa_path is not None and msa_path.is_dir():
             self._use_precomputed_msas = True
             logger.info("Using precomputed MSAs from %s", msa_path)
+
+        # Count protein chains so build_command can auto-select the
+        # multimer preset for multi-chain inputs (issue #46).
+        self._num_protein_chains = sum(
+            1
+            for e in entity_list.fasta_entities()
+            if e.entity_type == EntityType.PROTEIN
+        )
 
         output_dir.mkdir(parents=True, exist_ok=True)
         return entities_to_fasta(entity_list, output_dir / "input.fasta")
@@ -77,6 +88,19 @@ class AlphaFoldAdapter(BaseAdapter):
 
         model_preset = kwargs.get("af2_model_preset", "monomer")
         db_preset = kwargs.get("af2_db_preset", "reduced_dbs")
+
+        # Auto-promote to multimer for multi-chain protein inputs (issue #46).
+        # run_alphafold.py's monomer preset does not support a multi-sequence
+        # FASTA (it fails with a generic exit code 1). Only promote when the
+        # preset is still the default monomer — if the user explicitly chose a
+        # preset (including monomer_casp14), respect their choice.
+        if self._num_protein_chains > 1 and model_preset == "monomer":
+            logger.info(
+                "Detected %d protein chains; auto-selecting --model_preset=multimer "
+                "(monomer preset does not support multi-chain FASTA input).",
+                self._num_protein_chains,
+            )
+            model_preset = "multimer"
 
         cmd = [
             *get_command("alphafold"),
