@@ -900,6 +900,12 @@ sub run_report {
         push @cmd, "--chai-scores", $chai_scores[0];
     }
 
+    # Job provenance metadata
+    my $metadata_json = "$output_dir/metadata/metadata.json";
+    if (-f $metadata_json) {
+        push @cmd, "--metadata", $metadata_json;
+    }
+
     print "Generating characterization report: " . join(" ", @cmd) . "\n";
 
     my $rc = system(@cmd);
