@@ -110,6 +110,23 @@ def _write_job(tmp_path: Path, fasta: Path, output_dir_name: str) -> Path:
     return job_path
 
 
+def _write_multi_tool_job(tmp_path: Path, fasta: Path) -> Path:
+    """Write a CWL job file for multi-tool-comparison.cwl (T1 crambin)."""
+    job_path = tmp_path / "multi_job.yml"
+    job_path.write_text(textwrap.dedent(f"""\
+        protein:
+          - class: File
+            path: {fasta}
+        output_dir: predictions
+        seed: 42
+        device: gpu
+        output_format: pdb
+        num_samples: 1
+        report_name: comparison
+    """))
+    return job_path
+
+
 class TestSingleToolWorkflow:
     """`cwltool predict-structure.cwl` produces the unified layout."""
 
@@ -182,3 +199,86 @@ class TestSingleToolWorkflow:
         )
         assert result.returncode == 0, result.stderr[-1500:]
         assert_valid_results_json(out_dir / "predictions")
+
+
+class TestMultiToolWorkflow:
+    """`cwltool multi-tool-comparison.cwl` runs all 4 tools + aggregates.
+
+    Exercises the full fan-out/fan-in workflow end to end: Boltz, OpenFold,
+    Chai, and ESMFold each predict the same input, the best model from each
+    is renamed model_1.<tool>.pdb, protein_compare batch produces a pairwise
+    comparison, and aggregate-results merges the four per-tool results.json
+    into one multi-tool summary.
+
+    This is 4x GPU runs, so it is gated (slow + tier1) and skipped in CI /
+    environments without the SIF + GPU.
+    """
+
+    def test_multi_tool_aggregate(self, cwltool_env, tmp_path):
+        sif = cwltool_env
+        cwl_wf = CWL_DIR / "workflows" / "multi-tool-comparison.cwl"
+        fasta = TEST_DATA / "simple_protein.fasta"  # T1 crambin
+        out_dir = tmp_path / "cwl_out"
+        out_dir.mkdir()
+
+        job = _write_multi_tool_job(tmp_path, fasta)
+
+        result = subprocess.run(
+            [
+                "cwltool",
+                "--singularity",
+                "--outdir", str(out_dir),
+                str(cwl_wf),
+                str(job),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=14400,  # 4 GPU folds + comparison
+            env=_cwltool_env(),
+        )
+        assert result.returncode == 0, (
+            f"multi-tool cwltool execution failed (rc={result.returncode})\n"
+            f"STDERR:\n{result.stderr[-2500:]}"
+        )
+
+        # --- Per-tool prediction directories ---
+        for tool in ("boltz", "openfold", "chai", "esmfold"):
+            pred = out_dir / f"predictions_{tool}"
+            assert pred.is_dir(), (
+                f"predictions_{tool}/ not produced; outdir contents: "
+                f"{sorted(p.name for p in out_dir.iterdir())}"
+            )
+
+        # --- Renamed per-tool best models ---
+        for tool in ("boltz", "openfold", "chai", "esmfold"):
+            model = out_dir / f"model_1.{tool}.pdb"
+            assert model.exists(), (
+                f"model_1.{tool}.pdb missing in {out_dir}: "
+                f"{sorted(p.name for p in out_dir.iterdir())}"
+            )
+
+        # --- Comparison artifacts ---
+        assert (out_dir / "results.csv").exists(), "comparison results.csv missing"
+        assert (out_dir / "comparison.html").exists(), "comparison.html missing"
+        assert (out_dir / "comparison.json").exists(), "comparison.json missing"
+
+        # --- Aggregated multi-tool results.json ---
+        agg_path = out_dir / "results.json"
+        assert agg_path.is_file(), "aggregated results.json missing"
+        agg = json.loads(agg_path.read_text())
+        assert agg.get("kind") == "multi-tool", (
+            f"expected kind=multi-tool, got {agg.get('kind')!r}"
+        )
+        runs = agg.get("runs", [])
+        assert len(runs) == 4, f"expected 4 runs, got {len(runs)}"
+
+        # Each per-tool entry in runs[] is a full per-tool results.json and
+        # must validate against the shared schema used by the single-tool
+        # tests (tests/acceptance/schemas/results.schema.json).
+        import jsonschema
+
+        from tests.acceptance.validators import _load_schema
+
+        schema = _load_schema("results.schema.json")
+        for i, run in enumerate(runs):
+            jsonschema.validate(run, schema)
