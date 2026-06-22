@@ -6,6 +6,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from predict_structure.adapters.base import BaseAdapter
 from predict_structure.converters import entities_to_openfold_json
 from predict_structure.entities import EntityList, EntityType
@@ -103,6 +105,23 @@ class OpenFoldAdapter(BaseAdapter):
         # (either no MSA or a precomputed MSA file)
         use_msa_server = kwargs.get("use_msa_server", False)
         cmd.extend(["--use-msa-server", str(use_msa_server)])
+
+        # OpenFold 3's CLI has no direct MSA server URL flag; the override
+        # mechanism is an MSA computation settings YAML. Write one when a
+        # custom server URL is requested so we don't hit the public ColabFold
+        # endpoint by default.
+        msa_server_url = kwargs.get("msa_server_url")
+        if msa_server_url:
+            settings_path = output_dir / "msa_computation_settings.yaml"
+            settings = {
+                "msa_file_format": "a3m",
+                "server_user_agent": "openfold-predict-structure",
+                "server_url": msa_server_url,
+            }
+            output_dir.mkdir(parents=True, exist_ok=True)
+            with settings_path.open("w") as f:
+                yaml.dump(settings, f, default_flow_style=False, sort_keys=False)
+            cmd.extend(["--msa-computation-settings-yaml", str(settings_path)])
 
         # Templates disabled by default (evoformer_attn JIT fails on H200)
         use_templates = kwargs.get("use_templates", False)

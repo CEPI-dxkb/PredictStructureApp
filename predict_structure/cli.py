@@ -1099,6 +1099,7 @@ def esmfold2(protein, dna, rna, ligand, smiles,
 @optgroup.option("--num-diffusion-samples", type=int, default=5, help="Diffusion samples per query [default: 5]")
 @optgroup.option("--num-model-seeds", type=int, default=1, help="Independent model seeds [default: 1]")
 @optgroup.option("--use-msa-server/--no-msa-server", default=False, help="Use ColabFold MSA server [default: False]")
+@optgroup.option("--msa-server-url", default=None, help="Custom MSA server URL (implies --use-msa-server)")
 @optgroup.option("--use-templates/--no-templates", default=False, help="Use template structures [default: False]")
 @optgroup.option("--checkpoint", default=None, help="Model checkpoint name (e.g. openfold3_p2_v1)")
 @optgroup.option("--runner-yaml", type=click.Path(exists=True), default=None,
@@ -1106,13 +1107,14 @@ def esmfold2(protein, dna, rna, ligand, smiles,
 @backend_options
 def openfold(protein, dna, rna, ligand, smiles,
              num_diffusion_samples, num_model_seeds,
-             use_msa_server, use_templates, checkpoint, runner_yaml, **shared):
+             use_msa_server, msa_server_url, use_templates, checkpoint, runner_yaml, **shared):
     """Predict structure with OpenFold 3 (AF3-class, protein/DNA/RNA/ligands)."""
     entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
     extra = {
         "num_diffusion_samples": num_diffusion_samples,
         "num_model_seeds": num_model_seeds,
-        "use_msa_server": use_msa_server,
+        "use_msa_server": use_msa_server or (msa_server_url is not None),
+        "msa_server_url": msa_server_url,
         "use_templates": use_templates,
         "checkpoint": checkpoint,
         "runner_yaml": runner_yaml,
