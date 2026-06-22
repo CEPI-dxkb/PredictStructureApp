@@ -159,6 +159,27 @@ class TestChaiAdapter:
         adapter = ChaiAdapter()
         adapter.validate_entities(el)  # should not raise
 
+    def test_rejects_over_2048_tokens(self, tmp_output):
+        """Inputs above Chai's 2048-token limit raise a clear error."""
+        import pytest
+
+        from predict_structure.adapters.chai import ChaiAdapter
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "A" * 2049)
+        adapter = ChaiAdapter()
+        with pytest.raises(ValueError, match=r"2,?048"):
+            adapter.prepare_input(el, tmp_output)
+
+    def test_accepts_2048_tokens(self, tmp_output):
+        """Inputs at or under the 2048-token limit do not raise."""
+        from predict_structure.adapters.chai import ChaiAdapter
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "A" * 2048)
+        adapter = ChaiAdapter()
+        adapter.prepare_input(el, tmp_output)  # should not raise
+
 
 class TestAlphaFoldAdapter:
     def test_build_command_falls_back_to_config(self, protein_entity_list, tmp_output):
