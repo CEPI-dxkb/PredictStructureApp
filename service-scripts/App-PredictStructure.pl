@@ -328,6 +328,24 @@ sub _default_preflight {
         };
     }
 
+    # Boltz needs torch+cu130 (CUDA 13.0+), which only the H200 nodes
+    # provide; mirrors BoltzAdapter.preflight(). Issue #35: keep this
+    # fallback consistent with the adapter so a failed Python preflight
+    # does not silently schedule Boltz onto a non-H200 GPU.
+    if ($tool eq "boltz") {
+        return {
+            cpu     => 8,
+            memory  => "96G",
+            runtime => 14400,
+            storage => "50G",
+            policy_data => {
+                gpu_count  => 1,
+                partition  => 'gpu2',
+                constraint => 'H200',
+            },
+        };
+    }
+
     # ESMFold2 is GPU-only (bf16 model); mirrors ESMFold2Adapter.preflight().
     if ($tool eq "esmfold2") {
         return {
