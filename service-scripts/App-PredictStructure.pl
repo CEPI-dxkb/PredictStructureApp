@@ -474,6 +474,18 @@ sub run_app {
                        . "/local_databases/cache not found; "
                        . "redirected to $hf_tmp (model download may be slow)\n";
         }
+
+        # When a real pre-cached HF_HOME was found ($hf_ok), force the
+        # transformers library offline so ESMFold loads weights straight
+        # from the local cache instead of round-tripping to the Hub for
+        # revision/etag validation on every from_pretrained() call (issue
+        # #40). Only set this on the pre-cached path: the temp-dir
+        # fallback above still needs network access to download weights.
+        if ($hf_ok) {
+            $ENV{HF_HUB_OFFLINE} = 1;
+            print "Set HF_HUB_OFFLINE=1 (using pre-cached weights, offline)\n"
+                if $ENV{P3_DEBUG};
+        }
     }
 
     # Create working directories
