@@ -38,6 +38,32 @@
             "desc": "RNA sequence(s) in FASTA format. Tools that support RNA: Boltz-2, OpenFold 3, Chai-1."
         },
         {
+            "id": "text_input",
+            "type": "list",
+            "required": 0,
+            "label": "Inline Sequence Input",
+            "desc": "One or more sequences pasted as text (alternative to FASTA file uploads). Each entry has a sequence and an optional type (auto, protein, dna, rna); entries are grouped by type and written to FASTA before prediction.",
+            "item": {
+                "id": "entry",
+                "type": "object",
+                "properties": [
+                    {
+                        "id": "type",
+                        "type": "enum",
+                        "enum": ["auto", "protein", "dna", "rna"],
+                        "default": "auto",
+                        "label": "Sequence Type"
+                    },
+                    {
+                        "id": "sequence",
+                        "type": "string",
+                        "required": 1,
+                        "label": "Sequence"
+                    }
+                ]
+            }
+        },
+        {
             "id": "ligand",
             "type": "list",
             "required": 0,
