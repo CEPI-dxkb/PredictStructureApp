@@ -8,6 +8,7 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [x] Set HF_HUB_OFFLINE=1 in SIF %environment for ESMFold (Issue #40, PR #58 merged)
 - [x] Add job provenance to HTML report (Issue #69, PR #70 + protein_compare PR #7 merged)
 - [x] Commit test reports (folding_260622.2: 38/38 pass, all hosts)
+- [x] Commit test reports (folding_260622.3: 38/38 pass, all hosts)
 - [ ] Commit container def fixes (predict-structure-all.def, folding-from-base.def, Dockerfile)
 - [ ] Evaluate torch+cu124 rebuild for Boltz on mango/peach (Issue #38)
 - [ ] GoWe: test CWL tool submission through CPU workers
