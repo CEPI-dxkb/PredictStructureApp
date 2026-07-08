@@ -338,3 +338,73 @@ class TestEntitiesToFasta:
         el.add(EntityType.LIGAND, "ATP")
         with pytest.raises(ValueError, match="No sequence entities"):
             entities_to_fasta(el, tmp_output / "input.fasta")
+
+
+class TestMsaNulSanitization:
+    """Regression tests for issue #67: ColabFold MSA trailing NUL bytes."""
+
+    @pytest.fixture
+    def nul_a3m(self, tmp_path):
+        """A3M file with trailing NUL byte (mimics ColabFold MSA server output)."""
+        p = tmp_path / "nul.a3m"
+        p.write_bytes(
+            b">query\nMKTIIALSYIFCLVFA\n"
+            b">hit1\nMKTIIALSYIFCLVFA\n\x00"
+        )
+        return p
+
+    @pytest.fixture
+    def clean_a3m(self, tmp_path):
+        """A3M file without NUL bytes."""
+        p = tmp_path / "clean.a3m"
+        p.write_bytes(
+            b">query\nMKTIIALSYIFCLVFA\n"
+            b">hit1\nMKTIIALSYIFCLVFA\n"
+        )
+        return p
+
+    def test_stage_msa_sanitized_strips_trailing_nul(self, nul_a3m, tmp_path):
+        from predict_structure.converters import _stage_msa_sanitized
+
+        dest = tmp_path / "staged.a3m"
+        _stage_msa_sanitized(nul_a3m, dest)
+
+        raw = dest.read_bytes()
+        assert b"\x00" not in raw
+        assert raw.endswith(b"\n")
+
+    def test_stage_msa_sanitized_clean_file_unchanged(self, clean_a3m, tmp_path):
+        from predict_structure.converters import _stage_msa_sanitized
+
+        dest = tmp_path / "staged.a3m"
+        _stage_msa_sanitized(clean_a3m, dest)
+
+        assert dest.read_bytes() == clean_a3m.read_bytes()
+
+    def test_read_a3m_sequences_with_nul(self, nul_a3m):
+        from predict_structure.converters import _read_a3m_sequences
+
+        seqs = _read_a3m_sequences(nul_a3m)
+        assert len(seqs) == 2
+        assert all("\x00" not in s for s in seqs)
+        assert seqs[0] == "MKTIIALSY IFCLVFA".replace(" ", "")
+
+    def test_openfold_json_with_nul_msa(self, nul_a3m, tmp_path):
+        from predict_structure.converters import entities_to_openfold_json
+        import json
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "MKTIIALSY IFCLVFA".replace(" ", ""))
+        out = tmp_path / "output" / "query.json"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        entities_to_openfold_json(el, out, msa_path=nul_a3m)
+
+        data = json.loads(out.read_text())
+        staged_path = data["queries"]["prediction"]["chains"][0]["main_msa_file_paths"][0]
+        staged_bytes = Path(staged_path).read_bytes()
+        assert b"\x00" not in staged_bytes
+
+    def test_a3m_depth_with_nul(self, nul_a3m):
+        from predict_structure.converters import a3m_depth
+
+        assert a3m_depth(nul_a3m) == 2

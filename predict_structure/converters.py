@@ -32,6 +32,32 @@ logger = logging.getLogger(__name__)
 
 _CHAIN_IDS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+# Bytes that ColabFold MSA servers (and raw mmseqs2 result2msa) leave as
+# trailing padding.  Stripping only from the end avoids silently mutating
+# the body of the alignment while still fixing the most common corruption.
+_MSA_TRAILING_JUNK = b"\x00 \t\r\n"
+
+
+def _stage_msa_sanitized(source: Path, dest: Path) -> None:
+    """Copy *source* to *dest*, stripping trailing NUL bytes.
+
+    ColabFold MSA servers append a trailing ``\\x00`` that crashes parsers
+    expecting clean text (notably OpenFold 3's ``parse_a3m``).  This mirrors
+    the defensive strip in ``scripts/_colabfold_api_msa.py:121``.
+    """
+    raw = source.read_bytes()
+    clean = raw.rstrip(_MSA_TRAILING_JUNK)
+    if len(clean) != len(raw):
+        logger.info(
+            "Stripped %d trailing byte(s) from MSA file %s",
+            len(raw) - len(clean),
+            source.name,
+        )
+    if clean and not clean.endswith(b"\n"):
+        clean += b"\n"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(clean)
+
 
 def fasta_to_boltz_yaml(
     fasta_path: Path,
@@ -78,22 +104,27 @@ def fasta_to_boltz_yaml(
 
 
 def _read_a3m_sequences(a3m_path: Path) -> list[str]:
-    """Parse an A3M file and return its concatenated sequences (one per record)."""
+    """Parse an A3M file and return its concatenated sequences (one per record).
+
+    Reads as bytes and strips trailing NUL padding before decoding so that
+    ColabFold-server .a3m files don't inject NUL into sequence data.
+    """
+    raw = a3m_path.read_bytes().rstrip(_MSA_TRAILING_JUNK)
+    text = raw.decode("utf-8", errors="replace")
     sequences = []
-    with open(a3m_path) as f:
-        current_seq: list[str] = []
-        for line in f:
-            line = line.strip()
-            if line.startswith("#"):
-                continue
-            if line.startswith(">"):
-                if current_seq:
-                    sequences.append("".join(current_seq))
-                current_seq = []
-            elif line:
-                current_seq.append(line)
-        if current_seq:
-            sequences.append("".join(current_seq))
+    current_seq: list[str] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("#"):
+            continue
+        if line.startswith(">"):
+            if current_seq:
+                sequences.append("".join(current_seq))
+            current_seq = []
+        elif line:
+            current_seq.append(line)
+    if current_seq:
+        sequences.append("".join(current_seq))
     return sequences
 
 
@@ -106,7 +137,7 @@ def a3m_to_parquet(a3m_path: Path, output_path: Path) -> Path:
     """Convert an A3M multiple sequence alignment to Chai-1's Parquet format.
 
     Tries Chai's built-in converter first; falls back to manual parsing
-    with pandas + pyarrow.
+    with pandas + pyarrow.  Sanitizes trailing NUL bytes before conversion.
 
     Args:
         a3m_path: Input A3M alignment file.
@@ -115,10 +146,14 @@ def a3m_to_parquet(a3m_path: Path, output_path: Path) -> Path:
     Returns:
         Path to the written Parquet file.
     """
+    # Stage a sanitized copy so the Chai CLI doesn't choke on NUL padding.
+    clean_a3m = output_path.parent / (a3m_path.stem + ".clean.a3m")
+    _stage_msa_sanitized(a3m_path, clean_a3m)
+
     # Try Chai's built-in converter
     if shutil.which("chai"):
         result = subprocess.run(
-            ["chai", "a3m-to-pqt", str(a3m_path), str(output_path)],
+            ["chai", "a3m-to-pqt", str(clean_a3m), str(output_path)],
             capture_output=True,
             text=True,
         )
@@ -137,7 +172,7 @@ def a3m_to_parquet(a3m_path: Path, output_path: Path) -> Path:
             "Install with: pip install predict-structure[chai]"
         )
 
-    sequences = _read_a3m_sequences(a3m_path)
+    sequences = _read_a3m_sequences(clean_a3m)
     if not sequences:
         raise ValueError(f"No sequences found in {a3m_path}")
 
@@ -430,19 +465,9 @@ def entities_to_openfold_json(
                 chain_msa_dir = msa_staging_dir / f"chain_{entity.chain_id}"
                 chain_msa_dir.mkdir(exist_ok=True)
                 staged = chain_msa_dir / f"{OPENFOLD3_MSA_BASENAME}{msa_ext}"
-                # Remove any existing entry at the staged path to guarantee
-                # we never copy *through* a stale symlink into the user's
-                # original MSA file.
                 if staged.is_symlink() or staged.exists():
                     staged.unlink()
-                try:
-                    staged.symlink_to(msa_source)
-                except OSError:
-                    # Cross-device, unsupported FS, or no symlink privilege.
-                    # follow_symlinks=False ensures we write to `staged` even
-                    # if something re-creates it as a symlink before we copy.
-                    shutil.copy2(str(msa_source), str(staged),
-                                 follow_symlinks=False)
+                _stage_msa_sanitized(msa_source, staged)
                 # Keep the staged basename -- OpenFold infers MSA type from it,
                 # so we must not resolve back to the user's original filename.
                 chain["main_msa_file_paths"] = [str(staged.absolute())]
