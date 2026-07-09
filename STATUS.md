@@ -1,10 +1,31 @@
 # Project Status
 
-**Last updated:** 2026-06-23
-**Current version:** v0.17.0 (HEAD: 9e276f0)
+**Last updated:** 2026-07-08
+**Current version:** v0.17.0 (HEAD: e653c5a)
 **Production container:** `folding_260622.3.sif`
 
 ## What's done
+
+### Bug fixes (2026-07-08, on main)
+
+- **Fix #67: MSA NUL byte stripping** (83e4c17) — ColabFold MSA servers append trailing `\x00` that crashes OpenFold 3's parser and corrupts Chai A3M→Parquet conversion. Added `_stage_msa_sanitized()` in converters.py; applied in OpenFold JSON builder, A3M parser, and Chai Parquet converter.
+- **Fix #81: Boltz normalizer crash with SMILES ligands** (a00dc8a) — Boltz CIF with SMILES ligands labels all atoms as HETATM, causing `_extract_bfactors()` to return empty arrays and `write_confidence_json()` to crash. Fixed: HETATM fallback in extractor + graceful omission of per_atom_plddt when empty/short.
+- **CLAUDE.md branching rule** (e653c5a) — Added convention: never commit fixes/features directly to main, always use feature branches.
+
+### New issues created (2026-07-08)
+
+| # | Title | Type |
+|---|---|---|
+| 72 | Workspace file upload not immediately visible | UI bug |
+| 73 | File browser: cannot re-highlight a different file | UI bug |
+| 74 | 3Dmol.js viewer not showing secondary structures in cartoon mode | Report bug |
+| 75 | Add ESMFold2 to UI tool selector | Enhancement |
+| 76 | Add DSSP as post-prediction step | Enhancement |
+| 77 | Per-model protein length limits with clear error messages | Enhancement |
+| 78 | Report viewer: Reset View / Spin button issues | Report bug |
+| 79 | B-factor distribution bars invisible when value is zero | Report bug |
+| 80 | Report: add TOC/index, reorder B-factor sections | Report enhancement |
+| 81 | Boltz normalizer crash with SMILES ligands | Bug (fixed) |
 
 ### v0.17.0 — ESMFold2 adapter + report provenance (2026-06-09 → 2026-06-22)
 
@@ -29,23 +50,9 @@
 | mango (H100) | 11 | OpenFold (MSA/DNA/RNA/SMILES), Chai, param variants |
 | peach (V100) | 4 | Chai (MSA/RNA/2samples) |
 
-### v0.16.1 bug fixes (tagged, in production since 2026-06-02)
+### Unit test results (2026-07-08)
 
-- **SMILES normalizer crash** — Boltz PDB output for ligand-containing structures has corrupted line layout that crashes BioPython's PDB parser (upstream Boltz #298, #630). Fixed by preferring mmCIF over PDB in `_extract_bfactors()` and `promote_best_model()`.
-- **protein_compare report crash** — Same root cause. Fixed in protein_compare v0.2.1: `StructureLoader.load()` prefers `.cif` sibling when loading `.pdb` files.
-- **Boltz GPU constraint** — Changed preflight constraint from `V100|H100|H200` to `H200` only (cu130 needs CUDA 13.0+).
-- **AlphaFold DB path** — Fixed `/databases` to `/local_databases/alphafold/databases`.
-- **CIF promotion** — `promote_best_model()` copies `model_1.cif` alongside `.pdb` to top-level output.
-
-### Previous test results (folding_260602.1.sif, 2026-06-02)
-
-| Category | Cases | Pass | Fail | Notes |
-|---|---|---|---|---|
-| Positive (tool × entity) | 29 | 29 | 0 | All tools pass on both hosts |
-| Parameter variations | 12 | 12 | 0 | |
-| Negative (validation) | 5 | 5 | 0 | N03-N07 expected fail |
-| AlphaFold | 1 | 1 | 0 | A01 on mango, 21:46 |
-| **Total** | **47** | **47** | **0** | |
+457 passed, 10 skipped (full suite including #67 and #81 regression tests)
 
 ## What's pending
 
@@ -55,14 +62,22 @@
 |---|---|---|
 | Container def fixes | Uncommitted | Dockerfile.predict-structure-all, folding-from-base.def, predict-structure-all.def |
 
-### Open issues
+### Open issues (by priority)
 
-| # | Issue | Status | Notes |
+| # | Issue | Priority | Notes |
 |---|---|---|---|
-| 38 | Boltz only works on coconut | Open | torch+cu130 needs CUDA 13.0; rebuild with cu124 for mango/peach |
-| 40 | ESMFold contacts HuggingFace Hub on every run | **Fixed** | PR #58 merged — HF_HUB_OFFLINE=1 |
-| 41 | Boltz PDB ligand lines crash BioPython | **Fixed** | v0.16.1 + protein_compare v0.2.1 |
-| 69 | Add prediction provenance to report | **Fixed** | PR #70 + protein_compare PR #7 |
+| 81 | Boltz normalizer crash with SMILES | **Fixed** | a00dc8a — needs next container build |
+| 67 | MSA NUL bytes crash OpenFold/Chai | **Fixed** | 83e4c17 — needs next container build |
+| 38 | Boltz only works on coconut | Medium | torch+cu130 needs CUDA 13.0; rebuild with cu124 for mango/peach |
+| 77 | Per-model protein length limits | Medium | CLI + UI validation with tool-specific error messages |
+| 75 | Add ESMFold2 to UI tool selector | Medium | app_spec + service script registration |
+| 76 | DSSP as post-prediction step | Medium | Secondary structure assignment for reports |
+| 74 | 3Dmol.js cartoon mode missing secondary structures | Low | protein_compare report template |
+| 78 | Report viewer Reset View / Spin buttons | Low | protein_compare report template |
+| 79 | B-factor distribution zero-height bars | Low | protein_compare report template |
+| 80 | Report TOC/index + section reorder | Low | protein_compare report template |
+| 72 | Workspace file upload not immediately visible | Low | BV-BRC UI |
+| 73 | File browser re-highlight broken | Low | BV-BRC UI |
 
 ### Host coverage gaps
 
@@ -72,16 +87,9 @@
 | OpenFold | peach | H100\|H200 constraint excludes V100 |
 | AlphaFold | Not tested | Not included in 260622 matrix run |
 
-### Future work
-
-- Run negative test matrix via API (N01-N08 partially tested)
-- Phase 4 submission script improvements: retry logic, workspace output verification
-- Issue #38: evaluate torch+cu124 rebuild for Boltz
-- ESMFold2 remaining work: runner, registration, container, weights, testing (see PLAN.md Phase 5)
-
 ## Infrastructure
 
-### Folding tools (production SIF: folding_260622.1.sif)
+### Folding tools (production SIF: folding_260622.3.sif)
 
 | Tool | Package | Version | PyTorch / Framework | ML Model | Checkpoint / Weights |
 |---|---|---|---|---|---|
@@ -131,7 +139,7 @@
 
 | Repo | Version | Branch | Last commit | Pushed? |
 |---|---|---|---|---|
-| PredictStructureApp | v0.17.0 | main | f83c788 (PR #70 merged) | YES |
+| PredictStructureApp | v0.17.0 | main | e653c5a (branching rule + #67 + #81 fixes) | YES |
 | protein_compare | v0.2.1 | main | c7cd9c6 (PR #7 merged) | YES |
 
 ## How to resume
