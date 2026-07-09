@@ -34,13 +34,17 @@ Additionally, Claude Code maintains **auto-memory** (`~/.claude/projects/.../mem
 
 **At session end:** Reconcile TODO with reality. Update STATUS.md narrative. Commit and push.
 
-## Git Worktrees
+## Branching
 
-Always create git worktrees in the `.worktree/` subdirectory of this repo:
+Never commit fixes or features directly to `main`. Always create a feature branch first:
 
 ```bash
-git worktree add .worktree/<branch-name>
+git checkout -b fix/81-boltz-hetatm-crash
+# or, for parallel work, use a worktree:
+git worktree add .worktree/fix-81 -b fix/81-boltz-hetatm-crash
 ```
+
+Always create git worktrees in the `.worktree/` subdirectory of this repo.
 
 ## Environment
 
