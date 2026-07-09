@@ -59,6 +59,30 @@ class TestWriteConfidenceJson:
         assert len(data["per_atom_plddt"]) == 10
         assert len(data["per_atom_plddt"]) >= len(data["per_residue_plddt"])
 
+    def test_per_atom_plddt_empty_omitted(self, tmp_output):
+        """Empty per_atom_plddt is treated as absent, not as a length error (#81)."""
+        from predict_structure.normalizers import write_confidence_json
+
+        path = write_confidence_json(
+            tmp_output, plddt_mean=70.0, ptm=0.5,
+            per_residue_plddt=[70.0, 72.0],
+            per_atom_plddt=[],
+        )
+        data = json.loads(path.read_text())
+        assert "per_atom_plddt" not in data
+
+    def test_per_atom_shorter_than_per_residue_omitted(self, tmp_output):
+        """per_atom_plddt shorter than per_residue logs warning, omits data (#81)."""
+        from predict_structure.normalizers import write_confidence_json
+
+        path = write_confidence_json(
+            tmp_output, plddt_mean=70.0, ptm=0.5,
+            per_residue_plddt=[70.0, 72.0, 68.0],
+            per_atom_plddt=[70.1],
+        )
+        data = json.loads(path.read_text())
+        assert "per_atom_plddt" not in data
+
 
 class TestWriteMetadataJson:
     def test_schema(self, tmp_output):
@@ -143,6 +167,36 @@ class TestNormalizeBoltzOutput:
         # Should be scaled to 0-100
         assert data["per_residue_plddt"][0] == 91.0
         assert data["ptm"] == 0.92
+
+    def test_hetatm_only_structure(self, tmp_path, tmp_output):
+        """Boltz + SMILES ligands: all atoms as HETATM still extracts B-factors (#81)."""
+        from predict_structure.normalizers import normalize_boltz_output
+
+        raw = tmp_path / "raw"
+        pred_dir = raw / "predictions" / "test_input"
+        pred_dir.mkdir(parents=True)
+
+        # PDB where protein residues are HETATM (mimics Boltz SMILES output)
+        pdb_content = (
+            "HETATM    1  CA  ALA A   1       1.000   2.000   3.000  1.00  0.91           C\n"
+            "HETATM    2  CA  GLY A   2       4.000   5.000   6.000  1.00  0.88           C\n"
+            "END\n"
+        )
+        pdb_tmp = pred_dir / "temp.pdb"
+        pdb_tmp.write_text(pdb_content)
+        from predict_structure.converters import pdb_to_mmcif
+        cif_file = pred_dir / "test_input_model_0.cif"
+        pdb_to_mmcif(pdb_tmp, cif_file)
+        pdb_tmp.unlink()
+
+        conf = pred_dir / "confidence_test_input_model_0.json"
+        conf.write_text(json.dumps({"ptm": 0.85, "plddt": [0.91, 0.88]}))
+
+        normalize_boltz_output(raw, tmp_output)
+
+        data = json.loads((tmp_output / "predictions" / "confidence.json").read_text())
+        assert data["ptm"] == 0.85
+        assert len(data["per_residue_plddt"]) == 2
 
 
 class TestNormalizeChaiOutput:

@@ -62,13 +62,16 @@ def write_confidence_json(
         "ptm": round(ptm, 4) if ptm is not None else None,
         "per_residue_plddt": [round(v, 2) for v in per_residue_plddt],
     }
-    if per_atom_plddt is not None:
+    if per_atom_plddt is not None and len(per_atom_plddt) > 0:
         if len(per_atom_plddt) < len(per_residue_plddt):
-            raise ValueError(
-                f"per_atom_plddt ({len(per_atom_plddt)}) shorter than "
-                f"per_residue_plddt ({len(per_residue_plddt)})"
+            logger.warning(
+                "per_atom_plddt (%d) shorter than per_residue_plddt (%d) "
+                "— omitting per-atom data from confidence.json",
+                len(per_atom_plddt),
+                len(per_residue_plddt),
             )
-        data["per_atom_plddt"] = [round(v, 2) for v in per_atom_plddt]
+        else:
+            data["per_atom_plddt"] = [round(v, 2) for v in per_atom_plddt]
     path.write_text(json.dumps(data, indent=2))
     return path
 
@@ -360,19 +363,16 @@ def _extract_bfactors(pdb_path: Path) -> tuple[list[float], list[float]]:
         structure = parser.get_structure("s", str(pdb_path))
     per_residue: list[float] = []
     all_atom: list[float] = []
-    for model in structure:
+
+    def _collect(model, *, skip_hetatm: bool) -> None:
         for chain in model:
             for residue in chain:
-                # Biopython residue.id is (hetflag, resseq, icode);
-                # " " means a standard residue, anything else is a hetatm.
-                if residue.id[0] != " ":
+                if skip_hetatm and residue.id[0] != " ":
                     continue
                 residue_atoms = list(residue)
                 if not residue_atoms:
                     continue
                 all_atom.extend(a.get_bfactor() for a in residue_atoms)
-                # Pick a representative atom: CA for protein, C1' for
-                # nucleic acids, else first atom.
                 if "CA" in residue:
                     rep = residue["CA"]
                 elif "C1'" in residue:
@@ -380,6 +380,13 @@ def _extract_bfactors(pdb_path: Path) -> tuple[list[float], list[float]]:
                 else:
                     rep = residue_atoms[0]
                 per_residue.append(rep.get_bfactor())
+
+    for model in structure:
+        _collect(model, skip_hetatm=True)
+        # Boltz CIF with SMILES ligands can label all chains as HETATM;
+        # retry including HETATM so we still extract protein B-factors.
+        if not per_residue:
+            _collect(model, skip_hetatm=False)
         break  # first model only
     return per_residue, all_atom
 
