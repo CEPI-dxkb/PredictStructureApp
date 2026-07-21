@@ -49,6 +49,7 @@ class ChaiAdapter(BaseAdapter):
         **kwargs: Any,
     ) -> Path:
         """Convert entity list to Chai entity-typed FASTA; handle MSA."""
+        self._validate_ligands(entity_list)
         self._validate_token_limit(entity_list)
 
         if msa_path is not None:
@@ -65,6 +66,31 @@ class ChaiAdapter(BaseAdapter):
 
         output_dir.mkdir(parents=True, exist_ok=True)
         return entities_to_chai_fasta(entity_list, output_dir / "input.fasta")
+
+    def _validate_ligands(self, entity_list: EntityList) -> None:
+        """Reject CCD-code ligands, which Chai-1 cannot parse.
+
+        Chai-1's FASTA ligand records expect a **SMILES** string, not a
+        PDB Chemical Component Dictionary (CCD) code. Given a bare CCD code
+        (e.g. ``ATP``) Chai silently ignores the ligand and folds only the
+        remaining chains, exiting 0 with a protein-only structure (issue
+        #82). Guard up front with a clear, user-facing error rather than
+        letting the ligand vanish.
+
+        SMILES ligands (``EntityType.SMILES``) pass through unchanged.
+
+        Raises:
+            ValueError: If any ``EntityType.LIGAND`` (CCD-coded) entity is present.
+        """
+        ccd = [e for e in entity_list if e.entity_type == EntityType.LIGAND]
+        if ccd:
+            codes = ", ".join(e.value for e in ccd)
+            raise ValueError(
+                f"Chai-1 cannot accept CCD-coded ligands ({codes}); its FASTA "
+                f"format requires SMILES strings. Supply the ligand as SMILES "
+                f"via --smiles, or use Boltz or OpenFold, which accept CCD codes "
+                f"(--ligand) natively."
+            )
 
     def _validate_token_limit(self, entity_list: EntityList) -> None:
         """Reject inputs that exceed Chai-1's 2048 total-token limit.

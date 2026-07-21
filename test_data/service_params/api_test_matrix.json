@@ -30,7 +30,7 @@
     {"id": "C02", "name": "chai_msa_server", "tool": "chai", "input_file": "simple_protein.fasta", "expected": "pass", "note": "MSA via ColabFold server"},
     {"id": "C03", "name": "chai_dna", "tool": "chai", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "msa_file": "crambin.a3m", "expected": "pass"},
     {"id": "C04", "name": "chai_rna", "tool": "chai", "input_file": "simple_protein.fasta", "rna_file": "rna.fasta", "msa_file": "crambin.a3m", "expected": "pass"},
-    {"id": "C05", "name": "chai_ligand", "tool": "chai", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["ATP"], "expected": "pass"},
+    {"id": "C05", "name": "chai_ccd_ligand_reject", "tool": "chai", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["ATP"], "expected": "fail", "expected_error": "CCD", "note": "Chai needs SMILES for ligands, not CCD codes (#82); chai+SMILES is covered by C06"},
     {"id": "C06", "name": "chai_smiles", "tool": "chai", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "smiles": ["CCO"], "expected": "pass"},
 
     {"id": "A01", "name": "alphafold", "tool": "alphafold", "input_file": "simple_protein.fasta", "expected": "pass", "slow": true, "note": "Uses local DBs; 20+ min runtime"},

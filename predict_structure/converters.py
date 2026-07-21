@@ -361,9 +361,10 @@ def entities_to_chai_fasta(entity_list: EntityList, output_path: Path) -> Path:
     """
     from predict_structure.entities import EntityType
 
-    # Chai's native types are protein / dna / rna / ligand. Both CCD codes
-    # and SMILES strings are submitted as a `ligand` entity; the value
-    # itself encodes which (Chai parses the value form).
+    # Chai's native types are protein / dna / rna / ligand. Chai expects a
+    # SMILES string in the `ligand` record body; it does NOT parse CCD codes
+    # (those are rejected up front by ChaiAdapter._validate_ligands, issue
+    # #82). SMILES entities pass through here as-is.
     _TYPE_LABELS = {
         EntityType.PROTEIN: "protein",
         EntityType.DNA: "dna",
