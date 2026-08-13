@@ -228,7 +228,7 @@ def save_results(submitted, results, hosts, tag, ts):
     print(f"\nResults saved to {out_path}")
 
 
-def judge(s: dict) -> tuple[bool, str]:
+def judge(s: dict) -> tuple[bool | None, str]:
     """Decide whether one result matches what the matrix expected.
 
     Three expectations:
@@ -272,7 +272,7 @@ def print_report(submitted: list[dict]):
         host = s.get("host") or "--"
         label = s["label"]
         ok, detail = judge(s)
-        if not s.get("status") and not s.get("error"):
+        if ok is None:
             status = "submitted"
         # Truncate long error messages
         if len(status) > 12:
