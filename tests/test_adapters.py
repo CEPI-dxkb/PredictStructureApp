@@ -146,8 +146,9 @@ class TestChaiAdapter:
         assert EntityType.PROTEIN in adapter.supported_entities
         assert EntityType.DNA in adapter.supported_entities
         assert EntityType.LIGAND in adapter.supported_entities
-        # SMILES is now supported -- chai-lab's `ligand` entity accepts
-        # both CCD codes and SMILES strings as the value form.
+        # SMILES is supported directly; CCD-coded ligands (EntityType.LIGAND)
+        # are accepted by the type check but rejected at prepare_input because
+        # chai-lab's FASTA needs SMILES, not CCD codes (issue #82).
         assert EntityType.SMILES in adapter.supported_entities
 
     def test_smiles_accepted_as_ligand(self):
@@ -177,6 +178,42 @@ class TestChaiAdapter:
 
         el = EntityList()
         el.add(EntityType.PROTEIN, "A" * 2048)
+        adapter = ChaiAdapter()
+        adapter.prepare_input(el, tmp_output)  # should not raise
+
+    def test_rejects_ccd_ligand(self, tmp_output):
+        """CCD-coded ligands raise a clear error instead of being silently dropped (#82)."""
+        import pytest
+
+        from predict_structure.adapters.chai import ChaiAdapter
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "MKTIIAL")
+        el.add(EntityType.LIGAND, "ATP", name="ATP", format="ccd")
+        adapter = ChaiAdapter()
+        with pytest.raises(ValueError, match=r"CCD.*ligand|ATP"):
+            adapter.prepare_input(el, tmp_output)
+
+    def test_ccd_error_names_the_code(self, tmp_output):
+        """The rejection error names the offending CCD code(s)."""
+        import pytest
+
+        from predict_structure.adapters.chai import ChaiAdapter
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "MKTIIAL")
+        el.add(EntityType.LIGAND, "NAD", name="NAD", format="ccd")
+        adapter = ChaiAdapter()
+        with pytest.raises(ValueError, match="NAD"):
+            adapter.prepare_input(el, tmp_output)
+
+    def test_smiles_ligand_passes_through(self, tmp_output):
+        """SMILES ligands are not rejected — Chai accepts SMILES directly (#82)."""
+        from predict_structure.adapters.chai import ChaiAdapter
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "MKTIIAL")
+        el.add(EntityType.SMILES, "CCO")
         adapter = ChaiAdapter()
         adapter.prepare_input(el, tmp_output)  # should not raise
 
