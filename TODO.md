@@ -4,9 +4,19 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 
 ## Next up
 
-- [ ] Merge #87 (container env vars + STATUS/TODO) and #89 (runner cold start)
-- [ ] Decide #85 (retire AlphaFold 2) — currently the only reason AlphaFold
-      cases (R01/A01/A02) are excluded from the matrix
+- [x] Merge #87 (container env vars + STATUS/TODO) and #89 (runner cold start)
+- [x] Fix #90: retire AlphaFold from auto selection (PR #91, 56b1e5a)
+- [x] Fix #75 blockers: ESMFold2 H200 pin + VRAM floor + F01-F03 (PR #92, 160dc09)
+- [x] Build folding_260813.3.sif with #90 + #75
+- [ ] **Repoint ApplicationDefaultContainer at folding_260813.3** (needs scheduler
+      admin) — everything below is blocked on it
+- [ ] Run the matrix against 260813.3, including F01-F03 — the first ESMFold2
+      cases ever submitted through BV-BRC; closes #75
+- [ ] Apply docs/bvbrc-web-90-retire-alphafold.patch in BV-BRC-Web to finish #90
+      (this account has READ only on that repo)
+- [ ] #88 — eye-icon REPORT action, also BV-BRC-Web
+- [ ] Decide #85 (full AlphaFold decommission) — #90 already removed it from auto,
+      so the urgency is lower; still the reason A01/A02/R01 are excluded
 - [ ] #50: convert the Boltz PAE npz to `predictions/pae.json` — the report side
       is already built and shipped, only the data path is missing
 - [ ] #48: the Python CLI does no CCD validation at all while the Perl enforces
