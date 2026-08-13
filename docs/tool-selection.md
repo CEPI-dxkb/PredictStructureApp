@@ -42,17 +42,15 @@ auto-select(protein, dna, rna, ligand, smiles, msa, device)
   ┌─ device == cpu  AND  protein-only?
   │     └─→ ESMFold
   │
-  ├─ For each tool in priority order: boltz, openfold, chai, esmfold, alphafold
+  ├─ For each tool in priority order: boltz, openfold, chai, esmfold
+  │     (AlphaFold 2 is retired from auto selection, #90 — explicit runs only)
   │
-  │     ┌─ tool ∈ {alphafold, esmfold}  AND  non_protein?
-  │     │     └─ SKIP  (AF2 / ESMFold are protein-only)
+  │     ┌─ tool == esmfold  AND  non_protein?
+  │     │     └─ SKIP  (ESMFold is protein-only)
   │     │
   │     ├─ tool ∈ {boltz, openfold, chai}  AND  protein  AND  NOT msa_present?
   │     │     └─ SKIP  (would otherwise produce a dummy single-sequence MSA;
   │     │              external MSA servers disabled by BV-BRC policy)
-  │     │
-  │     ├─ tool == alphafold  AND  AlphaFold DB dir not on disk?
-  │     │     └─ SKIP
   │     │
   │     ├─ tool not installed?
   │     │     └─ SKIP
@@ -64,20 +62,20 @@ auto-select(protein, dna, rna, ligand, smiles, msa, device)
 
 ## Outcomes by input combination
 
-Assumes all five tools are installed and AlphaFold databases are on disk
-(true on the production BV-BRC SIF). `device` is taken to be `gpu` —
+Assumes Boltz, OpenFold, Chai, and ESMFold are installed (true on the
+production BV-BRC SIF). AlphaFold 2 is excluded from auto selection
+entirely (#90), so its installation state no longer affects any row. `device` is taken to be `gpu` —
 the Perl only auto-flips to `cpu` for ESMFold itself.
 
 | protein | dna/rna/lig/smi | msa_file | → Auto picks | Why |
 |:-:|:-:|:-:|---|---|
-| ✓ | — | — | **ESMFold** | Fast single-sequence (~5 min); fallback AlphaFold (hours, local DB MSA) |
+| ✓ | — | — | **ESMFold** | Fast single-sequence (~5 min); the only no-MSA option |
 | ✓ | — | ✓ | **Boltz** | MSA available, highest priority |
-| ✓ | ✓ (any) | — | **ERROR** | Boltz/OpenFold/Chai require MSA for protein; AF/ESMFold can't handle DNA/RNA/ligand |
+| ✓ | ✓ (any) | — | **ERROR** | Boltz/OpenFold/Chai require MSA for protein; ESMFold can't handle DNA/RNA/ligand |
 | ✓ | ✓ (any) | ✓ | **Boltz** | MSA + multi-entity → diffusion tool, Boltz first |
 | — | DNA/RNA only | — | **Boltz** | No protein → no MSA gate; Boltz first |
 | — | DNA/RNA only | ✓ | **Boltz** | Same |
 | — | ligand or SMILES only (no biopolymer) | any | **ERROR** in practice | Tools require at least one chain |
-| ✓ (only) | — | — | **AlphaFold** only if ESMFold unavailable AND AF DBs present | Last resort |
 
 ### Three failure modes the UI should surface
 
@@ -85,7 +83,7 @@ the Perl only auto-flips to `cpu` for ESMFold itself.
    matches. The UI can light this up the moment the user adds a
    non-protein input without an MSA, prompting "Boltz / OpenFold / Chai
    require an uploaded MSA — provide `msa_file` or remove the
-   non-protein input to use AlphaFold."
+   non-protein input to use ESMFold."
 
 2. **No inputs at all** — Perl errors before invocation.
 
@@ -100,7 +98,7 @@ the Perl only auto-flips to `cpu` for ESMFold itself.
 
 ```
                      Boltz   OpenFold   Chai    ESMFold     AlphaFold
-Priority (auto):       1        2         3         4            5
+Priority (auto):       1        2         3         4      retired (#90)
 Protein:               ✓        ✓         ✓         ✓            ✓
 DNA:                   ✓        ✓         ✓         —            —
 RNA:                   ✓        ✓         ✓         —            —
@@ -116,9 +114,12 @@ Multi-chain:           ✓        ✓         ✓    single-chain   ✓ (multime
 Notes:
 - **Glycans use ligand CCD codes** (NAG, MAN, BMA, …); there is no
   separate glycan input. See [`app_specs/README.md`](../app_specs/README.md).
-- **AlphaFold's MSA is built from on-disk databases** (jackhmmer /
-  hhsearch); no external HTTP call. This is the only "compute MSA on the
-  fly" option in the BV-BRC stack.
+- **AlphaFold 2 is retired from auto selection** (#90). UI removal is a
+  BV-BRC-Web change, tracked separately, so the dropdown may still list it.
+  It remains runnable when named explicitly (`tool: "alphafold"`, the
+  `alphafold` subcommand, or the AlphaFold CWL tool), where its MSA is
+  still built from on-disk databases (jackhmmer / hhsearch, no external
+  HTTP call) — the only "compute MSA on the fly" option in the stack.
 - **OpenFold's recycle count** isn't exposed via the form's `num_recycles`;
   it's set in the runner YAML. The form's `num_recycles` affects Boltz,
   Chai, and ESMFold.
@@ -138,9 +139,8 @@ function recommendedTool({protein, dna, rna, ligand, smiles, msa_file}) {
     if (hasProtein && !hasNonProtein && !msa_file) {
         return {
             tool: "esmfold",
-            fallback: "alphafold",
             hint: "ESMFold selected — fast single-sequence prediction (~5 min). " +
-                  "AlphaFold (hours) is the fallback if ESMFold is unavailable."
+                  "It is the only tool auto picks without an MSA."
         };
     }
 
@@ -148,7 +148,7 @@ function recommendedTool({protein, dna, rna, ligand, smiles, msa_file}) {
     if (hasProtein && msa_file) {
         return {
             tool: "boltz",
-            fallbacks: ["openfold", "chai", "esmfold", "alphafold"],
+            fallbacks: ["openfold", "chai", "esmfold"],
             hint: "Boltz selected — diffusion tool with highest priority when MSA is available."
         };
     }
@@ -159,7 +159,7 @@ function recommendedTool({protein, dna, rna, ligand, smiles, msa_file}) {
             tool: null,
             error: "Boltz / OpenFold / Chai require an MSA file when a " +
                    "protein chain is present. Upload msa_file, or remove " +
-                   "the DNA/RNA/ligand/SMILES inputs to use AlphaFold."
+                   "the DNA/RNA/ligand/SMILES inputs to use ESMFold."
         };
     }
 

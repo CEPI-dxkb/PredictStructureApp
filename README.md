@@ -1,6 +1,6 @@
 # PredictStructureApp
 
-Unified protein structure prediction for BV-BRC. Wraps **Boltz-2**, **Chai-1**, **AlphaFold 2**, and **ESMFold** behind a single CLI, CWL tool, and BV-BRC AppService interface with automatic parameter mapping, format conversion, and output normalization.
+Unified protein structure prediction for BV-BRC. Wraps **Boltz-2**, **OpenFold 3**, **Chai-1**, **ESMFold**, and (retired, explicit-use only) **AlphaFold 2** behind a single CLI, CWL tool, and BV-BRC AppService interface with automatic parameter mapping, format conversion, and output normalization.
 
 ## Installation
 
@@ -70,7 +70,7 @@ predict-structure esmfold --protein input.fasta -o output/ --fp16
 # Chai-1 with MSA
 predict-structure chai --protein input.fasta -o output/ --msa alignment.a3m
 
-# AlphaFold 2 (requires database directory)
+# AlphaFold 2 (retired from auto/UI; explicit runs only, requires database directory)
 predict-structure alphafold --protein input.fasta -o output/ --af2-data-dir /databases
 
 # Auto-discover best available tool
@@ -246,7 +246,9 @@ predict-structure chai --protein input.fasta -o output/ \
 | `--recycle-msa-subsample` | int | 0 | MSA subsample per recycle (0 = all) |
 | `--no-low-memory` | flag | off | Disable low-memory mode |
 
-#### AlphaFold 2
+#### AlphaFold 2 (retired: explicit CLI/API/CWL only)
+
+Retired from auto-selection and from the BV-BRC UI (issue #90). Still runnable exactly as before when named explicitly:
 
 ```bash
 predict-structure alphafold --protein input.fasta -o output/ \
@@ -284,10 +286,11 @@ The `auto` subcommand detects which tools are installed and picks the best one:
 | Condition | Selection |
 |-----------|-----------|
 | `--device cpu` (protein only) | ESMFold preferred |
-| Non-protein entities present | AlphaFold and ESMFold excluded |
-| GPU available | Boltz > Chai > AlphaFold > ESMFold (accuracy priority) |
+| Non-protein entities present | ESMFold excluded |
+| GPU available, MSA source available | Boltz > OpenFold > Chai > ESMFold (accuracy priority) |
+| GPU available, no MSA source | ESMFold (Boltz/OpenFold/Chai need an MSA) |
 
-AlphaFold is only auto-selected when both the executable and the database directory (`/databases`) are found.
+**AlphaFold 2 is never auto-selected** (issue #90). Its removal from the BV-BRC UI dropdown lives in the BV-BRC-Web repo and is tracked separately. It remains fully runnable when named explicitly — `predict-structure alphafold ...`, `tool: "alphafold"` in the API, or the AlphaFold CWL tool — so older jobs stay reproducible.
 
 ### Parameter mapping (shared → native)
 

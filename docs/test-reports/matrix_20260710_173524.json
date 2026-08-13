@@ -1,0 +1,24 @@
+[
+  {
+    "task_id": 22998070,
+    "label": "E01_esmfold",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "esmfold"
+    },
+    "output_file": "matrix_E01_esmfold_20260710_173524"
+  },
+  {
+    "task_id": 22998071,
+    "label": "C05_chai_ligand",
+    "params": {
+      "ligand": [
+        "ATP"
+      ],
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "tool": "chai"
+    },
+    "output_file": "matrix_C05_chai_ligand_20260710_173524"
+  }
+]
