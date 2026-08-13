@@ -214,6 +214,18 @@ def _auto_select_tool(
             f"No available prediction tool supports this combination of inputs "
             f"({kinds})."
         )
+    # AlphaFold is retired from auto (#90) but still runnable by name. Saying
+    # "no tool found" when it is sitting there installed is simply false, and
+    # UsageError would exit 2 — which App-PredictStructure.pl reads as "the
+    # preflight binary broke" and answers by scheduling the job anyway (#84).
+    # Classify it as bad input so preflight rejects it properly.
+    if _is_tool_available("alphafold"):
+        raise UnsupportedInputError(
+            "AlphaFold 2 is the only prediction tool installed, and it is "
+            "retired from automatic selection. Run it explicitly with "
+            "`predict-structure alphafold`, or install one of: boltz, "
+            "run_openfold, chai-lab, esm-fold-hf."
+        )
     raise click.UsageError(
         "No prediction tool found on PATH. "
         "Install one of: boltz, run_openfold, chai-lab, esm-fold-hf"

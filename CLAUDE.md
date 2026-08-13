@@ -60,7 +60,9 @@ When running Python, pytest, or pip commands, prefix with `conda run -n predict-
 
 PredictStructureApp is a unified BV-BRC (Bacterial and Viral Bioinformatics Resource Center) module that provides a single interface for protein structure prediction using five tools: Boltz-2, OpenFold 3, Chai-1, AlphaFold 2, and ESMFold. It wraps per-tool containers behind a unified AppService interface and Python CLI with automatic parameter mapping and format conversion.
 
-**AlphaFold 2 is retired** (issue #90): `auto` never selects it and the BV-BRC UI does not offer it. It stays fully runnable when named explicitly — `predict-structure alphafold`, `tool: "alphafold"` via the API, or the AlphaFold CWL tool — so the adapter, app-spec enum, CWL definitions, and subcommand must all be kept.
+**AlphaFold 2 is retired** (issue #90): `auto` never selects it. Removal from the
+BV-BRC UI dropdown lives in the BV-BRC-Web repo and is tracked separately, so it
+may still appear there until that lands. It stays fully runnable when named explicitly — `predict-structure alphafold`, `tool: "alphafold"` via the API, or the AlphaFold CWL tool — so the adapter, app-spec enum, CWL definitions, and subcommand must all be kept.
 
 ## Architecture
 

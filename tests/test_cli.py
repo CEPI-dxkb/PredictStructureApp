@@ -700,7 +700,16 @@ class TestAlphaFoldRetiredFromAuto:
         return el
 
     def test_auto_never_selects_alphafold(self, monkeypatch):
-        """Every entity mix x device x MSA source x availability set."""
+        """Every entity mix x device x MSA source x availability set.
+
+        Only the two refusal types are tolerated, and the sweep must actually
+        resolve some combinations: a bare `except Exception: continue` would let
+        this pass against an auto selector that raises unconditionally, which is
+        no guard at all.
+        """
+        import click
+        import pytest
+
         import predict_structure.cli as cli_mod
 
         availability_sets = [
@@ -710,6 +719,7 @@ class TestAlphaFoldRetiredFromAuto:
             {"chai", "alphafold"},
             {"boltz", "openfold", "chai", "alphafold"},             # no esmfold
         ]
+        resolved = refused = 0
         for installed in availability_sets:
             monkeypatch.setattr(
                 cli_mod, "_is_tool_available", lambda t, s=installed: t in s
@@ -721,12 +731,38 @@ class TestAlphaFoldRetiredFromAuto:
                             picked = cli_mod._auto_select_tool(
                                 self._entities(spec), device=device, **msa
                             )
-                        except Exception:
-                            continue  # refusing the job is fine; picking AF2 is not
+                        except (cli_mod.UnsupportedInputError, click.UsageError):
+                            refused += 1
+                            continue
+                        resolved += 1
                         assert picked != "alphafold", (
                             f"auto picked alphafold for {name}/{device}/{msa} "
                             f"with {sorted(installed)} installed"
                         )
+        assert resolved > 0, "no combination resolved — the assertion never ran"
+        assert refused > 0, "expected some combinations to be refused"
+
+    def test_alphafold_only_install_points_at_the_explicit_command(self, monkeypatch):
+        """AlphaFold installed alone: say so, and name the escape hatch.
+
+        Claiming "no prediction tool found" would be false, and raising
+        click.UsageError instead of UnsupportedInputError means preflight exits 2
+        rather than emitting a rejection — which App-PredictStructure.pl reads as
+        a broken binary and answers by scheduling the job anyway (#84).
+        """
+        import pytest
+
+        import predict_structure.cli as cli_mod
+        from predict_structure.entities import EntityList, EntityType
+
+        monkeypatch.setattr(cli_mod, "_is_tool_available", lambda t: t == "alphafold")
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "MKTIIALSYIFCLVFA")
+        with pytest.raises(cli_mod.UnsupportedInputError) as excinfo:
+            cli_mod._auto_select_tool(el, device="gpu", use_msa_server=True)
+        message = str(excinfo.value)
+        assert "predict-structure alphafold" in message
+        assert "No prediction tool found" not in message
 
     def test_protein_only_without_msa_still_resolves(self, monkeypatch):
         """The commonest job shape must not regress into an error.
@@ -795,3 +831,46 @@ class TestAlphaFoldRetiredFromAuto:
         fasta = tmp_path / "p.fasta"
         fasta.write_text(">p\nMKTIIALSYIFCLVFA\n")
         return fasta
+
+
+class TestAlphaFoldApiContractPinned:
+    """#90 retires AlphaFold from auto and the UI but must keep API/CLI access.
+
+    The declarative surfaces are what the BV-BRC API and CWL actually dispatch
+    on, and nothing else in the suite reads them — so deleting "alphafold" from
+    them would break API submissions with every test still green. That is
+    precisely the mistake #90's docs make tempting, hence these guards.
+    """
+
+    def _repo_root(self):
+        from pathlib import Path
+
+        return Path(__file__).resolve().parent.parent
+
+    def test_app_spec_tool_enum_still_offers_alphafold(self):
+        import json
+
+        spec = json.loads(
+            (self._repo_root() / "app_specs" / "PredictStructure.json").read_text()
+        )
+        tool = next(p for p in spec["parameters"] if p["id"] == "tool")
+        assert "alphafold" in tool["enum"], (
+            "removing alphafold from the app-spec enum breaks API submissions "
+            "with tool='alphafold', which #90 deliberately preserves"
+        )
+
+    def test_alphafold_mode_spec_still_present(self):
+        assert (self._repo_root() / "app_specs" / "modes" / "alphafold.json").is_file()
+
+    def test_cwl_tool_symbols_still_offer_alphafold(self):
+        text = (self._repo_root() / "cwl" / "tools" / "predict-structure.cwl").read_text()
+        assert "alphafold" in text, "CWL dispatch must keep the alphafold symbol"
+
+    def test_adapter_and_subcommand_still_registered(self):
+        from click.testing import CliRunner
+
+        from predict_structure.adapters import get_adapter
+        from predict_structure.cli import main
+
+        assert get_adapter("alphafold").tool_name == "alphafold"
+        assert CliRunner().invoke(main, ["alphafold", "--help"]).exit_code == 0

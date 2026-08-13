@@ -114,7 +114,8 @@ Multi-chain:           ✓        ✓         ✓    single-chain   ✓ (multime
 Notes:
 - **Glycans use ligand CCD codes** (NAG, MAN, BMA, …); there is no
   separate glycan input. See [`app_specs/README.md`](../app_specs/README.md).
-- **AlphaFold 2 is retired from auto selection and from the UI** (#90).
+- **AlphaFold 2 is retired from auto selection** (#90). UI removal is a
+  BV-BRC-Web change, tracked separately, so the dropdown may still list it.
   It remains runnable when named explicitly (`tool: "alphafold"`, the
   `alphafold` subcommand, or the AlphaFold CWL tool), where its MSA is
   still built from on-disk databases (jackhmmer / hhsearch, no external

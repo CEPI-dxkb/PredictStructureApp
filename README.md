@@ -290,7 +290,7 @@ The `auto` subcommand detects which tools are installed and picks the best one:
 | GPU available, MSA source available | Boltz > OpenFold > Chai > ESMFold (accuracy priority) |
 | GPU available, no MSA source | ESMFold (Boltz/OpenFold/Chai need an MSA) |
 
-**AlphaFold 2 is never auto-selected** (issue #90) and is not offered in the BV-BRC UI. It remains fully runnable when named explicitly — `predict-structure alphafold ...`, `tool: "alphafold"` in the API, or the AlphaFold CWL tool — so older jobs stay reproducible.
+**AlphaFold 2 is never auto-selected** (issue #90). Its removal from the BV-BRC UI dropdown lives in the BV-BRC-Web repo and is tracked separately. It remains fully runnable when named explicitly — `predict-structure alphafold ...`, `tool: "alphafold"` in the API, or the AlphaFold CWL tool — so older jobs stay reproducible.
 
 ### Parameter mapping (shared → native)
 
