@@ -77,10 +77,18 @@ def rpc(token: str, method: str, params: list, timeout: int = 120) -> dict:
     return data
 
 
+#: start_app2 runs preflight inside the app's container on the scheduler node.
+#: The first submission after a container switch blocks while a ~32 GB SIF is
+#: staged into the cluster's container cache — measured at 464s on 2026-08-13.
+#: A short timeout turns that routine cold start into a spurious failure.
+SUBMIT_TIMEOUT = 900
+
+
 def submit_job(token: str, app_params: dict, output_file: str) -> int:
     """Submit a single PredictStructure job. Returns task ID."""
     params = {**app_params, "output_path": WS_OUTPUT, "output_file": output_file}
-    data = rpc(token, "start_app2", ["PredictStructure", params, {"base_url": BASE_URL}])
+    data = rpc(token, "start_app2", ["PredictStructure", params, {"base_url": BASE_URL}],
+               timeout=SUBMIT_TIMEOUT)
     return data["result"][0]["id"]
 
 
@@ -220,7 +228,7 @@ def save_results(submitted, results, hosts, tag, ts):
     print(f"\nResults saved to {out_path}")
 
 
-def judge(s: dict) -> tuple[bool, str]:
+def judge(s: dict) -> tuple[bool | None, str]:
     """Decide whether one result matches what the matrix expected.
 
     Three expectations:
@@ -232,6 +240,10 @@ def judge(s: dict) -> tuple[bool, str]:
     expected = s.get("expected", "pass")
     error = s.get("error")
     status = s.get("status")
+
+    # Submitted but never polled (--no-poll): there is no outcome to judge yet.
+    if not error and not status:
+        return None, "submitted"
 
     if expected == "reject":
         if not error:
@@ -260,12 +272,16 @@ def print_report(submitted: list[dict]):
         host = s.get("host") or "--"
         label = s["label"]
         ok, detail = judge(s)
+        if ok is None:
+            status = "submitted"
         # Truncate long error messages
         if len(status) > 12:
             status = status[:11] + "…"
-        verdict = "PASS" if ok else "FAIL"
+        verdict = "—" if ok is None else ("PASS" if ok else "FAIL")
         print(f"{tid:>10}  {label:<25}  {status:<12}  {s.get('expected','pass'):<7}  "
               f"{verdict:<8}  {elapsed:>10}  {host:<12}")
+        if ok is None:
+            continue  # not polled — no verdict to count
         if ok:
             pass_count += 1
         else:
