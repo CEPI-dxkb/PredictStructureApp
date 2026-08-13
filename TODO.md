@@ -2,39 +2,69 @@
 
 Tactical checklist — derived from current PLAN phase. Check off as you go.
 
-## Active (Phase 2 + 3)
+## Next up
 
-- [x] Push protein_compare v0.2.1 (fixed: switched remote to HTTPS)
-- [x] Set HF_HUB_OFFLINE=1 in SIF %environment for ESMFold (Issue #40, PR #58 merged)
-- [x] Add job provenance to HTML report (Issue #69, PR #70 + protein_compare PR #7 merged)
-- [x] Commit test reports (folding_260622.2: 38/38 pass, all hosts)
-- [x] Commit test reports (folding_260622.3: 38/38 pass, all hosts)
-- [x] Fix #67: strip NUL bytes from ColabFold MSA files (83e4c17)
-- [x] Fix #81: Boltz normalizer crash with SMILES ligands (a00dc8a)
-- [x] Add branching rule to CLAUDE.md (e653c5a)
-- [ ] Commit container def fixes (predict-structure-all.def, folding-from-base.def, Dockerfile)
-- [ ] Evaluate torch+cu124 rebuild for Boltz on mango/peach (Issue #38)
+- [ ] Merge #87 (container env vars + STATUS/TODO) and #89 (runner cold start)
+- [ ] Decide #85 (retire AlphaFold 2) — currently the only reason AlphaFold
+      cases (R01/A01/A02) are excluded from the matrix
+- [ ] #50: convert the Boltz PAE npz to `predictions/pae.json` — the report side
+      is already built and shipped, only the data path is missing
+- [ ] #48: the Python CLI does no CCD validation at all while the Perl enforces
+      `^[A-Za-z0-9]{1,3}$`; junk reaches the tool and fails opaquely
+- [ ] Suppress the Carp backtrace on `_validate_params` dies, as the #84 path
+      already does (`local $SIG{__DIE__} = 'DEFAULT'`)
 - [ ] GoWe: test CWL tool submission through CPU workers
 - [ ] GoWe: test predict-structure CWL tool through GPU workers
-- [ ] Run AlphaFold in next API test matrix run (not covered in 260622 run)
 
-## Issues filed (2026-07-08)
+## Active
 
+- [x] Fix #67: strip NUL bytes from ColabFold MSA files (83e4c17)
+- [x] Fix #81: Boltz normalizer crash with SMILES ligands (a00dc8a)
+- [x] Fix #82: reject CCD ligands for Chai instead of dropping them (8ac583f)
+- [x] Fix #84: validate tool/entity compatibility in preflight (abda889)
+- [x] Add branching rule to CLAUDE.md (e653c5a)
+- [x] Commit container def env-var fixes (cbc9ab0)
+- [x] Build + deploy folding_260813.1.sif and folding_260813.2.sif
+- [x] Fix ESMFold2 HF cache permissions on /local_databases/esmfold
+- [x] Run the API test matrix against folding_260813.2 — 48 pass, 0 fail
+- [x] Fix the app->container registration (was pointing at a deleted SIF)
+- [x] Verify the #84 rejection message reaches the user — confirmed, it arrives
+      intact in the JSON-RPC error body (matrix run 2026-08-13)
+- [x] Confirm the OpenFold cache change works in a real job — all 6 OpenFold
+      matrix cases pass on mango with `OPENFOLD_CACHE` live
+- [ ] GoWe: test CWL tool submission through CPU workers
+- [ ] GoWe: test predict-structure CWL tool through GPU workers
+
+## Issue queue
+
+- [ ] #85 — Decommission AlphaFold 2, replace with ESMFold2 (blocked by #75)
+- [ ] #88 — Eye-icon REPORT action for PredictStructure in the workspace browser (fix lands in BV-BRC-Web)
+- [ ] #75 — ESMFold2 in UI but not functional (cache permissions fixed; recheck)
+- [ ] #77 — Per-model protein length limits (CLI + UI)
+- [ ] #76 — DSSP as post-prediction step
+- [ ] #48 — CCD ligand input rejects glycans containing parentheses
+- [ ] #50 — Add PAE score to the report
+- [ ] #79 — B-factor distribution bars invisible when value is zero
+- [ ] #80 — Report TOC/index + section reorder
 - [ ] #72 — Workspace file upload not immediately visible (UI)
 - [ ] #73 — File browser cannot re-highlight another file (UI)
-- [ ] #74 — 3Dmol.js viewer not showing secondary structures in cartoon mode (report)
-- [ ] #75 — Add ESMFold2 to UI tool selector (enhancement)
-- [ ] #76 — Add DSSP as post-prediction step (enhancement)
-- [ ] #77 — Per-model protein length limits with clear error messages (CLI + UI)
-- [ ] #78 — Report viewer Reset View / Spin button issues (report)
-- [ ] #79 — B-factor distribution bars invisible when value is zero (report)
-- [ ] #80 — Report TOC/index + section reorder (report)
+- [ ] #51 — Job progress indicator (UI)
+- [ ] #52 — Docs: multi-chain applies to DNA and RNA too
+- [ ] #18 — Nucleic acid secondary structure (DSSR integration)
 
 ## Inbox
 
 Items captured mid-work — triage into the queue or MEMORY/PLAN later.
 
-- Editable install shadow bug: change `pip install -e` to `pip install` in container defs for next build
-- 9 approved PRs from batch review were merged; verify no regressions in next container build
-- protein_compare remote switched from SSH to HTTPS (push URL) — SSH key still broken
-- Fixes #67 and #81 need next container build to reach production
+- `tests/acceptance/` shells out to real 32 GB containers and dominates suite
+  runtime; use `--ignore=tests/acceptance` for the normal loop
+- The container carries TWO copies of `App-PredictStructure.pl`; production
+  runs `/opt/p3/deployment/plbin/`, not the git checkout under
+  `/build/dev_container/`. A rebuild must redeploy the plbin copy or the Perl
+  silently stays stale while labels report the new commit
+- Scheduler error log is NOT at `~/var/services/app_service/error.log-*` on
+  coconut — that path does not exist; find the real location
+- There is no `v0.17.0` git tag; newest tag is `v0.16.1` while pyproject has
+  been on 0.17.0 since June. Tags are not a usable release marker right now
+- 9 approved PRs from the batch review were merged; verify no regressions in
+  the next container build

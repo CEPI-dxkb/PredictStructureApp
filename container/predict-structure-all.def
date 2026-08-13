@@ -56,12 +56,18 @@ From: {{base}}
     export CUDA_MODULE_LOADING=EAGER
 
     # Model/database cache — bind-mount /local_databases at runtime
-    if [[ -d /local_databases/boltz ]]; then
-        export BOLTZ_CACHE=/local_databases/boltz
-    fi
-    if [[ -d /local_databases/chai ]]; then
-        export CHAI_DOWNLOADS_DIR=/local_databases/chai
-    fi
+    export BOLTZ_CACHE=/local_databases/boltz
+    export CHAI_DOWNLOADS_DIR=/local_databases/chai
+    export HF_HOME=/local_databases/esmfold
+    # /local_databases/cache is the world-writable dir the acceptance suite and
+    # run_qa_case.py already use; /local_databases/torch does not exist on the
+    # GPU hosts.
+    export TORCH_HOME=/local_databases/cache
+    # OPENFOLD_CACHE is the variable openfold3 actually reads
+    # (entry_points/parameters.py, entry_points/validator.py).
+    export OPENFOLD_CACHE=/local_databases/openfold
+    # Read by pandera/_pandas_deprecated.py in the Chai env; suppresses its
+    # import-time deprecation warning so Chai's stdout stays clean.
     export DISABLE_PANDERA_IMPORT_WARNING=True
 
     # Issue #38: Boltz ships PyTorch with CUDA 13 libs under each conda env's
