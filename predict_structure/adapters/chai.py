@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ class ChaiAdapter(BaseAdapter):
     """
 
     tool_name: str = "chai"
+    display_name: str = "Chai-1"
     supports_msa: bool = True
     requires_gpu: bool = True
     min_gpu_memory_mb: int = 12000
@@ -67,6 +69,39 @@ class ChaiAdapter(BaseAdapter):
         output_dir.mkdir(parents=True, exist_ok=True)
         return entities_to_chai_fasta(entity_list, output_dir / "input.fasta")
 
+    def supports_entity_types(self, entity_types: Iterable[EntityType]) -> bool:
+        """Chai accepts ligands only as SMILES, never as CCD codes (#82).
+
+        ``EntityType.LIGAND`` stays in ``supported_entities`` so the rejection
+        below carries the specific SMILES guidance rather than the generic
+        unsupported-type message. Excluding it here keeps Chai-1 out of the
+        "use these tools instead" suggestions for CCD input.
+        """
+        types = frozenset(entity_types)
+        return super().supports_entity_types(types) and EntityType.LIGAND not in types
+
+    def validate_entity_types(self, entity_types: Iterable[EntityType]) -> None:
+        """Reject CCD ligands at submit time, before a GPU is allocated (#84)."""
+        # Materialize once: the signature accepts any Iterable, and a one-shot
+        # iterator would be drained by super() leaving nothing for the CCD check.
+        types = frozenset(entity_types)
+        super().validate_entity_types(types)
+        if EntityType.LIGAND in types:
+            raise ValueError(self._ccd_ligand_message())
+
+    def _ccd_ligand_message(self, codes: str = "") -> str:
+        """Message shared by the submit-time and runtime CCD rejections.
+
+        Preflight knows only that CCD ligands were declared; the runtime check
+        knows which ones. One builder so the two can't drift.
+        """
+        subject = f"CCD-coded ligands ({codes})" if codes else "CCD-coded ligands"
+        return (
+            f"Chai-1 cannot accept {subject}; its FASTA format requires SMILES "
+            f"strings. Supply the ligand as SMILES via --smiles, or use Boltz-2 "
+            f"or OpenFold 3, which accept CCD codes (--ligand) natively."
+        )
+
     def _validate_ligands(self, entity_list: EntityList) -> None:
         """Reject CCD-code ligands, which Chai-1 cannot parse.
 
@@ -77,6 +112,10 @@ class ChaiAdapter(BaseAdapter):
         #82). Guard up front with a clear, user-facing error rather than
         letting the ligand vanish.
 
+        ``validate_entity_types`` catches this earlier for CLI and preflight
+        callers; this stays as the guard for direct adapter use, and names the
+        offending codes.
+
         SMILES ligands (``EntityType.SMILES``) pass through unchanged.
 
         Raises:
@@ -84,12 +123,8 @@ class ChaiAdapter(BaseAdapter):
         """
         ccd = [e for e in entity_list if e.entity_type == EntityType.LIGAND]
         if ccd:
-            codes = ", ".join(e.value for e in ccd)
             raise ValueError(
-                f"Chai-1 cannot accept CCD-coded ligands ({codes}); its FASTA "
-                f"format requires SMILES strings. Supply the ligand as SMILES "
-                f"via --smiles, or use Boltz or OpenFold, which accept CCD codes "
-                f"(--ligand) natively."
+                self._ccd_ligand_message(", ".join(e.value for e in ccd))
             )
 
     def _validate_token_limit(self, entity_list: EntityList) -> None:

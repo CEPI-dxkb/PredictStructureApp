@@ -23,6 +23,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import click
 import yaml
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 from predict_structure import __version__
 from predict_structure.adapters import get_adapter
+from predict_structure.adapters.base import join_names
 from predict_structure.backends import get_backend
 from predict_structure.entities import (
     EntityList,
@@ -113,6 +115,23 @@ def _is_tool_available(tool: str) -> bool:
     return shutil.which(exe) is not None
 
 
+class UnsupportedInputError(click.ClickException, ValueError):
+    """The job's inputs cannot be served by any tool — a user-fixable problem.
+
+    Distinct from ``click.UsageError`` (which means the deployment is broken,
+    e.g. nothing on PATH) so preflight can reject the former at submit time
+    while still falling back to default resources for the latter.
+
+    Inherits from both parents deliberately: ``ValueError`` so preflight catches
+    it alongside adapter validation errors, and ``ClickException`` so the other
+    call sites (the ``auto`` subcommand, the job-file runner) print
+    ``Error: <message>`` instead of dumping a traceback — the whole point of
+    #84. ``exit_code`` matches the ``click.UsageError`` this replaced.
+    """
+
+    exit_code = 2
+
+
 def _auto_select_tool(
     entity_list: EntityList,
     device: str = "gpu",
@@ -140,7 +159,8 @@ def _auto_select_tool(
     Raises:
         click.UsageError: If no suitable tool is found.
     """
-    has_non_protein = entity_list.entity_types - {EntityType.PROTEIN}
+    requested_types = frozenset(entity_list.entity_types)
+    has_non_protein = requested_types - {EntityType.PROTEIN}
     msa_available = has_msa or use_msa_server
 
     # CPU → strongly prefer ESMFold (if protein-only)
@@ -148,28 +168,62 @@ def _auto_select_tool(
         if _is_tool_available("esmfold"):
             return "esmfold"
 
+    # Why each candidate was passed over, so the failure below can name the
+    # actual cause instead of always blaming PATH (issue #84).
+    excluded_by_input = False
+    excluded_by_msa: list[str] = []
+
     # Priority order: diffusion tools first (need MSA), then ESMFold
     # (fast single-sequence), then AlphaFold (slow, builds own MSA from
     # local DBs). ESMFold before AlphaFold because it's minutes vs hours
     # and covers the common "quick protein fold" use case.
+    has_protein = EntityType.PROTEIN in requested_types
     for tool in ("boltz", "openfold", "chai", "esmfold", "alphafold"):
-        # Skip tools that don't support the entity types
-        if tool in ("alphafold", "esmfold") and has_non_protein:
+        # Installed-ness first. A tool that isn't deployed was never a
+        # candidate, so it must not be reported as an input or MSA problem —
+        # otherwise "nothing is installed" masquerades as a user error.
+        available = _is_tool_available(tool)
+        if tool == "alphafold":
+            available = available and AF2_DEFAULT_DATA_DIR.is_dir()
+        if not available:
+            continue
+
+        # Ask the adapter rather than hardcoding which tools take what. Keeps
+        # this in step with supported_entities and honours Chai's SMILES-only
+        # ligand rule, so auto never resolves to a tool that would reject the
+        # job seconds later (#82, #84).
+        if not get_adapter(tool).supports_entity_types(requested_types):
+            excluded_by_input = True
             continue
 
         # Boltz/OpenFold/Chai need MSA for protein chains. Skip them
         # when none is available to avoid the silent dummy-MSA fallback
         # (catastrophic quality regression).
-        has_protein = EntityType.PROTEIN in entity_list.entity_types
         if tool in ("boltz", "openfold", "chai") and has_protein and not msa_available:
+            excluded_by_msa.append(get_adapter(tool).display_name or tool)
             continue
 
-        if tool == "alphafold":
-            if _is_tool_available(tool) and AF2_DEFAULT_DATA_DIR.is_dir():
-                return tool
-        elif _is_tool_available(tool):
-            return tool
+        return tool
 
+    # Nothing matched. Separate a user-input problem (fixable by changing the
+    # job, so preflight should reject it at submit) from a deployment problem
+    # (nothing installed, so preflight should fall back to defaults) — #84.
+    if excluded_by_msa:
+        # Name only the tools actually skipped for this reason. Suggesting a
+        # fallback here would be false advice: every other tool has already
+        # been tried and rejected by the time we reach this line.
+        verb = "needs" if len(excluded_by_msa) == 1 else "need"
+        raise UnsupportedInputError(
+            f"{join_names(excluded_by_msa)} {verb} an MSA for protein chains, "
+            f"but no MSA file was supplied and the MSA server was not enabled. "
+            f"Upload an MSA or enable the MSA server."
+        )
+    if excluded_by_input:
+        kinds = ", ".join(sorted(e.value for e in requested_types))
+        raise UnsupportedInputError(
+            f"No available prediction tool supports this combination of inputs "
+            f"({kinds})."
+        )
     raise click.UsageError(
         "No prediction tool found on PATH. "
         "Install one of: boltz, run_openfold, chai-lab, run_alphafold.py, esm-fold-hf"
@@ -566,7 +620,14 @@ def run_prediction(
     execution_backend = get_backend(backend, **backend_kwargs)
 
     # 2. Validate entity types against adapter capabilities
-    adapter.validate_entities(entity_list)
+    # Surface as a plain message, not a traceback: this reaches BV-BRC users
+    # in the job error stream, where a click/AppScript stack is noise (#84).
+    try:
+        adapter.validate_entities(entity_list)
+    except ValueError as exc:
+        logger.error("Entity validation failed: %s", exc)
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(2)
     adapter.validate_sequences(entity_list)
     logger.info("Entity validation passed")
 
@@ -649,8 +710,15 @@ def run_prediction(
     # -----------------------------------------------------------------
 
     # 3. Prepare input (entity list → tool-native format, MSA conversion)
+    # Adapters reject unusable input here too (Chai CCD ligands, token limits);
+    # same treatment as entity validation — a message, not a stack trace (#84).
     msa_path = Path(shared["msa"]) if shared.get("msa") else None
-    prepared = adapter.prepare_input(entity_list, output_path, msa_path=msa_path)
+    try:
+        prepared = adapter.prepare_input(entity_list, output_path, msa_path=msa_path)
+    except ValueError as exc:
+        logger.error("Input preparation failed: %s", exc)
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(2)
     logger.info("Prepared input: %s", prepared)
 
     # 4. Build tool-specific command
@@ -1208,17 +1276,51 @@ def auto(protein, dna, rna, ligand, smiles, use_msa_server, **shared):
               help="MSA server available (influences auto tool selection)")
 @click.option("--device", type=click.Choice(["gpu", "cpu"]), default="gpu",
               help="Compute device")
-def preflight(tool, protein, msa, use_msa_server, device):
+@click.option("--has-protein", is_flag=True, default=False,
+              help="A protein input was supplied (declaration only, no file read)")
+@click.option("--has-dna", is_flag=True, default=False,
+              help="A DNA input was supplied (declaration only, no file read)")
+@click.option("--has-rna", is_flag=True, default=False,
+              help="An RNA input was supplied (declaration only, no file read)")
+@click.option("--has-ligand", is_flag=True, default=False,
+              help="A CCD-coded ligand was supplied (declaration only)")
+@click.option("--has-smiles", is_flag=True, default=False,
+              help="A SMILES ligand was supplied (declaration only)")
+def preflight(tool, protein, msa, use_msa_server, device,
+              has_protein, has_dna, has_rna, has_ligand, has_smiles):
     """Return resource requirements as JSON for BV-BRC preflight.
 
     Resolves 'auto' to a concrete tool and returns CPU, memory, runtime,
     and GPU requirements. Does NOT run any prediction.
 
+    The ``--has-*`` flags declare which kinds of input the job carries, without
+    naming or reading any file. Preflight runs on the scheduler node where
+    workspace files are not mounted, so this is the only entity information
+    available — and it is enough to reject a tool/input mismatch before SLURM
+    allocates a GPU (issue #84).
+
+    Exit codes:
+        0  resources emitted as JSON on stdout
+        3  input is invalid for the tool; stdout carries {"error": {...}} and
+           the caller should fail the job rather than fall back to defaults
+           (3, not 2 — click already uses 2 for its own usage errors)
+
     \b
     Example:
-        predict-structure preflight --tool esmfold --protein input.fasta
-        predict-structure preflight --tool auto --protein input.fasta --use-msa-server
+        predict-structure preflight --tool esmfold --has-protein
+        predict-structure preflight --tool auto --has-protein --has-dna --use-msa-server
     """
+    declared: set[EntityType] = set()
+    for flag, entity_type in (
+        (has_protein, EntityType.PROTEIN),
+        (has_dna, EntityType.DNA),
+        (has_rna, EntityType.RNA),
+        (has_ligand, EntityType.LIGAND),
+        (has_smiles, EntityType.SMILES),
+    ):
+        if flag:
+            declared.add(entity_type)
+
     # Resolve tool
     if tool == "auto":
         if protein:
@@ -1226,20 +1328,38 @@ def preflight(tool, protein, msa, use_msa_server, device):
                 protein=(protein,), dna=(), rna=(), ligand=(), smiles=(),
             )
         else:
-            # Default to a single-protein entity for preflight estimation
+            # No file access here — synthesize one placeholder entity per
+            # declared kind so _auto_select_tool sees the real entity mix.
+            # Falls back to protein-only when nothing was declared.
             entity_list = EntityList()
-            entity_list.add(EntityType.PROTEIN, "X", name="preflight_dummy")
-        resolved = _auto_select_tool(
-            entity_list,
-            device=device,
-            has_msa=msa is not None,
-            use_msa_server=use_msa_server,
-        )
+            for entity_type in sorted(declared or {EntityType.PROTEIN},
+                                      key=lambda e: e.value):
+                entity_list.add(entity_type, "X", name="preflight_declared")
+        try:
+            resolved = _auto_select_tool(
+                entity_list,
+                device=device,
+                has_msa=msa is not None,
+                use_msa_server=use_msa_server,
+            )
+        except UnsupportedInputError as exc:
+            # click.UsageError is deliberately not caught: it means nothing is
+            # installed, which is a deployment fault, not the user's input.
+            _preflight_reject(str(exc))
     else:
         resolved = tool
 
     # Get resource requirements from the adapter
     adapter = get_adapter(resolved)
+
+    # Reject tool/input mismatches now, while rejecting is still cheap. The
+    # same check runs again in run_prediction; this one saves the allocation.
+    if declared:
+        try:
+            adapter.validate_entity_types(declared)
+        except ValueError as exc:
+            _preflight_reject(str(exc), resolved_tool=resolved)
+
     resources = adapter.preflight()
 
     # Build output with resolved tool and GPU info
@@ -1250,6 +1370,22 @@ def preflight(tool, protein, msa, use_msa_server, device):
     output.update(resources)
 
     click.echo(json.dumps(output))
+
+
+def _preflight_reject(message: str, resolved_tool: str | None = None) -> None:
+    """Emit a structured preflight rejection on stdout and exit 3.
+
+    App-PredictStructure.pl treats a generic non-zero exit as "the preflight
+    binary broke" and silently falls back to default resources — which would
+    schedule the very job we are rejecting. The caller therefore keys off the
+    ``error`` payload rather than the exit status, since click already exits 2
+    for its own usage errors and the two must not be confused.
+    """
+    payload: dict[str, Any] = {"error": {"code": "invalid_input", "message": message}}
+    if resolved_tool:
+        payload["error"]["resolved_tool"] = resolved_tool
+    click.echo(json.dumps(payload))
+    sys.exit(3)
 
 
 # ---------------------------------------------------------------------------

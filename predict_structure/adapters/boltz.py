@@ -25,6 +25,7 @@ class BoltzAdapter(BaseAdapter):
     """
 
     tool_name: str = "boltz"
+    display_name: str = "Boltz-2"
     supports_msa: bool = True
     requires_gpu: bool = True
     min_gpu_memory_mb: int = 24000

@@ -105,6 +105,7 @@ class ESMFold2Adapter(BaseAdapter):
     """
 
     tool_name: str = "esmfold2"
+    display_name: str = "ESMFold2"
     supports_msa: bool = False
     requires_gpu: bool = True
     supported_entities: frozenset[EntityType] = frozenset({
