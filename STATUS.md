@@ -1,10 +1,60 @@
 # Project Status
 
-**Last updated:** 2026-07-08
-**Current version:** v0.17.0 (HEAD: e653c5a)
-**Production container:** `folding_260622.3.sif`
+**Last updated:** 2026-08-13
+**Current version:** v0.17.0 (HEAD: abda889)
+**Production container:** `folding_260813.2.sif`
+
+## Next action
+
+**BLOCKED: BV-BRC job submission is failing.** `start_app2` returns HTTP 500
+with an empty detail (`"Error submitting job: \n"`) for every job, including
+valid ones (E01, plain ESMFold). Last successful submission was task 23415385
+on 2026-08-12, before today's container switch — so this correlates with the
+switch, not with the code.
+
+Ruled out so far:
+- Preflight is healthy. `predict-structure preflight --tool esmfold --device
+  cpu --use-msa-server --has-protein` returns rc=0 with correct resources, and
+  calling the deployed `App-PredictStructure.pl::preflight()` directly with
+  E01's params returns `{cpu 8, memory 32G, partition gpu2, runtime 3600}`.
+- Container cache is not full: 554 GB free on the cache volume.
+
+Still suspect: the app -> container registration, or the scheduler failing to
+stage the new SIF. `/disks/patric-common/container-cache/` still holds only
+`folding_260622.3.sif` (Jun 22); `folding_260813.2.sif` has not been staged.
+Needs someone with scheduler admin access to check the registration and the
+scheduler-side error log. Until this clears, the API test matrix cannot run.
 
 ## What's done
+
+### Preflight validation + container rebuild (2026-08-13)
+
+- **Fix #84: reject tool/entity mismatches at submit** (abda889, PR #86) —
+  jobs whose inputs a tool cannot handle were scheduled on a GPU node and only
+  then failed with a traceback; prod job 23403506 held an 8h GPU reservation
+  before dying in 8s. Preflight cannot read workspace files, so validation now
+  runs off declared kinds (`--has-protein/--has-dna/--has-rna/--has-ligand/
+  --has-smiles`). Rejections travel as exit 3 + a JSON error payload, which the
+  Perl converts into a clean `die`. Also fixed a pre-existing bug where
+  `return` inside a `Try::Tiny` catch was dead code, silently scheduling GPU
+  tools with no GPU constraint.
+- **Fix #82: Chai CCD ligands** (8ac583f, PR #83) — Chai's FASTA needs SMILES,
+  so a CCD code was silently dropped and it folded protein-only, exit 0.
+- **Container env vars corrected** (cbc9ab0) — `OPENFOLD_CACHE` (the variable
+  openfold3 actually reads; the old one was inert), `TORCH_HOME` pointed at a
+  nonexistent directory, `DISABLE_PANDERA_IMPORT_WARNING` kept after verifying
+  pandera does read it.
+- **Two containers built** — `folding_260813.1.sif` (#67/#81/#82) and
+  `folding_260813.2.sif` (adds #84). Both deployed to
+  `/vol/patric3/production/containers/`.
+- **ESMFold2 cache unblocked** — weights were already at
+  `/local_databases/esmfold/hub/models--biohub--ESMFold2` but the directory was
+  not group-writable, so the Perl's `-w` probe rejected it, fell through to
+  `/local_databases/cache` (which lacks ESMFold2), and forced
+  `HF_HUB_OFFLINE=1`. Permissions fixed; both ESMFold and ESMFold2 now resolve
+  offline from the same cache. Likely the mechanism behind #75.
+- **Issues filed** — #84 (preflight validation, fixed), #85 (decommission
+  AlphaFold 2 in favour of ESMFold2, blocked by #75).
 
 ### Bug fixes (2026-07-08, on main)
 
@@ -50,34 +100,42 @@
 | mango (H100) | 11 | OpenFold (MSA/DNA/RNA/SMILES), Chai, param variants |
 | peach (V100) | 4 | Chai (MSA/RNA/2samples) |
 
-### Unit test results (2026-07-08)
+### Unit test results (2026-08-13)
 
-457 passed, 10 skipped (full suite including #67 and #81 regression tests)
+473 passed, 10 skipped. Run with
+`python -m pytest tests/ -q --ignore=tests/acceptance` — `tests/acceptance/`
+shells out to real 32 GB containers via `apptainer exec` and takes far longer
+than the rest of the suite combined.
+
+### API test matrix
+
+Not yet run against `folding_260813.2.sif` — blocked, see **Next action**.
+The matrix gained an `expected: "reject"` class for jobs that must be refused
+at submit time (nothing scheduled); 11 cases now carry it, and the runner
+judges each case rather than counting any submit error as a failure.
 
 ## What's pending
-
-### Uncommitted local changes
-
-| Item | Status | Notes |
-|---|---|---|
-| Container def fixes | Uncommitted | Dockerfile.predict-structure-all, folding-from-base.def, predict-structure-all.def |
 
 ### Open issues (by priority)
 
 | # | Issue | Priority | Notes |
 |---|---|---|---|
-| 81 | Boltz normalizer crash with SMILES | **Fixed** | a00dc8a — needs next container build |
-| 67 | MSA NUL bytes crash OpenFold/Chai | **Fixed** | 83e4c17 — needs next container build |
-| 38 | Boltz only works on coconut | Medium | torch+cu130 needs CUDA 13.0; rebuild with cu124 for mango/peach |
+| 85 | Decommission AlphaFold 2, replace with ESMFold2 | High | Blocked by #75 |
+| 75 | ESMFold2 in UI but not functional | High | Cache permissions fixed 2026-08-13; recheck |
 | 77 | Per-model protein length limits | Medium | CLI + UI validation with tool-specific error messages |
-| 75 | Add ESMFold2 to UI tool selector | Medium | app_spec + service script registration |
 | 76 | DSSP as post-prediction step | Medium | Secondary structure assignment for reports |
-| 74 | 3Dmol.js cartoon mode missing secondary structures | Low | protein_compare report template |
-| 78 | Report viewer Reset View / Spin buttons | Low | protein_compare report template |
+| 48 | CCD ligand input rejects glycans with parentheses | Medium | Validation regex |
+| 50 | Add PAE score to the report | Low | protein_compare |
+| 51 | Job progress indicator | Low | BV-BRC UI |
+| 52 | Docs: multi-chain applies to DNA/RNA too | Low | Docs |
 | 79 | B-factor distribution zero-height bars | Low | protein_compare report template |
 | 80 | Report TOC/index + section reorder | Low | protein_compare report template |
 | 72 | Workspace file upload not immediately visible | Low | BV-BRC UI |
 | 73 | File browser re-highlight broken | Low | BV-BRC UI |
+| 18 | Nucleic acid secondary structure (DSSR) | Low | Enhancement |
+
+Closed since last update: #67, #74, #78, #81, #82, #84 (plus #8, #11, #12, #15,
+#45 triaged closed).
 
 ### Host coverage gaps
 
@@ -89,7 +147,7 @@
 
 ## Infrastructure
 
-### Folding tools (production SIF: folding_260622.3.sif)
+### Folding tools (production SIF: folding_260813.2.sif)
 
 | Tool | Package | Version | PyTorch / Framework | ML Model | Checkpoint / Weights |
 |---|---|---|---|---|---|
@@ -116,7 +174,9 @@
 
 | SIF | Date | Status | Notes |
 |---|---|---|---|
-| folding_260622.3.sif | 2026-06-22 | **Production** | v0.17.0 + report provenance; 38/38 tests pass |
+| folding_260813.2.sif | 2026-08-13 | **Production** | +#84 preflight validation; predict_structure abda889. API matrix not yet run (blocked) |
+| folding_260813.1.sif | 2026-08-13 | Superseded | #67 + #81 + #82, corrected cache env vars; predict_structure 8ac583f |
+| folding_260622.3.sif | 2026-06-22 | Previous prod | v0.17.0 + report provenance; 38/38 tests pass |
 | folding_260622.2.sif | 2026-06-22 | Previous prod | v0.17.0 + report provenance (PR #70); 38/38 tests pass |
 | folding_260622.1.sif | 2026-06-22 | Retired | v0.17.0, ESMFold2 adapter, 11 PRs merged; 38/38 tests pass |
 | folding_260602.1.sif | 2026-06-02 | Previous prod | v0.16.1, GPU precheck, MSA validation, run log; 47/47 tests pass |
@@ -128,9 +188,9 @@
 
 | Path | Purpose |
 |---|---|
-| /scout/containers/folding_prod.sif | Production symlink → folding_260622.3.sif |
-| /scout/containers/folding_260622.3.sif | Current production SIF (34 GB) |
-| /vol/patric3/production/containers/folding_260622.3.sif | BV-BRC production copy |
+| /scout/containers/folding_prod.sif | Local testing symlink → folding_260813.2.sif |
+| /scout/containers/folding_260813.2.sif | Current SIF, local build (32 GB) |
+| /vol/patric3/production/containers/folding_260813.2.sif | BV-BRC copy — promotion step: `cp` here |
 | /disks/patric-common/container-cache/ | BV-BRC scheduler container cache |
 | /local_databases/ | All tool weights + caches (bind-mounted) |
 | ~/.patric_token | BV-BRC auth token |
@@ -139,7 +199,7 @@
 
 | Repo | Version | Branch | Last commit | Pushed? |
 |---|---|---|---|---|
-| PredictStructureApp | v0.17.0 | main | e653c5a (branching rule + #67 + #81 fixes) | YES |
+| PredictStructureApp | v0.17.0 | main | abda889 (#84 preflight validation) | YES |
 | protein_compare | v0.2.1 | main | c7cd9c6 (PR #7 merged) | YES |
 
 ## How to resume
