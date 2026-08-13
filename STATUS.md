@@ -6,24 +6,39 @@
 
 ## Next action
 
-**BLOCKED: BV-BRC job submission is failing.** `start_app2` returns HTTP 500
-with an empty detail (`"Error submitting job: \n"`) for every job, including
-valid ones (E01, plain ESMFold). Last successful submission was task 23415385
-on 2026-08-12, before today's container switch — so this correlates with the
-switch, not with the code.
+`folding_260813.2.sif` is deployed and the full API matrix passes **48/48**.
+Open PRs to land: #87 (this branch), #89 (test-runner cold-start fix).
 
-Ruled out so far:
-- Preflight is healthy. `predict-structure preflight --tool esmfold --device
-  cpu --use-msa-server --has-protein` returns rc=0 with correct resources, and
-  calling the deployed `App-PredictStructure.pl::preflight()` directly with
-  E01's params returns `{cpu 8, memory 32G, partition gpu2, runtime 3600}`.
-- Container cache is not full: 554 GB free on the cache volume.
+Then: decide #85 (retire AlphaFold 2) — it is the only thing keeping AlphaFold
+cases out of the matrix — and pick up #50, whose report side is already built
+and only needs the Boltz PAE npz converted to `predictions/pae.json`.
 
-Still suspect: the app -> container registration, or the scheduler failing to
-stage the new SIF. `/disks/patric-common/container-cache/` still holds only
-`folding_260622.3.sif` (Jun 22); `folding_260813.2.sif` has not been staged.
-Needs someone with scheduler admin access to check the registration and the
-scheduler-side error log. Until this clears, the API test matrix cannot run.
+### Resolved 2026-08-13: submission failure after the container switch
+
+Every `start_app2` call returned HTTP 500 with an empty detail
+(`"Error submitting job: \n"`). Root cause: the **ApplicationDefaultContainer**
+row for PredictStructure pointed at `folding_260513.1`, whose SIF no longer
+exists anywhere. The scheduler runs preflight *inside* the registered
+container, so a missing container produces no output and hence an empty error.
+Repointing the row at `folding_260813.2` fixed it.
+
+Diagnostic order that worked, for next time:
+1. Submit the trivial `Date` app — it succeeded, proving the scheduler, auth,
+   and workspace paths were fine and the fault was app-specific.
+2. Run preflight the way the scheduler does (`--preflight` + `--user-error-file`
+   against the deployed `plbin` copy) — exit 0 and valid JSON exonerated the
+   app code.
+3. Check `p3x-show-container-config` on `gum` and confirm the app's container
+   filename actually exists.
+
+Do **not** use `AppService.enumerate_apps` to check whether an app is
+registered: it returns a curated 39-app list that never includes
+PredictStructure, on production, www, and alpha alike. That misled this
+investigation.
+
+After repointing, the first submission still took **464 s** while a 32 GB SIF
+was staged into the container cache — the runner's flat 120 s timeout turned
+that routine cold start into three more spurious failures. Fixed in #89.
 
 ## What's done
 
@@ -107,12 +122,37 @@ scheduler-side error log. Until this clears, the API test matrix cannot run.
 shells out to real 32 GB containers via `apptainer exec` and takes far longer
 than the rest of the suite combined.
 
-### API test matrix
+### API test matrix (folding_260813.2.sif, 2026-08-13)
 
-Not yet run against `folding_260813.2.sif` — blocked, see **Next action**.
-The matrix gained an `expected: "reject"` class for jobs that must be refused
-at submit time (nothing scheduled); 11 cases now carry it, and the runner
-judges each case rather than counting any submit error as a failure.
+`docs/test-reports/matrix_20260813_160754.json` — **48 pass, 0 fail.**
+
+| Category | Cases | Result |
+|---|---|---|
+| Boltz | 9 | all pass (coconut only — cu130 needs H200) |
+| OpenFold | 6 | all pass (mango) |
+| Chai | 5 | all pass (peach, mango, coconut) |
+| ESMFold / auto / parameter variations | 20 | all pass |
+| **Submit-time rejections** | **8** | **all refused before scheduling** |
+| Worker-side failures (N03, N07) | 2 | scheduled, then failed as expected |
+
+Hosts: coconut 25, mango 10, peach 5.
+
+**#84 verified in production.** E02, C05, R02, N04, N06 were refused at submit
+with no task created and no GPU allocated, and the messages reach the client
+intact inside the JSON-RPC error body, e.g.:
+
+> Error submitting job: Error running preflight checks: Chai-1 cannot accept
+> CCD-coded ligands; its FASTA format requires SMILES strings. Supply the
+> ligand as SMILES via --smiles, or use Boltz-2 or OpenFold 3 …
+
+R03 also passes: `auto` + DNA + CCD ligand resolves to a tool that accepts
+them, confirming auto no longer routes CCD ligands to Chai.
+
+Not covered: R01/A01/A02 (AlphaFold), excluded by default — revisit with #85.
+
+Known wart: the older `_validate_params` rejections (N01, N02, N08) still leak
+a Perl backtrace into the user-visible message. The #84 path suppresses it via
+`local $SIG{__DIE__} = 'DEFAULT'`; the same one-liner would clean these up.
 
 ## What's pending
 

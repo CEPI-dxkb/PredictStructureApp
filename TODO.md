@@ -2,18 +2,19 @@
 
 Tactical checklist — derived from current PLAN phase. Check off as you go.
 
-## Blocked
+## Next up
 
-- [ ] **BV-BRC submission returns HTTP 500 for every job.** Affects valid jobs
-      too (E01, plain ESMFold), so it is not the new preflight validation.
-      Preflight verified healthy standalone and via the deployed Perl.
-      Container cache has 554 GB free but `/disks/patric-common/container-cache/`
-      still holds only `folding_260622.3.sif` — `folding_260813.2.sif` was never
-      staged. Needs scheduler admin: check the app→container registration and
-      the scheduler-side error log. Blocks everything below it.
-- [ ] Run the API test matrix against `folding_260813.2.sif` (all 3 GPU hosts)
-- [ ] Run AlphaFold in the matrix — still not covered since the 260622 run
-      (may be moot if #85 lands first)
+- [ ] Merge #87 (container env vars + STATUS/TODO) and #89 (runner cold start)
+- [ ] Decide #85 (retire AlphaFold 2) — currently the only reason AlphaFold
+      cases (R01/A01/A02) are excluded from the matrix
+- [ ] #50: convert the Boltz PAE npz to `predictions/pae.json` — the report side
+      is already built and shipped, only the data path is missing
+- [ ] #48: the Python CLI does no CCD validation at all while the Perl enforces
+      `^[A-Za-z0-9]{1,3}$`; junk reaches the tool and fails opaquely
+- [ ] Suppress the Carp backtrace on `_validate_params` dies, as the #84 path
+      already does (`local $SIG{__DIE__} = 'DEFAULT'`)
+- [ ] GoWe: test CWL tool submission through CPU workers
+- [ ] GoWe: test predict-structure CWL tool through GPU workers
 
 ## Active
 
@@ -25,18 +26,19 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [x] Commit container def env-var fixes (cbc9ab0)
 - [x] Build + deploy folding_260813.1.sif and folding_260813.2.sif
 - [x] Fix ESMFold2 HF cache permissions on /local_databases/esmfold
-- [ ] Verify the #84 rejection message survives BV-BRC's HTTP 500 and actually
-      reaches the user — the runner now captures the response body, so the
-      first successful matrix run answers this
-- [ ] Confirm the OpenFold cache change works in a real job: `OPENFOLD_CACHE`
-      was inert before 2026-08-13, so OpenFold had been falling back to
-      `~/.openfold3/`
+- [x] Run the API test matrix against folding_260813.2 — 48 pass, 0 fail
+- [x] Fix the app->container registration (was pointing at a deleted SIF)
+- [x] Verify the #84 rejection message reaches the user — confirmed, it arrives
+      intact in the JSON-RPC error body (matrix run 2026-08-13)
+- [x] Confirm the OpenFold cache change works in a real job — all 6 OpenFold
+      matrix cases pass on mango with `OPENFOLD_CACHE` live
 - [ ] GoWe: test CWL tool submission through CPU workers
 - [ ] GoWe: test predict-structure CWL tool through GPU workers
 
 ## Issue queue
 
 - [ ] #85 — Decommission AlphaFold 2, replace with ESMFold2 (blocked by #75)
+- [ ] #88 — Eye-icon REPORT action for PredictStructure in the workspace browser (fix lands in BV-BRC-Web)
 - [ ] #75 — ESMFold2 in UI but not functional (cache permissions fixed; recheck)
 - [ ] #77 — Per-model protein length limits (CLI + UI)
 - [ ] #76 — DSSP as post-prediction step
