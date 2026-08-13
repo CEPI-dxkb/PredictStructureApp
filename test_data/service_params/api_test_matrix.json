@@ -59,7 +59,7 @@
     {"id": "R03", "name": "auto_dna_ligand_resolves", "tool": "auto", "dna_file": "dna.fasta", "ligand": ["ATP"], "expected": "pass", "note": "auto must resolve to a tool accepting DNA + CCD, never Chai (#82/#84)"},
 
     {"id": "N01", "name": "neg_no_input", "tool": "boltz", "expected": "reject", "expected_error": "No inputs supplied"},
-    {"id": "N02", "name": "neg_bad_ccd", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["TOOLONG"], "expected": "fail", "expected_error": "Invalid ligand CCD code"},
+    {"id": "N02", "name": "neg_bad_ccd", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["TOOLONG"], "expected": "reject", "expected_error": "Invalid ligand CCD code"},
     {"id": "N03", "name": "neg_bad_format", "tool": "boltz", "input_file": "not_fasta.txt", "msa_file": "crambin.a3m", "expected": "fail", "expected_error": "expected FASTA format"},
     {"id": "N04", "name": "neg_esm_dna", "tool": "esmfold", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "expected": "reject", "expected_error": "does not support"},
     {"id": "N05", "name": "neg_af_dna", "tool": "alphafold", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "expected": "reject", "expected_error": "does not support"},

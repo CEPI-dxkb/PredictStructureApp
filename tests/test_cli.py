@@ -592,3 +592,77 @@ class TestAutoSelectionRespectsAdapters:
         el.add(EntityType.PROTEIN, "MKTIIAL")
         with pytest.raises(Exception, match="No prediction tool found"):
             cli_mod._auto_select_tool(el, device="gpu", use_msa_server=True)
+
+
+class TestErrorPresentation:
+    """Rejections must read as messages, never tracebacks (#84)."""
+
+    def test_auto_unsupported_combo_is_a_clean_click_error(self, tmp_path, monkeypatch):
+        """UnsupportedInputError must be formatted by click, not dumped raw.
+
+        Regression: raising a bare ValueError here escaped uncaught through the
+        `auto` subcommand and printed a traceback — the exact failure #84 exists
+        to remove.
+        """
+        import predict_structure.cli as cli_mod
+        from predict_structure.cli import main
+
+        monkeypatch.setattr(cli_mod, "_is_tool_available", lambda _t: True)
+        fasta = tmp_path / "p.fasta"
+        fasta.write_text(">p\nMKTIIALSYIFCLVFA\n")
+
+        result = CliRunner().invoke(
+            main,
+            ["auto", "--protein", str(fasta), "--ligand", "ATP",
+             "-o", str(tmp_path / "out")],
+        )
+        assert result.exit_code == 2
+        assert "Error:" in result.output
+        assert "Traceback" not in result.output
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+
+    def test_msa_message_only_names_tools_it_skipped(self, monkeypatch):
+        """No suggesting a fallback that was already rejected.
+
+        By the time this branch runs, every other tool has been tried, so
+        naming one would be advice the user cannot act on.
+        """
+        import pytest
+
+        import predict_structure.cli as cli_mod
+        from predict_structure.entities import EntityList, EntityType
+
+        monkeypatch.setattr(cli_mod, "_is_tool_available", lambda _t: True)
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "MKTIIAL")
+        el.add(EntityType.LIGAND, "ATP", name="ATP", format="ccd")
+        with pytest.raises(cli_mod.UnsupportedInputError) as excinfo:
+            cli_mod._auto_select_tool(el, device="gpu")
+        message = str(excinfo.value)
+        assert "MSA" in message
+        assert "ESMFold" not in message   # can't take a ligand; not a remedy
+        assert "Chai-1" not in message    # skipped for CCD, not for MSA
+
+
+class TestValidateEntityTypesAcceptsIterables:
+    def test_chai_ccd_rejection_survives_a_one_shot_iterator(self):
+        """The signature promises Iterable, so a generator must work too."""
+        import pytest
+
+        from predict_structure.adapters import get_adapter
+        from predict_structure.entities import EntityType
+
+        types = [EntityType.PROTEIN, EntityType.LIGAND]
+        adapter = get_adapter("chai")
+        with pytest.raises(ValueError, match="CCD"):
+            adapter.validate_entity_types(iter(types))
+
+    def test_base_rejection_survives_a_one_shot_iterator(self):
+        import pytest
+
+        from predict_structure.adapters import get_adapter
+        from predict_structure.entities import EntityType
+
+        adapter = get_adapter("alphafold")
+        with pytest.raises(ValueError, match="does not support"):
+            adapter.validate_entity_types(iter([EntityType.DNA]))

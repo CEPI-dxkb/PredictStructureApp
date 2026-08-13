@@ -82,8 +82,11 @@ class ChaiAdapter(BaseAdapter):
 
     def validate_entity_types(self, entity_types: Iterable[EntityType]) -> None:
         """Reject CCD ligands at submit time, before a GPU is allocated (#84)."""
-        super().validate_entity_types(entity_types)
-        if EntityType.LIGAND in frozenset(entity_types):
+        # Materialize once: the signature accepts any Iterable, and a one-shot
+        # iterator would be drained by super() leaving nothing for the CCD check.
+        types = frozenset(entity_types)
+        super().validate_entity_types(types)
+        if EntityType.LIGAND in types:
             raise ValueError(self._ccd_ligand_message())
 
     def _ccd_ligand_message(self, codes: str = "") -> str:

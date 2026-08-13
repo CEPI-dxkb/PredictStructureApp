@@ -24,7 +24,7 @@ _DNA_ONLY = set("ACGTN")
 _PROTEIN_ONLY = set("DEFHIKLMPQRSVWY")  # never appear in DNA
 
 
-def _join(items: Iterable[str]) -> str:
+def join_names(items: Iterable[str]) -> str:
     """Join names the way prose does: "a", "a and b", "a, b, and c"."""
     items = list(items)
     if len(items) <= 1:
@@ -132,15 +132,15 @@ class BaseAdapter(ABC):
         the tool as users know it, say which inputs were rejected, and point at
         tools that would accept them.
         """
-        rejected = _join(sorted(e.value for e in unsupported))
-        supported = _join(sorted(e.value for e in self.supported_entities))
+        rejected = join_names(sorted(e.value for e in unsupported))
+        supported = join_names(sorted(e.value for e in self.supported_entities))
         msg = (
             f"{self.display_name or self.tool_name} does not support {rejected} "
             f"input (it supports {supported} only)."
         )
         alternatives = _tools_supporting(requested, exclude=self.tool_name)
         if alternatives:
-            msg += f" Use {_join(alternatives)}, which support {rejected}."
+            msg += f" Use {join_names(alternatives)}, which support {rejected}."
         msg += (
             f" Otherwise remove the {rejected} input to run "
             f"{self.display_name or self.tool_name}."

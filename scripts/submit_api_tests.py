@@ -62,10 +62,18 @@ def rpc(token: str, method: str, params: list, timeout: int = 120) -> dict:
         json={"id": 1, "method": f"AppService.{method}", "params": params, "jsonrpc": "2.0"},
         timeout=timeout,
     )
-    resp.raise_for_status()
+    if resp.status_code >= 400:
+        # raise_for_status() reports only the status line and URL, discarding
+        # the body — which is where a preflight rejection's message lives. The
+        # matrix checks rejections by their reason, so the body must survive.
+        raise RuntimeError(
+            f"HTTP {resp.status_code} from {API_URL}: {resp.text.strip()[:2000]}"
+        )
     data = resp.json()
     if "error" in data:
-        sys.exit(f"API error: {data['error']}")
+        # RuntimeError, not sys.exit: the caller catches Exception per job, and
+        # SystemExit would abort the whole run and lose already-submitted jobs.
+        raise RuntimeError(f"API error: {data['error']}")
     return data
 
 
@@ -178,7 +186,10 @@ def run_submit(token: str, jobs: list[tuple[str, dict]], tag: str, poll: bool = 
     print(f"\n{len(task_ids)} jobs submitted.")
 
     if not poll or not task_ids:
+        # Still report: a reject-only run has no task IDs by design, and that is
+        # exactly the run whose verdicts we need to see.
         save_results(submitted, {}, {}, tag, ts)
+        print_report(submitted)
         return submitted
 
     print(f"\nPolling for completion...\n")

@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 from predict_structure import __version__
 from predict_structure.adapters import get_adapter
+from predict_structure.adapters.base import join_names
 from predict_structure.backends import get_backend
 from predict_structure.entities import (
     EntityList,
@@ -114,14 +115,21 @@ def _is_tool_available(tool: str) -> bool:
     return shutil.which(exe) is not None
 
 
-class UnsupportedInputError(ValueError):
+class UnsupportedInputError(click.ClickException, ValueError):
     """The job's inputs cannot be served by any tool — a user-fixable problem.
 
     Distinct from ``click.UsageError`` (which means the deployment is broken,
     e.g. nothing on PATH) so preflight can reject the former at submit time
-    while still falling back to default resources for the latter. Subclasses
-    ``ValueError`` so it is caught alongside adapter validation errors (#84).
+    while still falling back to default resources for the latter.
+
+    Inherits from both parents deliberately: ``ValueError`` so preflight catches
+    it alongside adapter validation errors, and ``ClickException`` so the other
+    call sites (the ``auto`` subcommand, the job-file runner) print
+    ``Error: <message>`` instead of dumping a traceback — the whole point of
+    #84. ``exit_code`` matches the ``click.UsageError`` this replaced.
     """
+
+    exit_code = 2
 
 
 def _auto_select_tool(
@@ -163,7 +171,7 @@ def _auto_select_tool(
     # Why each candidate was passed over, so the failure below can name the
     # actual cause instead of always blaming PATH (issue #84).
     excluded_by_input = False
-    excluded_by_msa = False
+    excluded_by_msa: list[str] = []
 
     # Priority order: diffusion tools first (need MSA), then ESMFold
     # (fast single-sequence), then AlphaFold (slow, builds own MSA from
@@ -192,7 +200,7 @@ def _auto_select_tool(
         # when none is available to avoid the silent dummy-MSA fallback
         # (catastrophic quality regression).
         if tool in ("boltz", "openfold", "chai") and has_protein and not msa_available:
-            excluded_by_msa = True
+            excluded_by_msa.append(get_adapter(tool).display_name or tool)
             continue
 
         return tool
@@ -201,10 +209,14 @@ def _auto_select_tool(
     # job, so preflight should reject it at submit) from a deployment problem
     # (nothing installed, so preflight should fall back to defaults) — #84.
     if excluded_by_msa:
+        # Name only the tools actually skipped for this reason. Suggesting a
+        # fallback here would be false advice: every other tool has already
+        # been tried and rejected by the time we reach this line.
+        verb = "needs" if len(excluded_by_msa) == 1 else "need"
         raise UnsupportedInputError(
-            "Boltz-2, OpenFold 3, and Chai-1 need an MSA for protein chains, "
-            "but no MSA file was supplied and the MSA server was not enabled. "
-            "Upload an MSA or enable the MSA server, or choose ESMFold."
+            f"{join_names(excluded_by_msa)} {verb} an MSA for protein chains, "
+            f"but no MSA file was supplied and the MSA server was not enabled. "
+            f"Upload an MSA or enable the MSA server."
         )
     if excluded_by_input:
         kinds = ", ".join(sorted(e.value for e in requested_types))

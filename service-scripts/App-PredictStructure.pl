@@ -264,13 +264,27 @@ sub preflight {
     # mounted on the scheduler node, so we can only say which options were
     # supplied — never read them. That is enough for predict-structure to
     # reject a tool/input mismatch before SLURM allocates a GPU (issue #84).
-    push @cmd, "--has-protein" if $params->{input_file};
-    push @cmd, "--has-dna"     if $params->{dna_file};
-    push @cmd, "--has-rna"     if $params->{rna_file};
-    push @cmd, "--has-ligand"
+    my %declared;
+    $declared{protein} = 1 if $params->{input_file};
+    $declared{dna}     = 1 if $params->{dna_file};
+    $declared{rna}     = 1 if $params->{rna_file};
+    $declared{ligand}  = 1
         if ref($params->{ligand}) eq 'ARRAY' && @{$params->{ligand}};
-    push @cmd, "--has-smiles"
+    $declared{smiles}  = 1
         if ref($params->{smiles}) eq 'ARRAY' && @{$params->{smiles}};
+
+    # Pasted sequences carry their own declared type, so their kind is known
+    # without reading anything. 'auto' is deliberately left undeclared:
+    # guessing wrong would reject a valid job, which is worse than catching it
+    # late — and run_app resolves the real type on the worker.
+    if (ref($params->{text_input}) eq 'ARRAY') {
+        for my $entry (@{$params->{text_input}}) {
+            my $type = $entry->{type} // 'auto';
+            $declared{$type} = 1 if $type =~ /^(?:protein|dna|rna)$/;
+        }
+    }
+
+    push @cmd, "--has-$_" for sort keys %declared;
 
     print STDERR "Preflight command: @cmd\n" if $ENV{P3_DEBUG};
 
@@ -286,14 +300,27 @@ sub preflight {
         $rc = 1;
     }
 
-    # A structured {"error": ...} payload means "this input can never run with
-    # this tool" — a user error, not a broken binary. Fail the job now with the
-    # message. Falling through to _default_preflight would schedule the very
-    # job we are rejecting (issue #84). Keyed off the payload rather than the
-    # exit status so it cannot be confused with click's own usage errors.
-    my $decoded = $json_out ? eval { decode_json($json_out) } : undef;
-    if ($decoded && $decoded->{error} && $decoded->{error}{message}) {
-        die "$decoded->{error}{message}\n";
+    # Exit 3 means "this input can never run with this tool" — a user error,
+    # not a broken binary. Reject the job now; falling through to
+    # _default_preflight would schedule the very job we are rejecting (#84).
+    #
+    # Keyed off the exit status, not the stdout payload. The status is
+    # unambiguous (click uses 2 for its own usage errors, 3 is ours alone),
+    # whereas a single stray line on stdout — a library banner, a stray print —
+    # would make a payload check fall through and silently allocate a GPU. The
+    # payload only supplies the message.
+    if ($rc == 3) {
+        my $message = "Input is not valid for tool '$tool'.";
+        my $decoded;
+        $decoded = eval { decode_json($json_out) } if $json_out;
+        if (ref($decoded) eq 'HASH' && ref($decoded->{error}) eq 'HASH'
+                && $decoded->{error}{message}) {
+            $message = $decoded->{error}{message};
+        }
+        # Carp::Always (line 46) appends a Perl backtrace to every die. Users
+        # need the prose explaining what to change, not our call stack.
+        local $SIG{__DIE__} = 'DEFAULT';
+        die "$message\n";
     }
 
     if ($rc != 0 || !$json_out) {
@@ -302,13 +329,18 @@ sub preflight {
         return _default_preflight($tool);
     }
 
-    my $resources;
-    try {
-        $resources = decode_json($json_out);
+    # NB: `return` inside a Try::Tiny catch block returns from the *block*, not
+    # from preflight() — the value is discarded in void context. Capture the
+    # result and test it instead, or a parse failure leaves $resources undef and
+    # every field silently falls back, including needs_gpu, which would schedule
+    # a GPU tool with no GPU.
+    my $resources = try {
+        decode_json($json_out);
     } catch {
         print STDERR "Warning: failed to parse preflight JSON: $_\n";
-        return _default_preflight($tool);
+        undef;
     };
+    return _default_preflight($tool) unless ref($resources) eq 'HASH';
 
     my $result = {
         cpu     => $resources->{cpu} // 8,
