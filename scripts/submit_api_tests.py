@@ -113,9 +113,14 @@ def query_hosts(token: str, task_ids: list[int]) -> dict[int, str]:
     return hosts
 
 
-def build_matrix_jobs(tests: list[dict]) -> list[tuple[str, dict]]:
-    """Convert test matrix entries to (label, app_params) pairs."""
+def build_matrix_jobs(tests: list[dict]) -> tuple[list[tuple[str, dict]], dict[str, dict]]:
+    """Convert test matrix entries to (label, app_params) pairs.
+
+    Also returns per-label expectations so the report can judge the outcome
+    instead of assuming every submitted job was meant to run.
+    """
     jobs = []
+    expectations = {}
     for test in tests:
         label = f"{test['id']}_{test['name']}"
         params = {}
@@ -127,7 +132,11 @@ def build_matrix_jobs(tests: list[dict]) -> list[tuple[str, dict]]:
                     val = f"{WS_INPUTS}/{val}"
                 params[key] = val
         jobs.append((label, params))
-    return jobs
+        expectations[label] = {
+            "expected": test.get("expected", "pass"),
+            "expected_error": test.get("expected_error"),
+        }
+    return jobs, expectations
 
 
 def build_saturate_jobs(tool: str, n: int = 10) -> list[tuple[str, dict]]:
@@ -142,21 +151,28 @@ def build_saturate_jobs(tool: str, n: int = 10) -> list[tuple[str, dict]]:
     return jobs
 
 
-def run_submit(token: str, jobs: list[tuple[str, dict]], tag: str, poll: bool = True) -> list[dict]:
+def run_submit(token: str, jobs: list[tuple[str, dict]], tag: str, poll: bool = True,
+               expectations: dict[str, dict] | None = None) -> list[dict]:
     """Submit jobs, optionally poll, report results."""
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    expectations = expectations or {}
     submitted = []
 
     print(f"\nSubmitting {len(jobs)} jobs (tag: {tag}_{ts})...\n")
     for label, params in jobs:
         output_file = f"{tag}_{label}_{ts}"
+        expect = expectations.get(label, {})
         try:
             tid = submit_job(token, params, output_file)
             print(f"  {tid}  {label}")
-            submitted.append({"task_id": tid, "label": label, "params": params, "output_file": output_file})
+            submitted.append({"task_id": tid, "label": label, "params": params,
+                              "output_file": output_file, **expect})
         except Exception as e:
-            print(f"  FAIL  {label}: {e}")
-            submitted.append({"task_id": None, "label": label, "error": str(e)})
+            # Not necessarily a problem: expected=reject cases are supposed to
+            # be refused right here, before anything is scheduled (#84).
+            marker = "reject" if expect.get("expected") == "reject" else "FAIL"
+            print(f"  {marker}  {label}: {e}")
+            submitted.append({"task_id": None, "label": label, "error": str(e), **expect})
 
     task_ids = {s["task_id"] for s in submitted if s["task_id"]}
     print(f"\n{len(task_ids)} jobs submitted.")
@@ -193,10 +209,38 @@ def save_results(submitted, results, hosts, tag, ts):
     print(f"\nResults saved to {out_path}")
 
 
+def judge(s: dict) -> tuple[bool, str]:
+    """Decide whether one result matches what the matrix expected.
+
+    Three expectations:
+      pass    the job runs to completion
+      fail    the job is scheduled, then fails on the worker
+      reject  the job is refused at submit time, before SLURM allocates
+              anything — so no task ID is the *correct* outcome (#84)
+    """
+    expected = s.get("expected", "pass")
+    error = s.get("error")
+    status = s.get("status")
+
+    if expected == "reject":
+        if not error:
+            return False, "scheduled!"
+        want = s.get("expected_error")
+        if want and want.lower() not in error.lower():
+            return False, "wrong reason"
+        return True, "rejected"
+
+    if error:
+        return False, "submit err"
+    if expected == "fail":
+        return (status == "failed"), (status or "unknown")
+    return (status == "completed"), (status or "unknown")
+
+
 def print_report(submitted: list[dict]):
     """Print results table."""
-    print(f"\n{'Task ID':>10}  {'Label':<25}  {'Status':<12}  {'Elapsed':>10}  {'Host':<12}")
-    print("-" * 75)
+    print(f"\n{'Task ID':>10}  {'Label':<25}  {'Status':<12}  {'Want':<7}  {'Verdict':<8}  {'Elapsed':>10}  {'Host':<12}")
+    print("-" * 95)
     pass_count = fail_count = 0
     for s in submitted:
         tid = str(s.get("task_id") or "--")
@@ -204,17 +248,18 @@ def print_report(submitted: list[dict]):
         elapsed = s.get("elapsed") or "--"
         host = s.get("host") or "--"
         label = s["label"]
+        ok, detail = judge(s)
         # Truncate long error messages
         if len(status) > 12:
             status = status[:11] + "…"
-        print(f"{tid:>10}  {label:<25}  {status:<12}  {elapsed:>10}  {host:<12}")
-        if status == "completed":
-            pass_count += 1
-        elif status == "failed":
-            # "failed" from the scheduler is expected for negative tests
+        verdict = "PASS" if ok else "FAIL"
+        print(f"{tid:>10}  {label:<25}  {status:<12}  {s.get('expected','pass'):<7}  "
+              f"{verdict:<8}  {elapsed:>10}  {host:<12}")
+        if ok:
             pass_count += 1
         else:
             fail_count += 1
+            print(f"{'':>10}  └─ expected {s.get('expected','pass')}, got {detail}")
 
     print(f"\nTotal: {pass_count} pass, {fail_count} fail")
 
@@ -237,11 +282,11 @@ def cmd_matrix(args):
         ids = set(args.tests.split(","))
         tests = [t for t in tests if t["id"] in ids]
     if not args.include_negative:
-        tests = [t for t in tests if t.get("expected") != "fail"]
+        tests = [t for t in tests if t.get("expected") not in ("fail", "reject")]
     if not args.include_alphafold:
         tests = [t for t in tests if t["tool"] != "alphafold"]
-    jobs = build_matrix_jobs(tests)
-    run_submit(token, jobs, "matrix", poll=not args.no_poll)
+    jobs, expectations = build_matrix_jobs(tests)
+    run_submit(token, jobs, "matrix", poll=not args.no_poll, expectations=expectations)
 
 
 def cmd_saturate(args):

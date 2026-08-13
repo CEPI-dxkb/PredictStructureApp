@@ -499,3 +499,96 @@ class TestBackendRegistry:
         import pytest
         with pytest.raises(ValueError, match="Unknown backend"):
             get_backend("nonexistent")
+
+
+class TestPreflightEntityValidation:
+    """Preflight must reject impossible jobs before SLURM allocates (#84).
+
+    Preflight runs on the scheduler node with no access to workspace files, so
+    every case here declares entity *kinds* via --has-* and never a path.
+    """
+
+    def _run(self, *args):
+        import json as _json
+
+        from predict_structure.cli import main
+
+        result = CliRunner().invoke(main, ["preflight", *args])
+        try:
+            payload = _json.loads(result.output.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            payload = {}
+        return result, payload
+
+    def test_alphafold_rejects_dna_and_smiles(self):
+        """The exact shape of production job 23403506."""
+        result, payload = self._run(
+            "--tool", "alphafold", "--has-dna", "--has-smiles",
+        )
+        assert result.exit_code == 3
+        assert payload["error"]["code"] == "invalid_input"
+        assert "does not support" in payload["error"]["message"]
+
+    def test_esmfold_rejects_dna(self):
+        result, payload = self._run("--tool", "esmfold", "--has-protein", "--has-dna")
+        assert result.exit_code == 3
+        assert "dna" in payload["error"]["message"]
+
+    def test_chai_rejects_ccd_ligand(self):
+        """#82's CCD rejection must also fire at submit time, not on the worker."""
+        result, payload = self._run(
+            "--tool", "chai", "--has-protein", "--has-ligand", "--use-msa-server",
+        )
+        assert result.exit_code == 3
+        assert "CCD" in payload["error"]["message"]
+
+    def test_chai_accepts_smiles_ligand(self):
+        result, payload = self._run(
+            "--tool", "chai", "--has-protein", "--has-smiles", "--use-msa-server",
+        )
+        assert result.exit_code == 0
+        assert payload["resolved_tool"] == "chai"
+
+    def test_protein_only_still_passes(self):
+        result, payload = self._run("--tool", "alphafold", "--has-protein")
+        assert result.exit_code == 0
+        assert payload["resolved_tool"] == "alphafold"
+        assert "error" not in payload
+
+    def test_no_flags_is_backward_compatible(self):
+        """Callers predating the --has-* flags must keep working."""
+        result, payload = self._run("--tool", "esmfold")
+        assert result.exit_code == 0
+        assert payload["resolved_tool"] == "esmfold"
+
+    def test_rejection_names_the_tool_and_an_alternative(self):
+        """Messages reach BV-BRC users, so they must be actionable prose."""
+        _, payload = self._run("--tool", "alphafold", "--has-dna")
+        message = payload["error"]["message"]
+        assert "AlphaFold 2" in message      # display name, not "alphafold"
+        assert "Boltz-2" in message          # a tool that would accept DNA
+        assert "alphafold" not in message    # no bare identifiers leaking
+
+
+class TestAutoSelectionRespectsAdapters:
+    def test_auto_never_picks_chai_for_ccd_ligand(self):
+        """Chai takes ligands only as SMILES, so auto must route CCD elsewhere."""
+        from predict_structure.adapters import get_adapter
+        from predict_structure.entities import EntityType
+
+        types = frozenset({EntityType.PROTEIN, EntityType.LIGAND})
+        assert not get_adapter("chai").supports_entity_types(types)
+        assert get_adapter("boltz").supports_entity_types(types)
+
+    def test_unavailable_tools_are_not_reported_as_input_errors(self, monkeypatch):
+        """"Nothing installed" must not masquerade as a user input problem."""
+        import pytest
+
+        import predict_structure.cli as cli_mod
+        from predict_structure.entities import EntityList, EntityType
+
+        monkeypatch.setattr(cli_mod, "_is_tool_available", lambda _t: False)
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "MKTIIAL")
+        with pytest.raises(Exception, match="No prediction tool found"):
+            cli_mod._auto_select_tool(el, device="gpu", use_msa_server=True)

@@ -25,6 +25,7 @@ class AlphaFoldAdapter(BaseAdapter):
     """
 
     tool_name: str = "alphafold"
+    display_name: str = "AlphaFold 2"
     supports_msa: bool = True
     requires_gpu: bool = True
     min_gpu_memory_mb: int = 14000

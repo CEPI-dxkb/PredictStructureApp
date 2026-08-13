@@ -260,6 +260,18 @@ sub preflight {
         push @cmd, "--use-msa-server";
     }
 
+    # Declare which kinds of input this job carries. Workspace files are not
+    # mounted on the scheduler node, so we can only say which options were
+    # supplied — never read them. That is enough for predict-structure to
+    # reject a tool/input mismatch before SLURM allocates a GPU (issue #84).
+    push @cmd, "--has-protein" if $params->{input_file};
+    push @cmd, "--has-dna"     if $params->{dna_file};
+    push @cmd, "--has-rna"     if $params->{rna_file};
+    push @cmd, "--has-ligand"
+        if ref($params->{ligand}) eq 'ARRAY' && @{$params->{ligand}};
+    push @cmd, "--has-smiles"
+        if ref($params->{smiles}) eq 'ARRAY' && @{$params->{smiles}};
+
     print STDERR "Preflight command: @cmd\n" if $ENV{P3_DEBUG};
 
     # Execute and parse JSON output
@@ -272,6 +284,16 @@ sub preflight {
         $rc = $? >> 8;
     } else {
         $rc = 1;
+    }
+
+    # A structured {"error": ...} payload means "this input can never run with
+    # this tool" — a user error, not a broken binary. Fail the job now with the
+    # message. Falling through to _default_preflight would schedule the very
+    # job we are rejecting (issue #84). Keyed off the payload rather than the
+    # exit status so it cannot be confused with click's own usage errors.
+    my $decoded = $json_out ? eval { decode_json($json_out) } : undef;
+    if ($decoded && $decoded->{error} && $decoded->{error}{message}) {
+        die "$decoded->{error}{message}\n";
     }
 
     if ($rc != 0 || !$json_out) {

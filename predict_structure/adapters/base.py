@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,36 @@ _DNA_ONLY = set("ACGTN")
 _PROTEIN_ONLY = set("DEFHIKLMPQRSVWY")  # never appear in DNA
 
 
+def _join(items: Iterable[str]) -> str:
+    """Join names the way prose does: "a", "a and b", "a, b, and c"."""
+    items = list(items)
+    if len(items) <= 1:
+        return "".join(items)
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return f"{', '.join(items[:-1])}, and {items[-1]}"
+
+
+def _tools_supporting(
+    entity_types: Iterable[EntityType], *, exclude: str = ""
+) -> list[str]:
+    """Display names of tools that accept every one of ``entity_types``.
+
+    Used to turn a rejection into a suggestion. Asks each adapter via
+    ``supports_entity_types``, the pure predicate — never
+    ``validate_entity_types``, which builds a message and would recurse back
+    into this function.
+    """
+    from predict_structure.adapters import ADAPTERS
+
+    types = frozenset(entity_types)
+    return [
+        cls.display_name or name
+        for name, cls in ADAPTERS.items()
+        if name != exclude and cls().supports_entity_types(types)
+    ]
+
+
 class BaseAdapter(ABC):
     """Base class for tool-specific adapters.
 
@@ -37,6 +68,10 @@ class BaseAdapter(ABC):
 
     #: Short tool identifier used in CLI dispatch (e.g. "boltz", "chai", "alphafold", "esmfold")
     tool_name: str = ""
+
+    #: Human-readable tool name used in user-facing error messages. Errors reach
+    #: BV-BRC users who know the tool as "AlphaFold 2", not "alphafold".
+    display_name: str = ""
 
     #: Whether this tool supports MSA input
     supports_msa: bool = True
@@ -58,14 +93,59 @@ class BaseAdapter(ABC):
         Raises:
             ValueError: If any entity type is not in ``supported_entities``.
         """
-        unsupported = entity_list.entity_types - self.supported_entities
+        self.validate_entity_types(entity_list.entity_types)
+
+    def validate_entity_types(self, entity_types: Iterable[EntityType]) -> None:
+        """Check entity *types* alone, without needing the entities themselves.
+
+        Preflight runs on the scheduler node, where workspace files are not
+        mounted (issue #84). It knows only which kinds of input were declared —
+        never their contents — so validation has to be expressible over bare
+        types. ``validate_entities`` delegates here so the submit-time check and
+        the runtime check can never drift apart.
+
+        Raises:
+            ValueError: If any entity type is not in ``supported_entities``.
+        """
+        requested = frozenset(entity_types)
+        unsupported = requested - self.supported_entities
         if unsupported:
-            names = ", ".join(sorted(e.value for e in unsupported))
-            supported = ", ".join(sorted(e.value for e in self.supported_entities))
-            raise ValueError(
-                f"{self.tool_name} does not support entity type(s): {names}. "
-                f"Supported: {supported}"
-            )
+            raise ValueError(self._unsupported_entity_message(requested, unsupported))
+
+    def supports_entity_types(self, entity_types: Iterable[EntityType]) -> bool:
+        """Whether this tool accepts every one of ``entity_types``.
+
+        The pure predicate behind ``validate_entity_types``. Subclasses with
+        constraints beyond ``supported_entities`` (see ``ChaiAdapter``) override
+        both, so suggestions never name a tool that would itself reject the input.
+        """
+        return frozenset(entity_types) <= self.supported_entities
+
+    def _unsupported_entity_message(
+        self,
+        requested: frozenset[EntityType],
+        unsupported: frozenset[EntityType],
+    ) -> str:
+        """Build a user-facing message naming the problem and a way forward.
+
+        These messages surface to BV-BRC users in job error streams, so they name
+        the tool as users know it, say which inputs were rejected, and point at
+        tools that would accept them.
+        """
+        rejected = _join(sorted(e.value for e in unsupported))
+        supported = _join(sorted(e.value for e in self.supported_entities))
+        msg = (
+            f"{self.display_name or self.tool_name} does not support {rejected} "
+            f"input (it supports {supported} only)."
+        )
+        alternatives = _tools_supporting(requested, exclude=self.tool_name)
+        if alternatives:
+            msg += f" Use {_join(alternatives)}, which support {rejected}."
+        msg += (
+            f" Otherwise remove the {rejected} input to run "
+            f"{self.display_name or self.tool_name}."
+        )
+        return msg
 
     def validate_sequences(self, entity_list: EntityList) -> None:
         """Warn if sequence characters are inconsistent with declared entity type.

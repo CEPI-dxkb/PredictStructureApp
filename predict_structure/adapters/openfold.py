@@ -31,6 +31,7 @@ class OpenFoldAdapter(BaseAdapter):
     """
 
     tool_name: str = "openfold"
+    display_name: str = "OpenFold 3"
     supports_msa: bool = True
     requires_gpu: bool = True
     min_gpu_memory_mb: int = 30000
