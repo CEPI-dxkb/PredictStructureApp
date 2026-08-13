@@ -85,7 +85,7 @@ EXPECTED = {
         "policy_data": {
             "gpu_count": 1,
             "partition": "gpu2",
-            "constraint": "A100|H100|H200",
+            "constraint": "H200",
         },
     },
     "esmfold": {

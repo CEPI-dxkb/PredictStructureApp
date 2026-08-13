@@ -410,7 +410,11 @@ sub _default_preflight {
             policy_data => {
                 gpu_count  => 1,
                 partition  => 'gpu2',
-                constraint => 'A100|H100|H200',
+                # H200 only — ESMFold2 ships torch+cu130, which needs driver
+                # >= 580. Only coconut has it; mango (560) and peach (535) do
+                # not. Same reason Boltz is pinned to H200 (#38). Must stay in
+                # step with ESMFold2Adapter.preflight().
+                constraint => 'H200',
             },
         };
     }
