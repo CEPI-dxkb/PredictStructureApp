@@ -65,9 +65,17 @@ From: /scout/containers/base-gpu.2026-04-16.001.sif
 %environment
     export BOLTZ_CACHE=/local_databases/boltz
     export CHAI_DOWNLOADS_DIR=/local_databases/chai
-    export HF_HOME=/local_databases/cache
+    export HF_HOME=/local_databases/esmfold
+    # /local_databases/cache is the world-writable dir the acceptance suite and
+    # run_qa_case.py already use; /local_databases/torch does not exist on the
+    # GPU hosts.
     export TORCH_HOME=/local_databases/cache
-    export OPENFOLD3_CACHE_DIR=/local_databases/openfold
+    # OPENFOLD_CACHE is the variable openfold3 actually reads
+    # (entry_points/parameters.py, entry_points/validator.py).
+    export OPENFOLD_CACHE=/local_databases/openfold
+    # Read by pandera/_pandas_deprecated.py in the Chai env; suppresses its
+    # import-time deprecation warning so Chai's stdout stays clean.
+    export DISABLE_PANDERA_IMPORT_WARNING=True
 
     # Issue #38: Boltz ships PyTorch with CUDA 13 libs under each conda env's
     # nvidia/*/lib dir (e.g. nvidia/cu13/lib/libnvrtc-builtins.so.13.0). These

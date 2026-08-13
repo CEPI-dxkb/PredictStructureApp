@@ -199,8 +199,13 @@ RUN mkdir -p /input /output /local_databases /cache && \
 # Model/database cache — bind-mount /local_databases at runtime
 ENV BOLTZ_CACHE=/local_databases/boltz
 ENV CHAI_DOWNLOADS_DIR=/local_databases/chai
-ENV HF_HOME=/local_databases/huggingface
-ENV TORCH_HOME=/local_databases/torch
+ENV HF_HOME=/local_databases/esmfold
+# /local_databases/cache is the world-writable dir the acceptance suite and
+# run_qa_case.py already use; /local_databases/torch does not exist on the
+# GPU hosts.
+ENV TORCH_HOME=/local_databases/cache
+# Read by pandera/_pandas_deprecated.py in the Chai env; suppresses its
+# import-time deprecation warning so Chai's stdout stays clean.
 ENV DISABLE_PANDERA_IMPORT_WARNING=True
 ENV CUDA_HOME=/usr/local/cuda-12.2
 ENV CUDNN_PATH=/usr/lib/x86_64-linux-gnu
@@ -222,7 +227,7 @@ ENV LD_LIBRARY_PATH=/opt/conda-boltz/lib/python3.11/site-packages/nvidia/cu13/li
 #ENV CHAI_DOWNLOADS_DIR=/cache
 #ENV HF_HOME=/cache/huggingface
 #ENV TORCH_HOME=/cache/torch
-ENV OPENFOLD3_CACHE_DIR=/local_databases/openfold
+ENV OPENFOLD_CACHE=/local_databases/openfold
 
 # ─── Entrypoint ───────────────────────────────────────────────────────
 
