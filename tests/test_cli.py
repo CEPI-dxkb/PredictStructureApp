@@ -666,3 +666,132 @@ class TestValidateEntityTypesAcceptsIterables:
         adapter = get_adapter("alphafold")
         with pytest.raises(ValueError, match="does not support"):
             adapter.validate_entity_types(iter([EntityType.DNA]))
+
+
+class TestAlphaFoldRetiredFromAuto:
+    """AlphaFold 2 is retired from auto selection but stays runnable (#90).
+
+    Auto must never resolve to AlphaFold for any job shape, yet every
+    explicit entry point (CLI subcommand, preflight/API tool name, adapter
+    registry) has to keep working so old jobs remain reproducible.
+    """
+
+    # Entity mixes an auto job can arrive with, protein-only first.
+    _MIXES = {
+        "protein": [(EntityType.PROTEIN, "MKTIIAL")],
+        "protein+dna": [(EntityType.PROTEIN, "MKTIIAL"), (EntityType.DNA, "ACGT")],
+        "protein+rna": [(EntityType.PROTEIN, "MKTIIAL"), (EntityType.RNA, "ACGU")],
+        "protein+ccd": [(EntityType.PROTEIN, "MKTIIAL"), (EntityType.LIGAND, "ATP")],
+        "protein+smiles": [(EntityType.PROTEIN, "MKTIIAL"), (EntityType.SMILES, "CCO")],
+        "dna": [(EntityType.DNA, "ACGT")],
+        "ligand": [(EntityType.LIGAND, "ATP")],
+    }
+
+    @staticmethod
+    def _entities(spec):
+        el = EntityList()
+        for kind, value in spec:
+            if kind is EntityType.LIGAND:
+                el.add(kind, value, name=value, format="ccd")
+            elif kind is EntityType.SMILES:
+                el.add(kind, value, name="smiles", format="smiles")
+            else:
+                el.add(kind, value)
+        return el
+
+    def test_auto_never_selects_alphafold(self, monkeypatch):
+        """Every entity mix x device x MSA source x availability set."""
+        import predict_structure.cli as cli_mod
+
+        availability_sets = [
+            {"boltz", "openfold", "chai", "esmfold", "alphafold"},  # production
+            {"alphafold"},                                          # AF2 alone
+            {"boltz", "alphafold"},
+            {"chai", "alphafold"},
+            {"boltz", "openfold", "chai", "alphafold"},             # no esmfold
+        ]
+        for installed in availability_sets:
+            monkeypatch.setattr(
+                cli_mod, "_is_tool_available", lambda t, s=installed: t in s
+            )
+            for name, spec in self._MIXES.items():
+                for device in ("gpu", "cpu"):
+                    for msa in ({}, {"has_msa": True}, {"use_msa_server": True}):
+                        try:
+                            picked = cli_mod._auto_select_tool(
+                                self._entities(spec), device=device, **msa
+                            )
+                        except Exception:
+                            continue  # refusing the job is fine; picking AF2 is not
+                        assert picked != "alphafold", (
+                            f"auto picked alphafold for {name}/{device}/{msa} "
+                            f"with {sorted(installed)} installed"
+                        )
+
+    def test_protein_only_without_msa_still_resolves(self, monkeypatch):
+        """The commonest job shape must not regress into an error.
+
+        Retiring AlphaFold removes the historical no-MSA fallback, so this
+        pins ESMFold as the one that now serves it.
+        """
+        import predict_structure.cli as cli_mod
+
+        monkeypatch.setattr(cli_mod, "_is_tool_available", lambda _t: True)
+        el = self._entities(self._MIXES["protein"])
+        assert cli_mod._auto_select_tool(el, device="gpu") == "esmfold"
+        assert cli_mod._auto_select_tool(el, device="cpu") == "esmfold"
+
+    def test_legacy_discover_tool_skips_alphafold(self, tmp_path, monkeypatch):
+        import pytest
+
+        import predict_structure.cli as cli_mod
+
+        fasta = tmp_path / "p.fasta"
+        fasta.write_text(">p\nMKTIIAL\n")
+        monkeypatch.setattr(
+            cli_mod, "_is_tool_available", lambda t: t == "alphafold"
+        )
+        with pytest.raises(Exception, match="No prediction tool found"):
+            cli_mod.discover_tool(fasta, device="gpu")
+
+    def test_path_error_does_not_advertise_alphafold(self, monkeypatch):
+        """The install hint must not name a tool auto can no longer pick."""
+        import pytest
+
+        import predict_structure.cli as cli_mod
+
+        monkeypatch.setattr(cli_mod, "_is_tool_available", lambda _t: False)
+        el = self._entities(self._MIXES["protein"])
+        with pytest.raises(Exception) as excinfo:
+            cli_mod._auto_select_tool(el, device="gpu")
+        assert "run_alphafold.py" not in str(excinfo.value)
+
+    def test_explicit_alphafold_subcommand_still_builds_a_command(self, tmp_path):
+        result = CliRunner().invoke(main, [
+            "alphafold", "--protein", str(self._fasta(tmp_path)),
+            "-o", str(tmp_path / "out"),
+            "--af2-data-dir", "/data/alphafold", "--debug",
+        ])
+        assert result.exit_code == 0
+        assert "run_alphafold.py" in result.output
+
+    def test_explicit_alphafold_still_preflights(self):
+        import json as _json
+
+        result = CliRunner().invoke(
+            main, ["preflight", "--tool", "alphafold", "--has-protein"]
+        )
+        assert result.exit_code == 0
+        payload = _json.loads(result.output.strip().splitlines()[-1])
+        assert payload["resolved_tool"] == "alphafold"
+
+    def test_alphafold_adapter_is_still_registered(self):
+        from predict_structure.adapters import get_adapter
+
+        assert get_adapter("alphafold").tool_name == "alphafold"
+
+    @staticmethod
+    def _fasta(tmp_path):
+        fasta = tmp_path / "p.fasta"
+        fasta.write_text(">p\nMKTIIALSYIFCLVFA\n")
+        return fasta

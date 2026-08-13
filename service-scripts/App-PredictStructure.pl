@@ -805,7 +805,8 @@ sub build_command {
     # If the user uploaded an MSA file, pass it directly. Otherwise, for
     # tools that benefit from MSA (boltz/openfold/chai), enable the
     # ColabFold MSA server so they fetch alignments automatically.
-    # ESMFold ignores MSA; AlphaFold builds its own from local databases.
+    # ESMFold ignores MSA; AlphaFold builds its own from local databases
+    # (AlphaFold is explicit-only now -- auto never resolves to it, #90).
 
     if ($local_msa) {
         push @cmd, "--msa", $local_msa;

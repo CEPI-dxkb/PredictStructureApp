@@ -83,15 +83,7 @@ def _attach_run_log(output_dir: Path) -> logging.FileHandler:
 # Tool auto-discovery
 # ---------------------------------------------------------------------------
 
-from predict_structure.config import get_command, get_data_dir, get_data_root, get_tools
-
-# Default AlphaFold database directory — resolved from config/env.
-# Guard against config FileNotFoundError at import time so Click can
-# still start and report configuration issues gracefully.
-try:
-    AF2_DEFAULT_DATA_DIR = get_data_dir("alphafold")
-except (FileNotFoundError, KeyError):
-    AF2_DEFAULT_DATA_DIR = Path("/databases")
+from predict_structure.config import get_command, get_data_root, get_tools
 
 
 def _is_tool_available(tool: str) -> bool:
@@ -142,19 +134,18 @@ def _auto_select_tool(
     """Auto-select the best available prediction tool based on entity types.
 
     Selection rules:
-      - Non-protein entities exclude AlphaFold and ESMFold.
+      - Non-protein entities exclude ESMFold.
       - ``device=cpu`` prefers ESMFold (others are impractical on CPU).
       - Boltz, OpenFold, and Chai require an MSA source (``--msa`` file
         or ``--use-msa-server``).  Without one they are skipped --
         running them with a dummy single-sequence MSA produces unusable
         predictions, so we exclude them rather than silently degrade.
-      - AlphaFold builds its own MSA from local databases (no external
-        server, no upload), so it is selectable without an explicit MSA.
       - ESMFold is single-sequence by design and never uses MSA.
+      - AlphaFold 2 is retired from auto selection (#90).  It stays
+        runnable when named explicitly (API ``tool: "alphafold"``, CLI
+        ``predict-structure alphafold``, CWL), but auto never picks it.
       - Otherwise pick first available in priority order:
-        Boltz > OpenFold > Chai > ESMFold > AlphaFold.
-        ESMFold before AlphaFold because it returns in minutes (vs
-        hours for AF2's local-DB MSA pipeline).
+        Boltz > OpenFold > Chai > ESMFold.
 
     Raises:
         click.UsageError: If no suitable tool is found.
@@ -174,18 +165,17 @@ def _auto_select_tool(
     excluded_by_msa: list[str] = []
 
     # Priority order: diffusion tools first (need MSA), then ESMFold
-    # (fast single-sequence), then AlphaFold (slow, builds own MSA from
-    # local DBs). ESMFold before AlphaFold because it's minutes vs hours
-    # and covers the common "quick protein fold" use case.
+    # (fast single-sequence) as the no-MSA fallback. AlphaFold 2 is
+    # deliberately absent: it is retired from auto selection (#90) because
+    # its local-DB MSA pipeline takes hours where ESMFold takes minutes,
+    # and it is no longer offered in the UI. Explicit `--tool alphafold`
+    # still runs it.
     has_protein = EntityType.PROTEIN in requested_types
-    for tool in ("boltz", "openfold", "chai", "esmfold", "alphafold"):
+    for tool in ("boltz", "openfold", "chai", "esmfold"):
         # Installed-ness first. A tool that isn't deployed was never a
         # candidate, so it must not be reported as an input or MSA problem —
         # otherwise "nothing is installed" masquerades as a user error.
-        available = _is_tool_available(tool)
-        if tool == "alphafold":
-            available = available and AF2_DEFAULT_DATA_DIR.is_dir()
-        if not available:
+        if not _is_tool_available(tool):
             continue
 
         # Ask the adapter rather than hardcoding which tools take what. Keeps
@@ -226,7 +216,7 @@ def _auto_select_tool(
         )
     raise click.UsageError(
         "No prediction tool found on PATH. "
-        "Install one of: boltz, run_openfold, chai-lab, run_alphafold.py, esm-fold-hf"
+        "Install one of: boltz, run_openfold, chai-lab, esm-fold-hf"
     )
 
 
@@ -238,7 +228,8 @@ def discover_tool(input_file: Path, device: str = "gpu") -> str:
       - ``.yaml`` / ``.yml`` input forces Boltz (only tool supporting YAML).
       - ``device=cpu`` prefers ESMFold (others are impractical on CPU).
       - Otherwise pick first available in accuracy-priority order:
-        Boltz > Chai > AlphaFold > ESMFold.
+        Boltz > OpenFold > Chai > ESMFold.  AlphaFold 2 is retired from
+        auto selection (#90) and is only reachable by naming it.
 
     Raises:
         click.UsageError: If no suitable tool is found.
@@ -259,17 +250,14 @@ def discover_tool(input_file: Path, device: str = "gpu") -> str:
             return "esmfold"
         # Fall through to general priority
 
-    # Priority order: ESMFold before AlphaFold (fast vs hours)
-    for tool in ("boltz", "openfold", "chai", "esmfold", "alphafold"):
-        if tool == "alphafold":
-            if _is_tool_available(tool) and AF2_DEFAULT_DATA_DIR.is_dir():
-                return tool
-        elif _is_tool_available(tool):
+    # Same priority order as _auto_select_tool, AlphaFold excluded (#90).
+    for tool in ("boltz", "openfold", "chai", "esmfold"):
+        if _is_tool_available(tool):
             return tool
 
     raise click.UsageError(
         "No prediction tool found on PATH. "
-        "Install one of: boltz, run_openfold, chai-lab, run_alphafold.py, esm-fold-hf"
+        "Install one of: boltz, run_openfold, chai-lab, esm-fold-hf"
     )
 
 
@@ -1084,7 +1072,11 @@ def chai(protein, dna, rna, ligand, smiles,
 @backend_options
 def alphafold(protein, dna, rna, ligand, smiles,
               af2_data_dir, af2_model_preset, af2_db_preset, af2_max_template_date, **shared):
-    """Predict structure with AlphaFold 2 (MSA-based, high accuracy)."""
+    """Predict structure with AlphaFold 2 (MSA-based, high accuracy).
+
+    Retired from auto selection and from the BV-BRC UI (#90), but kept
+    fully runnable here and via the API/CWL for reproducing older jobs.
+    """
     entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
     extra = {
         "af2_data_dir": af2_data_dir,
@@ -1202,17 +1194,13 @@ def openfold(protein, dna, rna, ligand, smiles,
 
 # Sensible defaults applied when auto-discovery selects a tool.
 # These match the per-tool subcommand defaults so the user doesn't need
-# to provide tool-specific flags.
+# to provide tool-specific flags. No "alphafold" entry: auto can no
+# longer resolve to it (#90); the alphafold subcommand carries its own
+# defaults.
 _AUTO_DEFAULTS: dict[str, dict] = {
     "boltz": {},
     "openfold": {},
     "chai": {},
-    "alphafold": {
-        "af2_data_dir": str(AF2_DEFAULT_DATA_DIR),
-        "af2_model_preset": "monomer",
-        "af2_db_preset": "reduced_dbs",
-        "af2_max_template_date": "2022-01-01",
-    },
     "esmfold": {},
     "esmfold2": {},
 }
@@ -1231,14 +1219,16 @@ def auto(protein, dna, rna, ligand, smiles, use_msa_server, **shared):
 
     Boltz, OpenFold, and Chai are only selected when an MSA source is
     available (--msa file or --use-msa-server).  Without one, they are
-    skipped in favor of AlphaFold (local MSA databases) or ESMFold
-    (single-sequence).
+    skipped in favor of ESMFold (single-sequence).
+
+    AlphaFold 2 is never auto-selected; run `predict-structure alphafold`
+    to use it.
 
     \b
-    Priority order (GPU, MSA available):  Boltz > OpenFold > Chai > ESMFold > AlphaFold
-    Priority order (GPU, no MSA):         ESMFold > AlphaFold
+    Priority order (GPU, MSA available):  Boltz > OpenFold > Chai > ESMFold
+    Priority order (GPU, no MSA):         ESMFold
     Priority order (CPU):                 ESMFold > others
-    Non-protein entities:                 AlphaFold and ESMFold excluded
+    Non-protein entities:                 ESMFold excluded
     """
     entity_list = _build_entity_list(protein, dna, rna, ligand, smiles, sequence_files=shared.get("sequence_files", ()), force=shared.get("force", False))
     tool_name = _auto_select_tool(
