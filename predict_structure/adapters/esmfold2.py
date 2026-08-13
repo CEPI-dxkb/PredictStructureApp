@@ -108,6 +108,11 @@ class ESMFold2Adapter(BaseAdapter):
     display_name: str = "ESMFold2"
     supports_msa: bool = False
     requires_gpu: bool = True
+    #: Measured peak on H200: 13.9-14.0 GB allocated, 14.1-14.3 GB reserved
+    #: (crambin 46aa through ubiquitin+ATP 107 tokens). Without this the
+    #: adapter inherited BaseAdapter's 8000 MiB, so the GPU precheck would wave
+    #: through a host with 8-14 GB free and the run would then OOM.
+    min_gpu_memory_mb: int = 18000
     supported_entities: frozenset[EntityType] = frozenset({
         EntityType.PROTEIN, EntityType.DNA, EntityType.RNA,
         EntityType.LIGAND, EntityType.SMILES,
@@ -240,6 +245,12 @@ class ESMFold2Adapter(BaseAdapter):
             "policy_data": {
                 "gpu_count": 1,
                 "partition": "gpu2",
-                "constraint": "A100|H100|H200",
+                # H200 only. /opt/conda-esmfold2 ships torch 2.12.0+cu130, and
+                # CUDA 13 binaries need driver >= 580 — coconut (H200) has it,
+                # mango (H100, driver 560) and peach (V100, 535) do not. Boltz
+                # carries the same torch build and was narrowed to H200 for
+                # exactly this reason (#38). "A100" was also a phantom: no A100
+                # host exists in the cluster.
+                "constraint": "H200",
             },
         }

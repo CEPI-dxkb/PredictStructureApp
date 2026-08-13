@@ -146,7 +146,8 @@ class TestESMFold2Adapter:
         assert pf["memory"] == "32G"
         assert pf["policy_data"]["partition"] == "gpu2"
         assert pf["policy_data"]["gpu_count"] == 1
-        assert pf["policy_data"]["constraint"] == "A100|H100|H200"
+        # H200 only: torch+cu130 needs driver >= 580 (#38, #75)
+        assert pf["policy_data"]["constraint"] == "H200"
 
     def test_normalize_output(self, tmp_path, tmp_output):
         from predict_structure.adapters.esmfold2 import ESMFold2Adapter
@@ -202,3 +203,46 @@ class TestESMFold2Adapter:
         adapter = ESMFold2Adapter()
         with pytest.raises(FileNotFoundError, match="No .cif"):
             adapter.normalize_output(raw, tmp_output)
+
+
+class TestESMFold2SchedulingContract:
+    """Scheduling facts verified by real GPU runs on 2026-08-13 (#75).
+
+    Four predictions in folding_260813.2.sif on coconut (H200) measured a peak
+    of 13.9-14.0 GB allocated / 14.1-14.3 GB reserved.
+    """
+
+    def test_vram_floor_exceeds_measured_peak(self):
+        from predict_structure.adapters.base import BaseAdapter
+        from predict_structure.adapters.esmfold2 import ESMFold2Adapter
+
+        adapter = ESMFold2Adapter()
+        assert adapter.min_gpu_memory_mb > 14_500, (
+            "measured peak is ~14 GB; a lower floor lets the GPU precheck pass "
+            "a host that will then OOM"
+        )
+        assert adapter.min_gpu_memory_mb != BaseAdapter.min_gpu_memory_mb, (
+            "must not silently inherit the 8000 MiB default"
+        )
+
+    def test_constraint_is_h200_only(self):
+        """torch+cu130 needs driver >= 580 — only coconut has it (#38)."""
+        from predict_structure.adapters.esmfold2 import ESMFold2Adapter
+
+        constraint = ESMFold2Adapter().preflight()["policy_data"]["constraint"]
+        assert constraint == "H200"
+        assert "A100" not in constraint, "no A100 host exists in the cluster"
+
+    def test_perl_service_constraint_matches_adapter(self):
+        """The Perl carries its own copy; drift would silently misschedule."""
+        import re
+        from pathlib import Path
+
+        from predict_structure.adapters.esmfold2 import ESMFold2Adapter
+
+        perl = (Path(__file__).resolve().parent.parent
+                / "service-scripts" / "App-PredictStructure.pl").read_text()
+        block = re.search(r'\$tool eq "esmfold2".*?\n    \}', perl, re.S)
+        assert block, "esmfold2 preflight block not found in the service script"
+        expected = ESMFold2Adapter().preflight()["policy_data"]["constraint"]
+        assert f"constraint => '{expected}'" in block.group(0)

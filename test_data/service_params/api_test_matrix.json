@@ -1,6 +1,6 @@
 {
-  "_comment": "Comprehensive API test matrix v2.1. 52 cases: 29 tool x entity, 12 param variations, 8 negative, 3 preflight-rejection. expected=reject means the job must be refused at submit time, before SLURM allocates anything (#84).",
-  "_version": "2.1",
+  "_comment": "Comprehensive API test matrix v2.1. 55 cases: 29 tool x entity, 12 param variations, 8 negative, 3 preflight-rejection. expected=reject means the job must be refused at submit time, before SLURM allocates anything (#84).",
+  "_version": "2.2",
   "_previous": "api_test_matrix_v1.json",
   "ws_inputs": "/awilke@bvbrc/home/AppTests/inputs",
   "ws_output": "/awilke@bvbrc/home/AppTests",
@@ -8,6 +8,10 @@
 
     {"id": "E01", "name": "esmfold", "tool": "esmfold", "input_file": "simple_protein.fasta", "expected": "pass"},
     {"id": "E02", "name": "esmfold_dna_reject", "tool": "esmfold", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "expected": "reject", "expected_error": "does not support"},
+
+    {"id": "F01", "name": "esmfold2_protein", "tool": "esmfold2", "input_file": "simple_protein.fasta", "expected": "pass", "note": "ESMFold2 had zero matrix coverage until 2026-08-13 (#75); H200-only via torch+cu130"},
+    {"id": "F02", "name": "esmfold2_smiles", "tool": "esmfold2", "input_file": "simple_protein.fasta", "smiles": ["CCO"], "expected": "pass"},
+    {"id": "F03", "name": "esmfold2_dna", "tool": "esmfold2", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "expected": "pass"},
 
     {"id": "B01", "name": "boltz_msa_upload", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "expected": "pass"},
     {"id": "B02", "name": "boltz_msa_server", "tool": "boltz", "input_file": "simple_protein.fasta", "expected": "pass", "note": "MSA via ColabFold server"},
