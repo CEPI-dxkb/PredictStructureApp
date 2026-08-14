@@ -39,6 +39,12 @@ _TOOL_MSA_SPECS: dict[str, _ToolMsaSpec] = {
     "openfold":  _ToolMsaSpec(file_suffixes=(".a3m",), allows_directory=True),
     "alphafold": _ToolMsaSpec(file_suffixes=(".a3m", ".sto"), allows_directory=True),
     "esmfold":   _ToolMsaSpec(file_suffixes=(), allows_directory=False, ignored=True),
+    # ESMFold2 takes a per-chain MSA (#95) but only as A3M: the runner calls
+    # MSA.from_a3m. Without this entry esmfold2 fell through to the "unknown
+    # tool" branch and was not validated at all, so a directory reached the
+    # adapter as a raw IsADirectoryError traceback and a .sto/.pqt file
+    # produced a nonsense chain-length mismatch message.
+    "esmfold2":  _ToolMsaSpec(file_suffixes=(".a3m",), allows_directory=False),
 }
 
 
