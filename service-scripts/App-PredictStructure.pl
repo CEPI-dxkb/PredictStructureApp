@@ -535,83 +535,103 @@ sub run_app {
     _validate_params($params);
 
     # Ensure the HuggingFace cache actually holds the weights this tool needs.
-    # ESMFold and ESMFold2 load via transformers, which reads HF_HOME.
     #
-    # This used to probe for a WRITABLE cache root, which is the wrong test: we
-    # set HF_HUB_OFFLINE below, so nothing is ever written — we only read. On a
-    # worker where /local_databases/esmfold failed -w, the probe skipped it and
-    # took /local_databases/cache, which holds facebook/esmfold_v1 but NOT
-    # biohub/ESMFold2. ESMFold therefore worked while every ESMFold2 job died
-    # with "couldn't connect to huggingface.co ... and couldn't find them in the
-    # cached files" (task 23418633) — silently, because the pick was only logged
-    # under P3_DEBUG. Probe for the model directory instead, and log the choice
-    # unconditionally so the next such mismatch is visible (#75).
+    # History, because each step here was a production failure:
+    #  * The probe once required a WRITABLE cache root. Wrong test — we set
+    #    HF_HUB_OFFLINE below and only ever read. On a worker where
+    #    /local_databases/esmfold failed -w it took /local_databases/cache,
+    #    which has facebook/esmfold_v1 but not biohub/ESMFold2, so ESMFold
+    #    worked and every ESMFold2 job died offline (task 23418633).
+    #  * Checking one repo per tool was not enough: ESMFold2 also loads a 24G
+    #    ESMC-6B encoder, so a cache with only ESMFold2 failed one layer
+    #    deeper with the same opaque error (task 23418786).
+    #  * Checking that the repo DIRECTORY exists is still not enough: an
+    #    interrupted copy leaves the directory present and unusable, and it
+    #    would be selected over a complete cache. Resolve the revision the way
+    #    transformers does, and require its config.json.
+    # The chosen cache is logged unconditionally — a silent pick is what made
+    # the first of these cost a production job to diagnose (#75).
     {
+        # $params->{tool} is unvalidated here (_validate_params checks inputs,
+        # not the tool), and it is interpolated into a path below. Anything
+        # unexpected falls back to "auto"; the CLI rejects it properly a moment
+        # later via click.Choice.
         my $hf_tool = $params->{tool} // "auto";
-        # A tool may need MORE THAN ONE repo: ESMFold2 loads an ESMC-6B encoder
-        # (24G) alongside its own weights (1.3G). Checking only the headline
-        # repo picked a cache that had ESMFold2 but not ESMC, which failed at
-        # model-load with the same opaque "couldn't connect" error one layer
-        # deeper (task 23418786). Require every repo the tool needs.
+        $hf_tool = "auto" unless $hf_tool =~ /^[a-z][a-z0-9]*$/;
+
         my %REPOS_FOR_TOOL = (
             esmfold  => ["models--facebook--esmfold_v1"],
             esmfold2 => ["models--biohub--ESMFold2", "models--biohub--ESMC-6B"],
-            # "auto" is resolved by the CLI, after this runs. Among the tools it
-            # can pick (boltz, openfold, chai, esmfold — see _auto_select_tool)
-            # only ESMFold needs HuggingFace weights, so require those. The
-            # others ignore HF_HOME entirely, making this harmless for them and
-            # correct when auto lands on ESMFold.
+            # "auto" is resolved by the CLI after this runs. Of the tools it can
+            # pick (boltz, openfold, chai, esmfold) only ESMFold needs HF
+            # weights, so require those.
             auto     => ["models--facebook--esmfold_v1"],
         );
         my $repos = $REPOS_FOR_TOOL{$hf_tool};
 
-        my $has_model = sub {
-            my ($root) = @_;
-            return 0 unless $root && -d $root;
-            return 1 unless defined $repos;      # tool needs no HF weights
-            for my $repo (@$repos) {
-                return 0 unless -r "$root/hub/$repo";
+        # Tools with no entry never read HF_HOME (boltz/chai/openfold/alphafold
+        # have no huggingface libraries in their conda envs at all). Leave their
+        # environment untouched rather than repointing HF_HOME at a directory
+        # that is not a cache and logging that it "holds the required weights".
+        if (defined $repos) {
+            my $usable = sub {
+                my ($root) = @_;
+                return 0 unless $root && -d $root;
+                for my $repo (@$repos) {
+                    my $dir = "$root/hub/$repo";
+                    return 0 unless -d $dir;
+                    # refs/main names the revision transformers resolves. A
+                    # half-copied repo has the directory but not this, or not
+                    # the snapshot it points at.
+                    open(my $fh, "<", "$dir/refs/main") or return 0;
+                    chomp(my $rev = <$fh> // "");
+                    close $fh;
+                    return 0 unless length $rev;
+                    return 0 unless -r "$dir/snapshots/$rev/config.json";
+                }
+                return 1;
+            };
+
+            my $hf = $ENV{HF_HOME} // "";
+            my $hf_ok = $usable->($hf);
+
+            # Prefer the tool's own directory, matching the per-tool layout the
+            # other tools use and keeping each tool's weights independently
+            # updatable. Only offered for tools we actually know about.
+            my @hf_candidates = (
+                (exists $REPOS_FOR_TOOL{$hf_tool} && $hf_tool ne "auto"
+                    ? "/local_databases/$hf_tool" : ()),
+                "/local_databases/esmfold",
+                "/local_databases/cache",
+            );
+            my %seen;
+            @hf_candidates = grep { !$seen{$_}++ } @hf_candidates;
+
+            if (!$hf_ok) {
+                for my $candidate (@hf_candidates) {
+                    next unless $usable->($candidate);
+                    $ENV{HF_HOME} = $candidate;
+                    $hf_ok = 1;
+                    print "Set HF_HOME=$candidate (holds "
+                        . join(", ", @$repos) . ")\n";
+                    last;
+                }
             }
-            return 1;
-        };
 
-        my $hf = $ENV{HF_HOME} // "";
-        my $hf_ok = $has_model->($hf);
-
-        # Prefer the tool's own directory (/local_databases/esmfold2 for
-        # esmfold2), matching the per-tool layout the other tools already use
-        # and keeping each tool's weights independently updatable. Those dirs
-        # are owned by the service account; the shared cache is the fallback.
-        my @hf_candidates = grep { defined && length }
-            ("/local_databases/$hf_tool", "/local_databases/esmfold",
-             "/local_databases/cache");
-
-        if (!$hf_ok) {
-            for my $candidate (@hf_candidates) {
-                next unless $has_model->($candidate);
-                $ENV{HF_HOME} = $candidate;
-                $hf_ok = 1;
-                print "Set HF_HOME=$candidate (holds "
-                    . ($repos ? join(", ", @$repos) : "the required weights")
-                    . ")\n";
-                last;
+            # No usable cache: fail now. The old behaviour pointed HF_HOME at a
+            # temp dir and let the tool try to download, which on a worker with
+            # no outbound network burns the whole GPU allocation before dying
+            # with the same opaque error this block exists to prevent.
+            if (!$hf_ok) {
+                die "No local HuggingFace cache holds "
+                  . join(", ", @$repos)
+                  . " (checked HF_HOME=" . ($hf ne "" ? $hf : "<unset>")
+                  . " and " . join(", ", @hf_candidates)
+                  . "). Populate one of those paths on this worker.\n";
             }
-        }
 
-        if (!$hf_ok) {
-            my $hf_tmp = ($ENV{P3_WORKDIR} // $ENV{TMPDIR} // "/tmp") . "/hf_cache";
-            make_path($hf_tmp);
-            $ENV{HF_HOME} = $hf_tmp;
-            print STDERR "Warning: no local HuggingFace cache contains all of "
-                       . ($repos ? join(", ", @$repos) : "the required weights")
-                       . " (checked HF_HOME=$hf and " . join(", ", @hf_candidates)
-                       . "); redirected to $hf_tmp, which needs network access "
-                       . "and will be slow\n";
-        }
-
-        # Offline only when a cache that actually has the model was found;
-        # the temp-dir fallback still needs the network (issue #40).
-        if ($hf_ok) {
+            # Offline so transformers loads straight from the cache instead of
+            # revalidating against the Hub on every from_pretrained (issue #40).
             $ENV{HF_HUB_OFFLINE} = 1;
             print "Set HF_HUB_OFFLINE=1 (HF_HOME=$ENV{HF_HOME})\n";
         }

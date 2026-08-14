@@ -485,122 +485,120 @@ class TestRunnerBuildsProteinInput:
             _build_inputs(spec)
 
 
-class TestHFCacheProbeContract:
-    """The service script must pick an HF cache by CONTENT, not writability.
+class TestHFCacheProbe:
+    """Execute the service script's HF cache probe against fake cache trees.
 
-    Regression for task 23418633: the probe tested `-w` on the cache root, so a
-    worker where /local_databases/esmfold failed that test fell through to
-    /local_databases/cache — which holds facebook/esmfold_v1 but not
-    biohub/ESMFold2. ESMFold worked, every ESMFold2 job died offline against a
-    cache lacking the model, and the choice was only logged under P3_DEBUG.
+    These replace an earlier set of text assertions over the Perl source. Those
+    were worthless: mutating `next unless $has_model->($candidate)` to
+    `next unless 1` — i.e. verifying nothing, the exact bug this block exists to
+    prevent — left all of them green.
     """
 
-    def _perl(self):
-        from pathlib import Path
-
-        return (Path(__file__).resolve().parent.parent
-                / "service-scripts" / "App-PredictStructure.pl").read_text()
-
-    def test_probe_checks_the_model_directory(self):
-        perl = self._perl()
-        assert "models--biohub--ESMFold2" in perl, (
-            "the probe must look for the ESMFold2 repo dir, not just a writable root"
-        )
-        assert "models--facebook--esmfold_v1" in perl
-
-    def test_probe_requires_the_esmc_encoder_too(self):
-        """ESMFold2 loads an ESMC-6B encoder (24G) besides its own 1.3G weights.
-
-        Checking only the headline repo selected a cache holding ESMFold2 but
-        not ESMC, which failed one layer deeper at model-load with the same
-        opaque "couldn't connect" error (task 23418786).
-        """
+    def _run_probe(self, root, tool, hf_home=""):
+        """Extract the probe block, run it under a fake /local_databases."""
         import re
-
-        perl = self._perl()
-        block = re.search(r"# Ensure the HuggingFace cache.*?\n    \}\n", perl, re.S).group(0)
-        m = re.search(r"esmfold2\s*=>\s*\[([^\]]+)\]", block)
-        assert m, "esmfold2 repo list not found"
-        repos = m.group(1)
-        assert "models--biohub--ESMFold2" in repos
-        assert "models--biohub--ESMC-6B" in repos, (
-            "ESMFold2 cannot load without the ESMC encoder; a cache missing it "
-            "must not be selected"
-        )
-
-    def test_probe_does_not_gate_on_writability(self):
-        """HF_HUB_OFFLINE means we only ever read; -w rejects good read-only caches."""
-        import re
-
-        perl = self._perl()
-        block = re.search(r"# Ensure the HuggingFace cache.*?\n    \}\n", perl, re.S)
-        assert block, "HF cache block not found"
-        assert "-w " not in block.group(0), (
-            "the HF cache probe must not test writability — that is what sent "
-            "ESMFold2 jobs to a cache without the model"
-        )
-
-    def test_per_tool_directory_is_preferred(self):
-        """/local_databases/<tool> wins over the shared cache.
-
-        Those dirs are owned by the service account and are independently
-        updatable per tool; the shared cache is the fallback. Depending on a
-        personal account's group permissions for production weights is what
-        broke ESMFold2 in the first place.
-        """
-        import re
-
-        perl = self._perl()
-        # Match the candidate list itself, not the prose above it — the comment
-        # mentions /local_databases/cache while explaining the old bug.
-        decl = re.search(r"my \@hf_candidates\s*=(.*?);", perl, re.S)
-        assert decl, "candidate list not found"
-        listing = decl.group(1)
-        i_tool = listing.index("/local_databases/$hf_tool")
-        i_cache = listing.index("/local_databases/cache")
-        assert i_tool < i_cache, (
-            f"the tool's own directory must be probed before the shared cache: {listing}"
-        )
-
-    def test_cache_choice_is_logged_unconditionally(self):
-        """The silent pick is what made this cost a production job to diagnose."""
-        import re
-
-        perl = self._perl()
-        block = re.search(r"# Ensure the HuggingFace cache.*?\n    \}\n", perl, re.S).group(0)
-        for line in block.splitlines():
-            if "Set HF_HOME=" in line or "Set HF_HUB_OFFLINE" in line:
-                assert "P3_DEBUG" not in line, f"cache choice still debug-gated: {line.strip()}"
-
-
-class TestAutoToolHFCache:
-    """`auto` is resolved by the CLI *after* the Perl picks a cache.
-
-    The probe therefore sees tool="auto". Without an entry it verified nothing
-    and accepted any existing directory — so an auto job that resolved to
-    ESMFold could be handed a cache without esmfold_v1 and then fail offline.
-    """
-
-    def test_auto_requires_the_esmfold_weights(self):
-        import re
+        import subprocess
         from pathlib import Path
 
         perl = (Path(__file__).resolve().parent.parent
                 / "service-scripts" / "App-PredictStructure.pl").read_text()
-        block = re.search(r"# Ensure the HuggingFace cache.*?\n    \}\n", perl, re.S).group(0)
-        m = re.search(r"auto\s*=>\s*\[([^\]]+)\]", block)
-        assert m, "auto has no repo list — the probe would verify nothing for auto jobs"
-        assert "models--facebook--esmfold_v1" in m.group(1)
+        m = re.search(r"    # Ensure the HuggingFace cache.*?\n    \}\n", perl, re.S)
+        assert m, "HF cache block not found"
+        block = m.group(0).replace("/local_databases", str(root))
+
+        script = (
+            'use strict; use warnings;\n'
+            'my $params = { tool => $ARGV[0] };\n'
+            + block +
+            'print "RESULT HF_HOME=", ($ENV{HF_HOME} // ""), '
+            '" OFFLINE=", ($ENV{HF_HUB_OFFLINE} // ""), "\\n";\n'
+        )
+        env = {"PATH": "/usr/bin:/bin", "HF_HOME": hf_home}
+        r = subprocess.run(["perl", "-e", script, tool],
+                           capture_output=True, text=True, env=env, timeout=30)
+        out = {"rc": r.returncode, "stdout": r.stdout, "stderr": r.stderr,
+               "HF_HOME": None, "OFFLINE": None}
+        mm = re.search(r"RESULT HF_HOME=(\S*) OFFLINE=(\S*)", r.stdout)
+        if mm:
+            out["HF_HOME"], out["OFFLINE"] = mm.group(1), mm.group(2)
+        return out
+
+    def _repo(self, root, cache, name, *, complete=True):
+        d = root / cache / "hub" / name
+        (d / "refs").mkdir(parents=True, exist_ok=True)
+        if not complete:
+            return d                      # directory only: an interrupted copy
+        (d / "refs" / "main").write_text("deadbeef\n")
+        snap = d / "snapshots" / "deadbeef"
+        snap.mkdir(parents=True, exist_ok=True)
+        (snap / "config.json").write_text("{}")
+        return d
+
+    def test_rejects_a_cache_missing_the_esmc_encoder(self, tmp_path):
+        """ESMFold2 needs ESMC-6B too; a cache with only ESMFold2 must lose."""
+        self._repo(tmp_path, "esmfold", "models--biohub--ESMFold2")
+        self._repo(tmp_path, "esmfold", "models--biohub--ESMC-6B")
+        self._repo(tmp_path, "cache", "models--biohub--ESMFold2")
+        out = self._run_probe(tmp_path, "esmfold2")
+        assert out["HF_HOME"] == str(tmp_path / "esmfold"), out
+        assert out["OFFLINE"] == "1"
+
+    def test_rejects_a_half_copied_repo(self, tmp_path):
+        """An interrupted copy must not win over a complete cache.
+
+        The per-tool directory is probed first, so a mid-rsync esmfold2 would
+        otherwise be selected and then fail at model load.
+        """
+        self._repo(tmp_path, "esmfold2", "models--biohub--ESMFold2", complete=False)
+        self._repo(tmp_path, "esmfold2", "models--biohub--ESMC-6B", complete=False)
+        self._repo(tmp_path, "esmfold", "models--biohub--ESMFold2")
+        self._repo(tmp_path, "esmfold", "models--biohub--ESMC-6B")
+        out = self._run_probe(tmp_path, "esmfold2")
+        assert out["HF_HOME"] == str(tmp_path / "esmfold"), out
+
+    def test_prefers_the_per_tool_directory_when_complete(self, tmp_path):
+        for cache in ("esmfold2", "esmfold"):
+            self._repo(tmp_path, cache, "models--biohub--ESMFold2")
+            self._repo(tmp_path, cache, "models--biohub--ESMC-6B")
+        out = self._run_probe(tmp_path, "esmfold2")
+        assert out["HF_HOME"] == str(tmp_path / "esmfold2"), out
+
+    def test_dies_rather_than_attempting_a_doomed_download(self, tmp_path):
+        """No usable cache: fail fast instead of burning the GPU allocation."""
+        (tmp_path / "cache").mkdir(parents=True)
+        out = self._run_probe(tmp_path, "esmfold2")
+        assert out["rc"] != 0, out
+        assert "No local HuggingFace cache holds" in out["stderr"], out
+        assert "models--biohub--ESMC-6B" in out["stderr"]
+
+    def test_leaves_non_hf_tools_alone(self, tmp_path):
+        """boltz has no HF libraries; repointing HF_HOME at it was a landmine."""
+        (tmp_path / "boltz").mkdir(parents=True)
+        out = self._run_probe(tmp_path, "boltz")
+        assert out["rc"] == 0, out
+        assert out["HF_HOME"] == "", out
+        assert out["OFFLINE"] == "", out
+
+    def test_auto_is_checked_against_the_esmfold_weights(self, tmp_path):
+        self._repo(tmp_path, "esmfold", "models--facebook--esmfold_v1")
+        out = self._run_probe(tmp_path, "auto")
+        assert out["HF_HOME"] == str(tmp_path / "esmfold"), out
+        assert out["OFFLINE"] == "1"
+
+    def test_a_bogus_tool_name_cannot_escape_the_cache_root(self, tmp_path):
+        """tool is unvalidated here and is interpolated into a path."""
+        self._repo(tmp_path, "esmfold", "models--facebook--esmfold_v1")
+        for bad in ("", "../../../tmp", "Boltz;rm -rf /"):
+            out = self._run_probe(tmp_path, bad)
+            assert out["HF_HOME"] in ("", str(tmp_path / "esmfold")), (bad, out)
 
     def test_auto_cannot_resolve_to_esmfold2(self):
-        """If that ever changes, auto's repo list must gain ESMC-6B too."""
+        """If that changes, auto's repo list must gain ESMC-6B."""
         import inspect
 
         from predict_structure import cli
 
-        src = inspect.getsource(cli._auto_select_tool)
-        tuple_src = src.split("for tool in (")[1].split(")")[0]
+        tuple_src = inspect.getsource(cli._auto_select_tool).split("for tool in (")[1].split(")")[0]
         assert "esmfold2" not in tuple_src, (
-            "auto can now pick esmfold2 — add its repos to %REPOS_FOR_TOOL{auto} "
-            "in App-PredictStructure.pl or auto jobs will fail offline"
+            "auto can now pick esmfold2 — add its repos to %REPOS_FOR_TOOL{auto}"
         )
