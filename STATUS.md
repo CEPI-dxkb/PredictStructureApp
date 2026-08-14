@@ -1,17 +1,26 @@
 # Project Status
 
 **Last updated:** 2026-08-13
-**Current version:** v0.17.0 (HEAD: abda889)
-**Production container:** `folding_260813.2.sif`
+**Current version:** v0.17.0 (HEAD: 160dc09)
+**Production container:** `folding_260813.3.sif`
 
 ## Next action
 
-`folding_260813.2.sif` is deployed and the full API matrix passes **48/48**.
-Open PRs to land: #87 (this branch), #89 (test-runner cold-start fix).
+`folding_260813.3.sif` is deployed and registered (predict_structure 160dc09,
+carrying #90 + #75). Nothing is blocked on infrastructure.
 
-Then: decide #85 (retire AlphaFold 2) — it is the only thing keeping AlphaFold
-cases out of the matrix — and pick up #50, whose report side is already built
-and only needs the Boltz PAE npz converted to `predictions/pae.json`.
+Run the matrix with `--include-negative` to re-verify against it, and in
+particular **F01-F03 — the first ESMFold2 cases ever submitted through BV-BRC**.
+That run is what closes #75. Expect the first submission to take several minutes
+while the SIF is staged into the container cache; the runner now allows 900s, so
+a slow first call is no longer a spurious failure.
+
+Two issues wait only on write access to BV-BRC-Web: #90's UI half and #88's
+eye-icon action. The #90 patch is prepared at
+`docs/bvbrc-web-90-retire-alphafold.patch`.
+
+After that: #50 is the highest-value remaining fix — the report side already
+ships, it only needs the Boltz PAE npz converted to `predictions/pae.json`.
 
 ### Resolved 2026-08-13: submission failure after the container switch
 
@@ -41,6 +50,26 @@ was staged into the container cache — the runner's flat 120 s timeout turned
 that routine cold start into three more spurious failures. Fixed in #89.
 
 ## What's done
+
+### AlphaFold retirement + ESMFold2 unblock (2026-08-13, later)
+
+- **Fix #90: AlphaFold retired from auto** (56b1e5a, PR #91) — `auto` no longer
+  selects it in either `_auto_select_tool` or the legacy `discover_tool`; API and
+  CLI access deliberately preserved and now pinned by tests. The issue's premise
+  turned out to be wrong: a 432-case sweep showed ESMFold already ranked ahead of
+  AlphaFold with the same supported entities, so AlphaFold was only reachable when
+  ESMFold was absent. Production behavior is byte-identical.
+- **Fix #75 blockers: ESMFold2** (160dc09, PR #92) — verified end-to-end with four
+  real GPU predictions (crambin 50.4s, ubiquitin 37.8s, ubiquitin+ATP 24.7s, peak
+  ~14 GB, sane geometry). Two production faults found and fixed: preflight
+  requested `A100|H100|H200` while the env ships torch+cu130, which needs driver
+  >= 580 — only coconut qualifies, so a job on mango would have failed exactly as
+  Boltz did (#38); and `min_gpu_memory_mb` was unset, inheriting 8000 MiB against
+  a ~14 GB peak, so the VRAM precheck would pass a host that then OOMs. Now H200
+  and 18000. Added matrix cases F01-F03 — ESMFold2 had zero coverage.
+- **#75 rewritten** — its title and all five listed blockers were stale.
+- **Container `folding_260813.3.sif`** built, verified (21/21 env checks; both
+  fixes confirmed in the packed image), deployed and registered.
 
 ### Preflight validation + container rebuild (2026-08-13)
 
