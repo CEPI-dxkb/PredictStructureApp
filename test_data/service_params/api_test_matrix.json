@@ -1,6 +1,6 @@
 {
-  "_comment": "Comprehensive API test matrix v2.1. 55 cases: 29 tool x entity, 12 param variations, 8 negative, 3 preflight-rejection. expected=reject means the job must be refused at submit time, before SLURM allocates anything (#84).",
-  "_version": "2.2",
+  "_comment": "Comprehensive API test matrix v2.1. 56 cases: 29 tool x entity, 12 param variations, 8 negative, 3 preflight-rejection. expected=reject means the job must be refused at submit time, before SLURM allocates anything (#84).",
+  "_version": "2.3",
   "_previous": "api_test_matrix_v1.json",
   "ws_inputs": "/awilke@bvbrc/home/AppTests/inputs",
   "ws_output": "/awilke@bvbrc/home/AppTests",
@@ -10,6 +10,7 @@
     {"id": "E02", "name": "esmfold_dna_reject", "tool": "esmfold", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "expected": "reject", "expected_error": "does not support"},
 
     {"id": "F01", "name": "esmfold2_protein", "tool": "esmfold2", "input_file": "simple_protein.fasta", "expected": "pass", "note": "ESMFold2 had zero matrix coverage until 2026-08-13 (#75); H200-only via torch+cu130"},
+    {"id": "F04", "name": "esmfold2_msa_upload", "tool": "esmfold2", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "expected": "pass", "note": "ESMFold2 accepts a per-chain MSA (#95); crambin.a3m query matches simple_protein.fasta"},
     {"id": "F02", "name": "esmfold2_smiles", "tool": "esmfold2", "input_file": "simple_protein.fasta", "smiles": ["CCO"], "expected": "pass"},
     {"id": "F03", "name": "esmfold2_dna", "tool": "esmfold2", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "expected": "pass"},
 

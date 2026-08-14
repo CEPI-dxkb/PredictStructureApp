@@ -71,7 +71,15 @@ def _build_inputs(spec: dict[str, Any]) -> list[Any]:
                 "cannot accept MSA input"
             )
         logger.info("Loading MSA for chain %s from %s", record.get("id"), path)
-        msa = MSA.from_a3m(path, remove_insertions=True)
+        try:
+            msa = MSA.from_a3m(path, remove_insertions=True)
+        except Exception as exc:
+            # Name the chain and the file: a bare FileNotFoundError from deep in
+            # the loader tells the user nothing about which input was at fault.
+            raise ValueError(
+                f"Failed to load the MSA for chain {record.get('id')!r} from "
+                f"{path}: {exc}"
+            ) from exc
         logger.info("MSA depth %d for chain %s", len(msa.sequences), record.get("id"))
         return msa
 
@@ -95,10 +103,18 @@ def _build_inputs(spec: dict[str, Any]) -> list[Any]:
         etype = rec.get("type")
         cid = rec.get("id")
         if etype == "protein":
-            inputs.append(ProteinInput(
-                id=cid, sequence=rec["sequence"], modifications=_mods(rec),
-                msa=_msa(rec),
-            ))
+            # Pass msa= only when there is one. This module is deliberately
+            # defensive about optional parts of the upstream API, and an esm
+            # build whose ProteinInput lacks the field (ESMFold2-Fast is
+            # single-sequence) would otherwise reject the kwarg and break every
+            # job, including ones with no MSA at all.
+            kwargs: dict[str, Any] = {
+                "id": cid, "sequence": rec["sequence"], "modifications": _mods(rec),
+            }
+            msa = _msa(rec)
+            if msa is not None:
+                kwargs["msa"] = msa
+            inputs.append(ProteinInput(**kwargs))
         elif etype == "dna":
             inputs.append(DNAInput(id=cid, sequence=rec["sequence"], modifications=_mods(rec)))
         elif etype == "rna":

@@ -363,3 +363,123 @@ class TestMsaServerFlagContract:
                 f"{tool} is excluded from the MSA-server flag but its CLI "
                 f"accepts it — the exclusion may be wrong"
             )
+
+
+class TestRunnerBuildsProteinInput:
+    """Cover the runner half of #95.
+
+    The adapter-side tests only inspect the JSON spec. Without these, deleting
+    the runner's MSA loading entirely left the suite green — the code that
+    actually delivers the feature was untested.
+
+    These use a stub esm module rather than the real one so they run without a
+    GPU or the container; the real library is exercised separately.
+    """
+
+    def _stub_esm(self, monkeypatch, *, protein_accepts_msa=True):
+        import sys
+        import types
+        from dataclasses import dataclass, field
+        from typing import Any, Optional
+
+        @dataclass
+        class _MSA:
+            sequences: list
+
+            @classmethod
+            def from_a3m(cls, path, remove_insertions=True):
+                seqs, cur = [], []
+                for line in open(path):
+                    line = line.strip()
+                    if line.startswith(">"):
+                        if cur:
+                            seqs.append("".join(cur)); cur = []
+                    elif line:
+                        cur.append(line)
+                if cur:
+                    seqs.append("".join(cur))
+                return cls(sequences=seqs)
+
+        if protein_accepts_msa:
+            @dataclass
+            class _ProteinInput:
+                id: str
+                sequence: str
+                modifications: Any = None
+                msa: Optional[_MSA] = None
+        else:
+            # Mirrors an esm build whose ProteinInput predates MSA support,
+            # e.g. a single-sequence variant.
+            @dataclass
+            class _ProteinInput:
+                id: str
+                sequence: str
+                modifications: Any = None
+
+        @dataclass
+        class _Other:
+            id: str
+            sequence: str = ""
+            modifications: Any = None
+            ccd: Any = None
+            smiles: Any = None
+
+        mod = types.ModuleType("esm.models.esmfold2")
+        mod.ProteinInput = _ProteinInput
+        mod.DNAInput = _Other
+        mod.RNAInput = _Other
+        mod.LigandInput = _Other
+        mod.Modification = None
+        mod.MSA = _MSA if protein_accepts_msa else None
+        pkg = types.ModuleType("esm.models"); pkg.esmfold2 = mod
+        root = types.ModuleType("esm"); root.models = pkg
+        monkeypatch.setitem(sys.modules, "esm", root)
+        monkeypatch.setitem(sys.modules, "esm.models", pkg)
+        monkeypatch.setitem(sys.modules, "esm.models.esmfold2", mod)
+        return mod
+
+    def test_msa_reaches_protein_input(self, monkeypatch, tmp_path):
+        """The whole point of #95: the MSA must land on ProteinInput."""
+        from predict_structure.runners.esmfold2 import _build_inputs
+
+        self._stub_esm(monkeypatch)
+        a3m = tmp_path / "a.a3m"
+        a3m.write_text(">q\nMKTIIALSY\n>h\nMKTIIALSF\n")
+        spec = {"sequences": [
+            {"id": "A", "type": "protein", "sequence": "MKTIIALSY", "msa": str(a3m)},
+        ]}
+        built = _build_inputs(spec)
+        assert built[0].msa is not None, "MSA was not passed to ProteinInput"
+        assert len(built[0].msa.sequences) == 2
+
+    def test_no_msa_leaves_it_unset(self, monkeypatch):
+        from predict_structure.runners.esmfold2 import _build_inputs
+
+        self._stub_esm(monkeypatch)
+        spec = {"sequences": [{"id": "A", "type": "protein", "sequence": "MKTIIALSY"}]}
+        assert _build_inputs(spec)[0].msa is None
+
+    def test_msa_less_job_works_on_an_esm_without_the_field(self, monkeypatch):
+        """Regression: msa= must not be passed when the spec has no MSA.
+
+        Passing it unconditionally broke every ESMFold2 job — not just MSA ones
+        — on any esm build whose ProteinInput lacks the field.
+        """
+        from predict_structure.runners.esmfold2 import _build_inputs
+
+        self._stub_esm(monkeypatch, protein_accepts_msa=False)
+        spec = {"sequences": [{"id": "A", "type": "protein", "sequence": "MKTIIALSY"}]}
+        built = _build_inputs(spec)          # must not raise TypeError
+        assert built[0].sequence == "MKTIIALSY"
+
+    def test_unreadable_msa_names_the_chain(self, monkeypatch):
+        import pytest
+
+        from predict_structure.runners.esmfold2 import _build_inputs
+
+        self._stub_esm(monkeypatch)
+        spec = {"sequences": [
+            {"id": "B", "type": "protein", "sequence": "MKTIIALSY", "msa": "/nope/gone.a3m"},
+        ]}
+        with pytest.raises(ValueError, match="chain 'B'"):
+            _build_inputs(spec)

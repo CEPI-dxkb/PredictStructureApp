@@ -106,7 +106,12 @@ def _a3m_query_sequence(msa_path: Path) -> str:
                 continue
             seq_lines.append(line)
     query = "".join(seq_lines)
-    return "".join(c for c in query if not c.islower()).replace("-", "").upper()
+    # Drop A3M lowercase insertions, then every gap and terminator character.
+    # '.' is a2m-style gap padding and '*' a translated stop codon; both are
+    # common in real files and neither is part of the chain, so leaving them in
+    # would fail the match and kill a job over formatting.
+    query = "".join(c for c in query if not c.islower())
+    return query.translate(str.maketrans("", "", "-.*~ ")).upper()
 
 
 def _attach_msa(specs: list[dict[str, Any]], msa_path: Path) -> None:
@@ -128,13 +133,19 @@ def _attach_msa(specs: list[dict[str, Any]], msa_path: Path) -> None:
     query = _a3m_query_sequence(msa_path)
     matches = [s for s in proteins if s["sequence"].upper() == query]
     if not matches:
+        def _describe(label: str, seq: str) -> str:
+            head = seq[:24] + ("…" if len(seq) > 24 else "")
+            return f"{label} {len(seq)} aa ({head})"
+
         raise ValueError(
             f"The MSA in {msa_path} does not match any protein chain in this "
             f"job. ESMFold2 requires the first sequence of the A3M to be the "
-            f"query and to match the chain exactly. A3M query is "
-            f"{len(query)} aa; chains are "
-            + ", ".join(f"{s['id']}={len(s['sequence'])} aa" for s in proteins)
-            + "."
+            f"query and to match the chain exactly. "
+            + _describe("A3M query:", query)
+            + "; chains: "
+            + ", ".join(_describe(f"{s['id']}=", s["sequence"]) for s in proteins)
+            + ". Supply the MSA built for this sequence, or drop --msa to fold "
+            + "single-sequence."
         )
     if len(matches) > 1:
         logger.info(
