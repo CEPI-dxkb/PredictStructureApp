@@ -548,30 +548,46 @@ sub run_app {
     # unconditionally so the next such mismatch is visible (#75).
     {
         my $hf_tool = $params->{tool} // "auto";
-        my %REPO_FOR_TOOL = (
-            esmfold  => "models--facebook--esmfold_v1",
-            esmfold2 => "models--biohub--ESMFold2",
+        # A tool may need MORE THAN ONE repo: ESMFold2 loads an ESMC-6B encoder
+        # (24G) alongside its own weights (1.3G). Checking only the headline
+        # repo picked a cache that had ESMFold2 but not ESMC, which failed at
+        # model-load with the same opaque "couldn't connect" error one layer
+        # deeper (task 23418786). Require every repo the tool needs.
+        my %REPOS_FOR_TOOL = (
+            esmfold  => ["models--facebook--esmfold_v1"],
+            esmfold2 => ["models--biohub--ESMFold2", "models--biohub--ESMC-6B"],
         );
-        my $repo_dir = $REPO_FOR_TOOL{$hf_tool};
+        my $repos = $REPOS_FOR_TOOL{$hf_tool};
 
         my $has_model = sub {
             my ($root) = @_;
             return 0 unless $root && -d $root;
-            return 1 unless defined $repo_dir;   # tool needs no HF weights
-            return -r "$root/hub/$repo_dir" ? 1 : 0;
+            return 1 unless defined $repos;      # tool needs no HF weights
+            for my $repo (@$repos) {
+                return 0 unless -r "$root/hub/$repo";
+            }
+            return 1;
         };
 
         my $hf = $ENV{HF_HOME} // "";
         my $hf_ok = $has_model->($hf);
 
+        # Prefer the tool's own directory (/local_databases/esmfold2 for
+        # esmfold2), matching the per-tool layout the other tools already use
+        # and keeping each tool's weights independently updatable. Those dirs
+        # are owned by the service account; the shared cache is the fallback.
+        my @hf_candidates = grep { defined && length }
+            ("/local_databases/$hf_tool", "/local_databases/esmfold",
+             "/local_databases/cache");
+
         if (!$hf_ok) {
-            for my $candidate ("/local_databases/esmfold", "/local_databases/cache",
-                               "/local_databases/esmfold2") {
+            for my $candidate (@hf_candidates) {
                 next unless $has_model->($candidate);
                 $ENV{HF_HOME} = $candidate;
                 $hf_ok = 1;
                 print "Set HF_HOME=$candidate (holds "
-                    . ($repo_dir // "the required weights") . ")\n";
+                    . ($repos ? join(", ", @$repos) : "the required weights")
+                    . ")\n";
                 last;
             }
         }
@@ -580,11 +596,11 @@ sub run_app {
             my $hf_tmp = ($ENV{P3_WORKDIR} // $ENV{TMPDIR} // "/tmp") . "/hf_cache";
             make_path($hf_tmp);
             $ENV{HF_HOME} = $hf_tmp;
-            print STDERR "Warning: no local HuggingFace cache contains "
-                       . ($repo_dir // "the required weights")
-                       . " (checked HF_HOME=$hf and /local_databases/"
-                       . "{esmfold,cache,esmfold2}); redirected to $hf_tmp, which "
-                       . "needs network access and will be slow\n";
+            print STDERR "Warning: no local HuggingFace cache contains all of "
+                       . ($repos ? join(", ", @$repos) : "the required weights")
+                       . " (checked HF_HOME=$hf and " . join(", ", @hf_candidates)
+                       . "); redirected to $hf_tmp, which needs network access "
+                       . "and will be slow\n";
         }
 
         # Offline only when a cache that actually has the model was found;

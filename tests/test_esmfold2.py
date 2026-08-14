@@ -508,6 +508,26 @@ class TestHFCacheProbeContract:
         )
         assert "models--facebook--esmfold_v1" in perl
 
+    def test_probe_requires_the_esmc_encoder_too(self):
+        """ESMFold2 loads an ESMC-6B encoder (24G) besides its own 1.3G weights.
+
+        Checking only the headline repo selected a cache holding ESMFold2 but
+        not ESMC, which failed one layer deeper at model-load with the same
+        opaque "couldn't connect" error (task 23418786).
+        """
+        import re
+
+        perl = self._perl()
+        block = re.search(r"# Ensure the HuggingFace cache.*?\n    \}\n", perl, re.S).group(0)
+        m = re.search(r"esmfold2\s*=>\s*\[([^\]]+)\]", block)
+        assert m, "esmfold2 repo list not found"
+        repos = m.group(1)
+        assert "models--biohub--ESMFold2" in repos
+        assert "models--biohub--ESMC-6B" in repos, (
+            "ESMFold2 cannot load without the ESMC encoder; a cache missing it "
+            "must not be selected"
+        )
+
     def test_probe_does_not_gate_on_writability(self):
         """HF_HUB_OFFLINE means we only ever read; -w rejects good read-only caches."""
         import re
@@ -520,16 +540,26 @@ class TestHFCacheProbeContract:
             "ESMFold2 jobs to a cache without the model"
         )
 
-    def test_esmfold_cache_is_preferred_over_the_shared_one(self):
-        """Order matters: /local_databases/esmfold holds both models."""
+    def test_per_tool_directory_is_preferred(self):
+        """/local_databases/<tool> wins over the shared cache.
+
+        Those dirs are owned by the service account and are independently
+        updatable per tool; the shared cache is the fallback. Depending on a
+        personal account's group permissions for production weights is what
+        broke ESMFold2 in the first place.
+        """
         import re
 
         perl = self._perl()
-        block = re.search(r"# Ensure the HuggingFace cache.*?\n    \}\n", perl, re.S).group(0)
-        i_esm = block.index("/local_databases/esmfold\"")
-        i_cache = block.index("/local_databases/cache\"")
-        assert i_esm < i_cache, (
-            "/local_databases/esmfold must be probed before /local_databases/cache"
+        # Match the candidate list itself, not the prose above it — the comment
+        # mentions /local_databases/cache while explaining the old bug.
+        decl = re.search(r"my \@hf_candidates\s*=(.*?);", perl, re.S)
+        assert decl, "candidate list not found"
+        listing = decl.group(1)
+        i_tool = listing.index("/local_databases/$hf_tool")
+        i_cache = listing.index("/local_databases/cache")
+        assert i_tool < i_cache, (
+            f"the tool's own directory must be probed before the shared cache: {listing}"
         )
 
     def test_cache_choice_is_logged_unconditionally(self):
