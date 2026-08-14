@@ -483,3 +483,122 @@ class TestRunnerBuildsProteinInput:
         ]}
         with pytest.raises(ValueError, match="chain 'B'"):
             _build_inputs(spec)
+
+
+class TestHFCacheProbe:
+    """Execute the service script's HF cache probe against fake cache trees.
+
+    These replace an earlier set of text assertions over the Perl source. Those
+    were worthless: mutating `next unless $has_model->($candidate)` to
+    `next unless 1` — i.e. verifying nothing, the exact bug this block exists to
+    prevent — left all of them green.
+    """
+
+    def _run_probe(self, root, tool, hf_home=""):
+        """Extract the probe block, run it under a fake /local_databases."""
+        import re
+        import subprocess
+        from pathlib import Path
+
+        perl = (Path(__file__).resolve().parent.parent
+                / "service-scripts" / "App-PredictStructure.pl").read_text()
+        m = re.search(r"    # Ensure the HuggingFace cache.*?\n    \}\n", perl, re.S)
+        assert m, "HF cache block not found"
+        block = m.group(0).replace("/local_databases", str(root))
+
+        script = (
+            'use strict; use warnings;\n'
+            'my $params = { tool => $ARGV[0] };\n'
+            + block +
+            'print "RESULT HF_HOME=", ($ENV{HF_HOME} // ""), '
+            '" OFFLINE=", ($ENV{HF_HUB_OFFLINE} // ""), "\\n";\n'
+        )
+        env = {"PATH": "/usr/bin:/bin", "HF_HOME": hf_home}
+        r = subprocess.run(["perl", "-e", script, tool],
+                           capture_output=True, text=True, env=env, timeout=30)
+        out = {"rc": r.returncode, "stdout": r.stdout, "stderr": r.stderr,
+               "HF_HOME": None, "OFFLINE": None}
+        mm = re.search(r"RESULT HF_HOME=(\S*) OFFLINE=(\S*)", r.stdout)
+        if mm:
+            out["HF_HOME"], out["OFFLINE"] = mm.group(1), mm.group(2)
+        return out
+
+    def _repo(self, root, cache, name, *, complete=True):
+        d = root / cache / "hub" / name
+        (d / "refs").mkdir(parents=True, exist_ok=True)
+        if not complete:
+            return d                      # directory only: an interrupted copy
+        (d / "refs" / "main").write_text("deadbeef\n")
+        snap = d / "snapshots" / "deadbeef"
+        snap.mkdir(parents=True, exist_ok=True)
+        (snap / "config.json").write_text("{}")
+        return d
+
+    def test_rejects_a_cache_missing_the_esmc_encoder(self, tmp_path):
+        """ESMFold2 needs ESMC-6B too; a cache with only ESMFold2 must lose."""
+        self._repo(tmp_path, "esmfold", "models--biohub--ESMFold2")
+        self._repo(tmp_path, "esmfold", "models--biohub--ESMC-6B")
+        self._repo(tmp_path, "cache", "models--biohub--ESMFold2")
+        out = self._run_probe(tmp_path, "esmfold2")
+        assert out["HF_HOME"] == str(tmp_path / "esmfold"), out
+        assert out["OFFLINE"] == "1"
+
+    def test_rejects_a_half_copied_repo(self, tmp_path):
+        """An interrupted copy must not win over a complete cache.
+
+        The per-tool directory is probed first, so a mid-rsync esmfold2 would
+        otherwise be selected and then fail at model load.
+        """
+        self._repo(tmp_path, "esmfold2", "models--biohub--ESMFold2", complete=False)
+        self._repo(tmp_path, "esmfold2", "models--biohub--ESMC-6B", complete=False)
+        self._repo(tmp_path, "esmfold", "models--biohub--ESMFold2")
+        self._repo(tmp_path, "esmfold", "models--biohub--ESMC-6B")
+        out = self._run_probe(tmp_path, "esmfold2")
+        assert out["HF_HOME"] == str(tmp_path / "esmfold"), out
+
+    def test_prefers_the_per_tool_directory_when_complete(self, tmp_path):
+        for cache in ("esmfold2", "esmfold"):
+            self._repo(tmp_path, cache, "models--biohub--ESMFold2")
+            self._repo(tmp_path, cache, "models--biohub--ESMC-6B")
+        out = self._run_probe(tmp_path, "esmfold2")
+        assert out["HF_HOME"] == str(tmp_path / "esmfold2"), out
+
+    def test_dies_rather_than_attempting_a_doomed_download(self, tmp_path):
+        """No usable cache: fail fast instead of burning the GPU allocation."""
+        (tmp_path / "cache").mkdir(parents=True)
+        out = self._run_probe(tmp_path, "esmfold2")
+        assert out["rc"] != 0, out
+        assert "No local HuggingFace cache holds" in out["stderr"], out
+        assert "models--biohub--ESMC-6B" in out["stderr"]
+
+    def test_leaves_non_hf_tools_alone(self, tmp_path):
+        """boltz has no HF libraries; repointing HF_HOME at it was a landmine."""
+        (tmp_path / "boltz").mkdir(parents=True)
+        out = self._run_probe(tmp_path, "boltz")
+        assert out["rc"] == 0, out
+        assert out["HF_HOME"] == "", out
+        assert out["OFFLINE"] == "", out
+
+    def test_auto_is_checked_against_the_esmfold_weights(self, tmp_path):
+        self._repo(tmp_path, "esmfold", "models--facebook--esmfold_v1")
+        out = self._run_probe(tmp_path, "auto")
+        assert out["HF_HOME"] == str(tmp_path / "esmfold"), out
+        assert out["OFFLINE"] == "1"
+
+    def test_a_bogus_tool_name_cannot_escape_the_cache_root(self, tmp_path):
+        """tool is unvalidated here and is interpolated into a path."""
+        self._repo(tmp_path, "esmfold", "models--facebook--esmfold_v1")
+        for bad in ("", "../../../tmp", "Boltz;rm -rf /"):
+            out = self._run_probe(tmp_path, bad)
+            assert out["HF_HOME"] in ("", str(tmp_path / "esmfold")), (bad, out)
+
+    def test_auto_cannot_resolve_to_esmfold2(self):
+        """If that changes, auto's repo list must gain ESMC-6B."""
+        import inspect
+
+        from predict_structure import cli
+
+        tuple_src = inspect.getsource(cli._auto_select_tool).split("for tool in (")[1].split(")")[0]
+        assert "esmfold2" not in tuple_src, (
+            "auto can now pick esmfold2 — add its repos to %REPOS_FOR_TOOL{auto}"
+        )
