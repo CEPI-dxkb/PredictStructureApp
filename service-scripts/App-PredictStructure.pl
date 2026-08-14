@@ -534,26 +534,45 @@ sub run_app {
 
     _validate_params($params);
 
-    # Ensure HuggingFace model cache is usable. ESMFold and ESMFold2 load
-    # weights via the transformers library which writes to HF_HOME. The SIF
-    # bakes HF_HOME=/local_databases/esmfold, but on production workers where
-    # /local_databases isn't bind-mounted that path is read-only or
-    # absent → OSError EROFS. We check the current HF_HOME (or the
-    # default locations) and redirect to a writable path if needed.
+    # Ensure the HuggingFace cache actually holds the weights this tool needs.
+    # ESMFold and ESMFold2 load via transformers, which reads HF_HOME.
+    #
+    # This used to probe for a WRITABLE cache root, which is the wrong test: we
+    # set HF_HUB_OFFLINE below, so nothing is ever written — we only read. On a
+    # worker where /local_databases/esmfold failed -w, the probe skipped it and
+    # took /local_databases/cache, which holds facebook/esmfold_v1 but NOT
+    # biohub/ESMFold2. ESMFold therefore worked while every ESMFold2 job died
+    # with "couldn't connect to huggingface.co ... and couldn't find them in the
+    # cached files" (task 23418633) — silently, because the pick was only logged
+    # under P3_DEBUG. Probe for the model directory instead, and log the choice
+    # unconditionally so the next such mismatch is visible (#75).
     {
+        my $hf_tool = $params->{tool} // "auto";
+        my %REPO_FOR_TOOL = (
+            esmfold  => "models--facebook--esmfold_v1",
+            esmfold2 => "models--biohub--ESMFold2",
+        );
+        my $repo_dir = $REPO_FOR_TOOL{$hf_tool};
+
+        my $has_model = sub {
+            my ($root) = @_;
+            return 0 unless $root && -d $root;
+            return 1 unless defined $repo_dir;   # tool needs no HF weights
+            return -r "$root/hub/$repo_dir" ? 1 : 0;
+        };
+
         my $hf = $ENV{HF_HOME} // "";
-        my $hf_ok = $hf && -d $hf && -w $hf;
+        my $hf_ok = $has_model->($hf);
 
         if (!$hf_ok) {
-            # Try the standard pre-cached locations
-            for my $candidate ("/local_databases/cache", "/local_databases/esmfold", "/local_databases/esmfold2") {
-                if (-d $candidate && -w $candidate) {
-                    $ENV{HF_HOME} = $candidate;
-                    $hf_ok = 1;
-                    print "Set HF_HOME=$candidate (pre-cached model weights)\n"
-                        if $ENV{P3_DEBUG};
-                    last;
-                }
+            for my $candidate ("/local_databases/esmfold", "/local_databases/cache",
+                               "/local_databases/esmfold2") {
+                next unless $has_model->($candidate);
+                $ENV{HF_HOME} = $candidate;
+                $hf_ok = 1;
+                print "Set HF_HOME=$candidate (holds "
+                    . ($repo_dir // "the required weights") . ")\n";
+                last;
             }
         }
 
@@ -561,21 +580,18 @@ sub run_app {
             my $hf_tmp = ($ENV{P3_WORKDIR} // $ENV{TMPDIR} // "/tmp") . "/hf_cache";
             make_path($hf_tmp);
             $ENV{HF_HOME} = $hf_tmp;
-            print STDERR "Warning: HF_HOME=$hf is not writable and "
-                       . "/local_databases/cache not found; "
-                       . "redirected to $hf_tmp (model download may be slow)\n";
+            print STDERR "Warning: no local HuggingFace cache contains "
+                       . ($repo_dir // "the required weights")
+                       . " (checked HF_HOME=$hf and /local_databases/"
+                       . "{esmfold,cache,esmfold2}); redirected to $hf_tmp, which "
+                       . "needs network access and will be slow\n";
         }
 
-        # When a real pre-cached HF_HOME was found ($hf_ok), force the
-        # transformers library offline so ESMFold loads weights straight
-        # from the local cache instead of round-tripping to the Hub for
-        # revision/etag validation on every from_pretrained() call (issue
-        # #40). Only set this on the pre-cached path: the temp-dir
-        # fallback above still needs network access to download weights.
+        # Offline only when a cache that actually has the model was found;
+        # the temp-dir fallback still needs the network (issue #40).
         if ($hf_ok) {
             $ENV{HF_HUB_OFFLINE} = 1;
-            print "Set HF_HUB_OFFLINE=1 (using pre-cached weights, offline)\n"
-                if $ENV{P3_DEBUG};
+            print "Set HF_HUB_OFFLINE=1 (HF_HOME=$ENV{HF_HOME})\n";
         }
     }
 

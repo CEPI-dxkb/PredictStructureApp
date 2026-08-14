@@ -483,3 +483,61 @@ class TestRunnerBuildsProteinInput:
         ]}
         with pytest.raises(ValueError, match="chain 'B'"):
             _build_inputs(spec)
+
+
+class TestHFCacheProbeContract:
+    """The service script must pick an HF cache by CONTENT, not writability.
+
+    Regression for task 23418633: the probe tested `-w` on the cache root, so a
+    worker where /local_databases/esmfold failed that test fell through to
+    /local_databases/cache — which holds facebook/esmfold_v1 but not
+    biohub/ESMFold2. ESMFold worked, every ESMFold2 job died offline against a
+    cache lacking the model, and the choice was only logged under P3_DEBUG.
+    """
+
+    def _perl(self):
+        from pathlib import Path
+
+        return (Path(__file__).resolve().parent.parent
+                / "service-scripts" / "App-PredictStructure.pl").read_text()
+
+    def test_probe_checks_the_model_directory(self):
+        perl = self._perl()
+        assert "models--biohub--ESMFold2" in perl, (
+            "the probe must look for the ESMFold2 repo dir, not just a writable root"
+        )
+        assert "models--facebook--esmfold_v1" in perl
+
+    def test_probe_does_not_gate_on_writability(self):
+        """HF_HUB_OFFLINE means we only ever read; -w rejects good read-only caches."""
+        import re
+
+        perl = self._perl()
+        block = re.search(r"# Ensure the HuggingFace cache.*?\n    \}\n", perl, re.S)
+        assert block, "HF cache block not found"
+        assert "-w " not in block.group(0), (
+            "the HF cache probe must not test writability — that is what sent "
+            "ESMFold2 jobs to a cache without the model"
+        )
+
+    def test_esmfold_cache_is_preferred_over_the_shared_one(self):
+        """Order matters: /local_databases/esmfold holds both models."""
+        import re
+
+        perl = self._perl()
+        block = re.search(r"# Ensure the HuggingFace cache.*?\n    \}\n", perl, re.S).group(0)
+        i_esm = block.index("/local_databases/esmfold\"")
+        i_cache = block.index("/local_databases/cache\"")
+        assert i_esm < i_cache, (
+            "/local_databases/esmfold must be probed before /local_databases/cache"
+        )
+
+    def test_cache_choice_is_logged_unconditionally(self):
+        """The silent pick is what made this cost a production job to diagnose."""
+        import re
+
+        perl = self._perl()
+        block = re.search(r"# Ensure the HuggingFace cache.*?\n    \}\n", perl, re.S).group(0)
+        for line in block.splitlines():
+            if "Set HF_HOME=" in line or "Set HF_HUB_OFFLINE" in line:
+                assert "P3_DEBUG" not in line, f"cache choice still debug-gated: {line.strip()}"
