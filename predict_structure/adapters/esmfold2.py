@@ -87,9 +87,74 @@ def _entity_to_esmfold2_spec(entity: Entity) -> dict[str, Any]:
     return spec
 
 
-def entities_to_esmfold2_json(entity_list: EntityList, output_path: Path) -> Path:
+def _a3m_query_sequence(msa_path: Path) -> str:
+    """Return the query (first) sequence of an A3M, insertions stripped.
+
+    ESMFold2 requires the MSA's first row to be the query and to match the
+    chain's sequence exactly, so this is what we match chains against. A3M
+    lowercase letters mark insertions relative to the query and are removed.
+    """
+    seq_lines: list[str] = []
+    with msa_path.open(encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith(">"):
+                if seq_lines:
+                    break          # hit the second record — query is complete
+                continue
+            seq_lines.append(line)
+    query = "".join(seq_lines)
+    return "".join(c for c in query if not c.islower()).replace("-", "").upper()
+
+
+def _attach_msa(specs: list[dict[str, Any]], msa_path: Path) -> None:
+    """Attach ``msa_path`` to the protein chain whose sequence it describes.
+
+    ESMFold2 takes one MSA per chain (``ProteinInput.msa``). We are given a
+    single uploaded file, so it belongs to whichever protein chain the A3M's
+    query row matches. Guessing wrong is worse than refusing: a mismatched MSA
+    is rejected deep inside the tool, and silently folding without it is the
+    exact failure this feature exists to remove (#95).
+    """
+    proteins = [s for s in specs if s.get("type") == "protein"]
+    if not proteins:
+        raise ValueError(
+            f"--msa {msa_path} was supplied but the job has no protein chain "
+            f"to attach it to."
+        )
+
+    query = _a3m_query_sequence(msa_path)
+    matches = [s for s in proteins if s["sequence"].upper() == query]
+    if not matches:
+        raise ValueError(
+            f"The MSA in {msa_path} does not match any protein chain in this "
+            f"job. ESMFold2 requires the first sequence of the A3M to be the "
+            f"query and to match the chain exactly. A3M query is "
+            f"{len(query)} aa; chains are "
+            + ", ".join(f"{s['id']}={len(s['sequence'])} aa" for s in proteins)
+            + "."
+        )
+    if len(matches) > 1:
+        logger.info(
+            "MSA matches %d identical protein chains; attaching to all of them",
+            len(matches),
+        )
+    for spec in matches:
+        spec["msa"] = str(msa_path)
+
+
+def entities_to_esmfold2_json(
+    entity_list: EntityList,
+    output_path: Path,
+    msa_path: Path | None = None,
+) -> Path:
     """Write an EntityList as an ESMFold2 ``StructurePredictionInput`` spec."""
-    spec = {"sequences": [_entity_to_esmfold2_spec(e) for e in entity_list]}
+    specs = [_entity_to_esmfold2_spec(e) for e in entity_list]
+    if msa_path is not None:
+        _attach_msa(specs, Path(msa_path))
+    spec = {"sequences": specs}
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(spec, indent=2))
     logger.info("Wrote ESMFold2 spec with %d entries to %s", len(spec["sequences"]), output_path)
@@ -103,19 +168,19 @@ class ESMFold2Adapter(BaseAdapter):
     residue modifications. Produces an mmCIF complex and pLDDT / pTM / ipTM
     scores.
 
-    The ``biohub/ESMFold2`` checkpoint we default to **does** accept an optional
-    per-chain MSA (``ProteinInput.msa``, built via ``MSA.from_a3m``), and the
-    upstream tutorial reports a large accuracy gain from it — ipTM 0.19 -> 0.85
-    on PDB 7YTU. Our runner does not wire it up yet, so ``supports_msa`` stays
-    False to avoid advertising a capability we do not deliver. Tracked
-    separately; see the note on ``prepare_input``. (``ESMFold2-Fast`` is the
-    genuinely single-sequence variant — if the default checkpoint ever changes
-    to it, MSA support must go back off.)
+    The ``biohub/ESMFold2`` checkpoint we default to accepts an optional
+    per-chain MSA (``ProteinInput.msa``, built via ``MSA.from_a3m``); upstream
+    reports ipTM 0.19 -> 0.85 on PDB 7YTU with one. An uploaded ``--msa`` is
+    wired through (#95). Fetching one from a server is not — ``esm`` ships no
+    MSA-server client, so that work is ours to do (#96).
+
+    ``ESMFold2-Fast`` is the genuinely single-sequence variant; if the default
+    checkpoint ever changes to it, MSA support must go back off.
     """
 
     tool_name: str = "esmfold2"
     display_name: str = "ESMFold2"
-    supports_msa: bool = False
+    supports_msa: bool = True
     requires_gpu: bool = True
     #: Measured peak on H200: 13.9-14.0 GB allocated, 14.1-14.3 GB reserved
     #: (crambin 46aa through ubiquitin+ATP 107 tokens). Without this the
@@ -135,21 +200,17 @@ class ESMFold2Adapter(BaseAdapter):
         msa_path: Path | None = None,
         **kwargs: Any,
     ) -> Path:
-        """Convert entity list to an ESMFold2 JSON spec.
+        """Convert entity list to an ESMFold2 JSON spec, attaching any MSA.
 
-        An uploaded MSA is currently dropped. That is a limitation of this
-        wrapper, not of the model: ``biohub/ESMFold2`` accepts a per-chain MSA
-        and folds noticeably better with one.
+        The MSA is recorded per protein chain in the spec; the runner loads it
+        with ``MSA.from_a3m`` and hands it to ``ProteinInput``.
         """
-        if msa_path is not None:
-            logger.warning(
-                "ESMFold2 MSA input is not wired up yet, ignoring %s. The model "
-                "does support per-chain MSAs and is more accurate with them; "
-                "this wrapper has not implemented it.", msa_path,
-            )
-
         output_dir.mkdir(parents=True, exist_ok=True)
-        return entities_to_esmfold2_json(entity_list, output_dir / "input.json")
+        if msa_path is not None:
+            logger.info("Attaching MSA %s to the ESMFold2 spec", msa_path)
+        return entities_to_esmfold2_json(
+            entity_list, output_dir / "input.json", msa_path=msa_path,
+        )
 
     def build_command(
         self,

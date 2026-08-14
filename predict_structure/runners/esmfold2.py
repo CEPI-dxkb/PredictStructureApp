@@ -52,6 +52,28 @@ def _build_inputs(spec: dict[str, Any]) -> list[Any]:
     LigandInput = ef2.LigandInput
     RNAInput = getattr(ef2, "RNAInput", None)
     Modification = getattr(ef2, "Modification", None)
+    MSA = getattr(ef2, "MSA", None)
+
+    def _msa(record: dict[str, Any]) -> Any:
+        """Load a chain's A3M, if the spec carries one.
+
+        ESMFold2 wants the query as row 0 with insertions stripped; the adapter
+        already verified that row matches this chain's sequence. Failing loudly
+        beats folding single-sequence behind the user's back — silently dropping
+        the MSA is the bug this path exists to fix (#95).
+        """
+        path = record.get("msa")
+        if not path:
+            return None
+        if MSA is None:
+            raise ValueError(
+                "esm.models.esmfold2 exposes no MSA type; this build of esm "
+                "cannot accept MSA input"
+            )
+        logger.info("Loading MSA for chain %s from %s", record.get("id"), path)
+        msa = MSA.from_a3m(path, remove_insertions=True)
+        logger.info("MSA depth %d for chain %s", len(msa.sequences), record.get("id"))
+        return msa
 
     def _mods(record: dict[str, Any]) -> list[Any]:
         raw = record.get("modifications") or []
@@ -73,7 +95,10 @@ def _build_inputs(spec: dict[str, Any]) -> list[Any]:
         etype = rec.get("type")
         cid = rec.get("id")
         if etype == "protein":
-            inputs.append(ProteinInput(id=cid, sequence=rec["sequence"], modifications=_mods(rec)))
+            inputs.append(ProteinInput(
+                id=cid, sequence=rec["sequence"], modifications=_mods(rec),
+                msa=_msa(rec),
+            ))
         elif etype == "dna":
             inputs.append(DNAInput(id=cid, sequence=rec["sequence"], modifications=_mods(rec)))
         elif etype == "rna":
