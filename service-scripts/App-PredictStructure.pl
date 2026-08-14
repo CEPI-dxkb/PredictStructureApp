@@ -814,9 +814,14 @@ sub build_command {
 
     if ($local_msa) {
         push @cmd, "--msa", $local_msa;
-    } elsif ($tool !~ /^(esmfold|alphafold)$/) {
+    } elsif ($tool !~ /^(esmfold|esmfold2|alphafold)$/) {
         # Enable ColabFold MSA server for boltz/openfold/chai and auto.
-        # ESMFold ignores MSA; AlphaFold builds its own from local DBs.
+        # Excluded tools are exactly those with supports_msa = False in their
+        # adapter, plus AlphaFold which builds its own MSA from local DBs.
+        # Their CLI subcommands have no --use-msa-server option at all, so
+        # passing it is not merely useless — click exits 2 and the job dies.
+        # esmfold2 was missing here until #75: it had zero matrix coverage, so
+        # every ESMFold2 job through BV-BRC failed on an unknown option.
         push @cmd, "--use-msa-server";
     }
 

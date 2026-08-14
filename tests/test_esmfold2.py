@@ -246,3 +246,54 @@ class TestESMFold2SchedulingContract:
         assert block, "esmfold2 preflight block not found in the service script"
         expected = ESMFold2Adapter().preflight()["policy_data"]["constraint"]
         assert f"constraint => '{expected}'" in block.group(0)
+
+
+class TestMsaServerFlagContract:
+    """The Perl must not pass --use-msa-server to a tool that has no such option.
+
+    ESMFold2 declares supports_msa = False and its subcommand omits the flag, so
+    the Perl passing it made click exit 2 and killed every ESMFold2 job through
+    BV-BRC (#75). It went unnoticed because ESMFold2 had no matrix coverage.
+    This pins the Perl's exclusion list against the adapters themselves, so a
+    future tool with supports_msa = False cannot repeat it.
+    """
+
+    def _exclusion_regex(self):
+        import re
+        from pathlib import Path
+
+        perl = (Path(__file__).resolve().parent.parent
+                / "service-scripts" / "App-PredictStructure.pl").read_text()
+        m = re.search(r'\$tool !~ /\^\(([^)]+)\)\$/', perl)
+        assert m, "MSA-server exclusion regex not found in the service script"
+        return set(m.group(1).split("|"))
+
+    def test_every_non_msa_tool_is_excluded(self):
+        from predict_structure.adapters import ADAPTERS
+
+        excluded = self._exclusion_regex()
+        missing = {
+            name for name, cls in ADAPTERS.items()
+            if not cls.supports_msa and name not in excluded
+        }
+        assert not missing, (
+            f"{sorted(missing)} declare supports_msa=False but the service "
+            f"script would still pass --use-msa-server, which their CLI "
+            f"rejects with exit 2"
+        )
+
+    def test_excluded_tools_really_lack_the_option(self):
+        """Guards the converse: don't exclude a tool that does support MSA."""
+        from click.testing import CliRunner
+
+        from predict_structure.cli import main
+
+        for tool in self._exclusion_regex():
+            result = CliRunner().invoke(main, [tool, "--help"])
+            assert result.exit_code == 0, f"{tool} --help failed"
+            if tool == "alphafold":
+                continue  # excluded for local-DB reasons, not a missing option
+            assert "--use-msa-server" not in result.output, (
+                f"{tool} is excluded from the MSA-server flag but its CLI "
+                f"accepts it — the exclusion may be wrong"
+            )
