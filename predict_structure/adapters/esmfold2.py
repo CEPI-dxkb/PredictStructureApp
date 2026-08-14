@@ -99,9 +99,18 @@ def entities_to_esmfold2_json(entity_list: EntityList, output_path: Path) -> Pat
 class ESMFold2Adapter(BaseAdapter):
     """Adapter for ESMFold2 multi-entity structure prediction.
 
-    ESMFold2 is single-sequence-style (no MSA) but accepts proteins, DNA,
-    RNA, and CCD ligands in one input, with optional residue modifications.
-    The model produces an mmCIF complex and pLDDT / pTM / ipTM scores.
+    Accepts proteins, DNA, RNA, and CCD ligands in one input, with optional
+    residue modifications. Produces an mmCIF complex and pLDDT / pTM / ipTM
+    scores.
+
+    The ``biohub/ESMFold2`` checkpoint we default to **does** accept an optional
+    per-chain MSA (``ProteinInput.msa``, built via ``MSA.from_a3m``), and the
+    upstream tutorial reports a large accuracy gain from it — ipTM 0.19 -> 0.85
+    on PDB 7YTU. Our runner does not wire it up yet, so ``supports_msa`` stays
+    False to avoid advertising a capability we do not deliver. Tracked
+    separately; see the note on ``prepare_input``. (``ESMFold2-Fast`` is the
+    genuinely single-sequence variant — if the default checkpoint ever changes
+    to it, MSA support must go back off.)
     """
 
     tool_name: str = "esmfold2"
@@ -126,9 +135,18 @@ class ESMFold2Adapter(BaseAdapter):
         msa_path: Path | None = None,
         **kwargs: Any,
     ) -> Path:
-        """Convert entity list to an ESMFold2 JSON spec. MSA is ignored."""
+        """Convert entity list to an ESMFold2 JSON spec.
+
+        An uploaded MSA is currently dropped. That is a limitation of this
+        wrapper, not of the model: ``biohub/ESMFold2`` accepts a per-chain MSA
+        and folds noticeably better with one.
+        """
         if msa_path is not None:
-            logger.warning("ESMFold2 does not use MSA input; ignoring --msa")
+            logger.warning(
+                "ESMFold2 MSA input is not wired up yet, ignoring %s. The model "
+                "does support per-chain MSAs and is more accurate with them; "
+                "this wrapper has not implemented it.", msa_path,
+            )
 
         output_dir.mkdir(parents=True, exist_ok=True)
         return entities_to_esmfold2_json(entity_list, output_dir / "input.json")

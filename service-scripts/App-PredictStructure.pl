@@ -814,9 +814,18 @@ sub build_command {
 
     if ($local_msa) {
         push @cmd, "--msa", $local_msa;
-    } elsif ($tool !~ /^(esmfold|alphafold)$/) {
+    } elsif ($tool !~ /^(esmfold|esmfold2|alphafold)$/) {
         # Enable ColabFold MSA server for boltz/openfold/chai and auto.
-        # ESMFold ignores MSA; AlphaFold builds its own from local DBs.
+        # The exclusion list is exactly the tools whose CLI subcommand has no
+        # --use-msa-server option; passing it there is not merely useless,
+        # click exits 2 and the job dies. esmfold2 was missing here until #75:
+        # it had zero matrix coverage, so every ESMFold2 job through BV-BRC
+        # failed on an unknown option.
+        #
+        # Note esmfold2 is excluded because the esm package ships no MSA-server
+        # client, NOT because the model ignores MSAs — biohub/ESMFold2 accepts
+        # per-chain MSAs and is markedly more accurate with them. Supplying an
+        # uploaded --msa to ESMFold2 is a separate, wanted feature.
         push @cmd, "--use-msa-server";
     }
 

@@ -110,7 +110,11 @@ class TestESMFold2Adapter:
             adapter = ESMFold2Adapter()
             adapter.prepare_input(protein_entity_list, tmp_output, msa_path=sample_a3m)
 
-        assert "does not use MSA" in caplog.text
+        # Warns and drops it — a wrapper limitation, not a model one. Asserting
+        # the old "ESMFold2 does not use MSA" wording would re-enshrine a claim
+        # that is false for the biohub/ESMFold2 checkpoint (#75).
+        assert "not wired up yet" in caplog.text
+        assert "does not use MSA" not in caplog.text
 
     def test_supported_entities(self):
         from predict_structure.adapters.esmfold2 import ESMFold2Adapter
@@ -134,6 +138,12 @@ class TestESMFold2Adapter:
         assert ESMFold2Adapter.requires_gpu is True
 
     def test_supports_msa_false(self):
+        """Pins the wrapper's current state, not a property of the model.
+
+        biohub/ESMFold2 accepts per-chain MSAs; this flag is False only because
+        our runner does not pass them yet. Flip it when that lands (#75) —
+        do not read this as evidence the model is single-sequence.
+        """
         from predict_structure.adapters.esmfold2 import ESMFold2Adapter
 
         assert ESMFold2Adapter.supports_msa is False
@@ -246,3 +256,62 @@ class TestESMFold2SchedulingContract:
         assert block, "esmfold2 preflight block not found in the service script"
         expected = ESMFold2Adapter().preflight()["policy_data"]["constraint"]
         assert f"constraint => '{expected}'" in block.group(0)
+
+
+class TestMsaServerFlagContract:
+    """The Perl must not pass --use-msa-server to a tool that has no such option.
+
+    The Perl passing it to esmfold2 made click exit 2 and killed every ESMFold2
+    job through BV-BRC (#75); it went unnoticed because ESMFold2 had no matrix
+    coverage. The invariant is about the CLI surface, not about whether a model
+    understands MSAs: biohub/ESMFold2 does accept per-chain MSAs, it simply has
+    no server to fetch them from. So this pins the exclusion list against which
+    subcommands actually expose the flag.
+    """
+
+    def _exclusion_regex(self):
+        import re
+        from pathlib import Path
+
+        perl = (Path(__file__).resolve().parent.parent
+                / "service-scripts" / "App-PredictStructure.pl").read_text()
+        m = re.search(r'\$tool !~ /\^\(([^)]+)\)\$/', perl)
+        assert m, "MSA-server exclusion regex not found in the service script"
+        return set(m.group(1).split("|"))
+
+    def test_every_tool_lacking_the_flag_is_excluded(self):
+        """Any subcommand without the option must be in the exclusion list."""
+        from click.testing import CliRunner
+
+        from predict_structure.adapters import ADAPTERS
+        from predict_structure.cli import main
+
+        excluded = self._exclusion_regex()
+        runner = CliRunner()
+        missing = set()
+        for name in ADAPTERS:
+            result = runner.invoke(main, [name, "--help"])
+            if result.exit_code != 0:
+                continue  # no subcommand for this adapter
+            if "--use-msa-server" not in result.output and name not in excluded:
+                missing.add(name)
+        assert not missing, (
+            f"{sorted(missing)} have no --use-msa-server option but the service "
+            f"script would still pass it, which click rejects with exit 2"
+        )
+
+    def test_excluded_tools_really_lack_the_option(self):
+        """Guards the converse: don't exclude a tool that does support MSA."""
+        from click.testing import CliRunner
+
+        from predict_structure.cli import main
+
+        for tool in self._exclusion_regex():
+            result = CliRunner().invoke(main, [tool, "--help"])
+            assert result.exit_code == 0, f"{tool} --help failed"
+            if tool == "alphafold":
+                continue  # excluded for local-DB reasons, not a missing option
+            assert "--use-msa-server" not in result.output, (
+                f"{tool} is excluded from the MSA-server flag but its CLI "
+                f"accepts it — the exclusion may be wrong"
+            )
