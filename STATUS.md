@@ -2,29 +2,25 @@
 
 **Last updated:** 2026-08-13
 **Current version:** v0.17.0 (HEAD: 160dc09)
-**Production container:** `folding_260813.2.sif`
+**Production container:** `folding_260813.3.sif`
 
 ## Next action
 
-`folding_260813.3.sif` is built and deployed locally with #90 + #75 (predict_structure
-160dc09). **It needs the ApplicationDefaultContainer row repointed at it** before
-anything can be verified in production — same step that unblocked 260813.2:
+`folding_260813.3.sif` is deployed and registered (predict_structure 160dc09,
+carrying #90 + #75). Nothing is blocked on infrastructure.
 
-```bash
-p3x-show-container-config          # on gum, as p3
-# repoint PredictStructure -> folding_260813.3
-cp /scout/containers/folding_260813.3.sif /vol/patric3/production/containers/
-```
+Run the matrix with `--include-negative` to re-verify against it, and in
+particular **F01-F03 — the first ESMFold2 cases ever submitted through BV-BRC**.
+That run is what closes #75. Expect the first submission to take several minutes
+while the SIF is staged into the container cache; the runner now allows 900s, so
+a slow first call is no longer a spurious failure.
 
-Expect the first submission after the switch to take ~8 minutes while the SIF is
-staged; the runner now allows 900s for it, so it should no longer look like a failure.
-
-Then: run the matrix with `--include-negative` to re-verify, and specifically F01-F03
-(the first ESMFold2 cases ever submitted through BV-BRC) to close #75.
-
-Two issues are waiting only on someone with write access to BV-BRC-Web:
-#90's UI half and #88's eye-icon action. The #90 patch is prepared at
+Two issues wait only on write access to BV-BRC-Web: #90's UI half and #88's
+eye-icon action. The #90 patch is prepared at
 `docs/bvbrc-web-90-retire-alphafold.patch`.
+
+After that: #50 is the highest-value remaining fix — the report side already
+ships, it only needs the Boltz PAE npz converted to `predictions/pae.json`.
 
 ### Resolved 2026-08-13: submission failure after the container switch
 
@@ -72,7 +68,8 @@ that routine cold start into three more spurious failures. Fixed in #89.
   a ~14 GB peak, so the VRAM precheck would pass a host that then OOMs. Now H200
   and 18000. Added matrix cases F01-F03 — ESMFold2 had zero coverage.
 - **#75 rewritten** — its title and all five listed blockers were stale.
-- **Container `folding_260813.3.sif`** built with both fixes; awaiting registration.
+- **Container `folding_260813.3.sif`** built, verified (21/21 env checks; both
+  fixes confirmed in the packed image), deployed and registered.
 
 ### Preflight validation + container rebuild (2026-08-13)
 
