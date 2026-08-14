@@ -110,7 +110,11 @@ class TestESMFold2Adapter:
             adapter = ESMFold2Adapter()
             adapter.prepare_input(protein_entity_list, tmp_output, msa_path=sample_a3m)
 
-        assert "does not use MSA" in caplog.text
+        # Warns and drops it — a wrapper limitation, not a model one. Asserting
+        # the old "ESMFold2 does not use MSA" wording would re-enshrine a claim
+        # that is false for the biohub/ESMFold2 checkpoint (#75).
+        assert "not wired up yet" in caplog.text
+        assert "does not use MSA" not in caplog.text
 
     def test_supported_entities(self):
         from predict_structure.adapters.esmfold2 import ESMFold2Adapter
@@ -134,6 +138,12 @@ class TestESMFold2Adapter:
         assert ESMFold2Adapter.requires_gpu is True
 
     def test_supports_msa_false(self):
+        """Pins the wrapper's current state, not a property of the model.
+
+        biohub/ESMFold2 accepts per-chain MSAs; this flag is False only because
+        our runner does not pass them yet. Flip it when that lands (#75) —
+        do not read this as evidence the model is single-sequence.
+        """
         from predict_structure.adapters.esmfold2 import ESMFold2Adapter
 
         assert ESMFold2Adapter.supports_msa is False
@@ -251,11 +261,12 @@ class TestESMFold2SchedulingContract:
 class TestMsaServerFlagContract:
     """The Perl must not pass --use-msa-server to a tool that has no such option.
 
-    ESMFold2 declares supports_msa = False and its subcommand omits the flag, so
-    the Perl passing it made click exit 2 and killed every ESMFold2 job through
-    BV-BRC (#75). It went unnoticed because ESMFold2 had no matrix coverage.
-    This pins the Perl's exclusion list against the adapters themselves, so a
-    future tool with supports_msa = False cannot repeat it.
+    The Perl passing it to esmfold2 made click exit 2 and killed every ESMFold2
+    job through BV-BRC (#75); it went unnoticed because ESMFold2 had no matrix
+    coverage. The invariant is about the CLI surface, not about whether a model
+    understands MSAs: biohub/ESMFold2 does accept per-chain MSAs, it simply has
+    no server to fetch them from. So this pins the exclusion list against which
+    subcommands actually expose the flag.
     """
 
     def _exclusion_regex(self):
@@ -268,18 +279,25 @@ class TestMsaServerFlagContract:
         assert m, "MSA-server exclusion regex not found in the service script"
         return set(m.group(1).split("|"))
 
-    def test_every_non_msa_tool_is_excluded(self):
+    def test_every_tool_lacking_the_flag_is_excluded(self):
+        """Any subcommand without the option must be in the exclusion list."""
+        from click.testing import CliRunner
+
         from predict_structure.adapters import ADAPTERS
+        from predict_structure.cli import main
 
         excluded = self._exclusion_regex()
-        missing = {
-            name for name, cls in ADAPTERS.items()
-            if not cls.supports_msa and name not in excluded
-        }
+        runner = CliRunner()
+        missing = set()
+        for name in ADAPTERS:
+            result = runner.invoke(main, [name, "--help"])
+            if result.exit_code != 0:
+                continue  # no subcommand for this adapter
+            if "--use-msa-server" not in result.output and name not in excluded:
+                missing.add(name)
         assert not missing, (
-            f"{sorted(missing)} declare supports_msa=False but the service "
-            f"script would still pass --use-msa-server, which their CLI "
-            f"rejects with exit 2"
+            f"{sorted(missing)} have no --use-msa-server option but the service "
+            f"script would still pass it, which click rejects with exit 2"
         )
 
     def test_excluded_tools_really_lack_the_option(self):
