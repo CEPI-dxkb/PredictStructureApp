@@ -556,6 +556,12 @@ sub run_app {
         my %REPOS_FOR_TOOL = (
             esmfold  => ["models--facebook--esmfold_v1"],
             esmfold2 => ["models--biohub--ESMFold2", "models--biohub--ESMC-6B"],
+            # "auto" is resolved by the CLI, after this runs. Among the tools it
+            # can pick (boltz, openfold, chai, esmfold — see _auto_select_tool)
+            # only ESMFold needs HuggingFace weights, so require those. The
+            # others ignore HF_HOME entirely, making this harmless for them and
+            # correct when auto lands on ESMFold.
+            auto     => ["models--facebook--esmfold_v1"],
         );
         my $repos = $REPOS_FOR_TOOL{$hf_tool};
 

@@ -571,3 +571,36 @@ class TestHFCacheProbeContract:
         for line in block.splitlines():
             if "Set HF_HOME=" in line or "Set HF_HUB_OFFLINE" in line:
                 assert "P3_DEBUG" not in line, f"cache choice still debug-gated: {line.strip()}"
+
+
+class TestAutoToolHFCache:
+    """`auto` is resolved by the CLI *after* the Perl picks a cache.
+
+    The probe therefore sees tool="auto". Without an entry it verified nothing
+    and accepted any existing directory — so an auto job that resolved to
+    ESMFold could be handed a cache without esmfold_v1 and then fail offline.
+    """
+
+    def test_auto_requires_the_esmfold_weights(self):
+        import re
+        from pathlib import Path
+
+        perl = (Path(__file__).resolve().parent.parent
+                / "service-scripts" / "App-PredictStructure.pl").read_text()
+        block = re.search(r"# Ensure the HuggingFace cache.*?\n    \}\n", perl, re.S).group(0)
+        m = re.search(r"auto\s*=>\s*\[([^\]]+)\]", block)
+        assert m, "auto has no repo list — the probe would verify nothing for auto jobs"
+        assert "models--facebook--esmfold_v1" in m.group(1)
+
+    def test_auto_cannot_resolve_to_esmfold2(self):
+        """If that ever changes, auto's repo list must gain ESMC-6B too."""
+        import inspect
+
+        from predict_structure import cli
+
+        src = inspect.getsource(cli._auto_select_tool)
+        tuple_src = src.split("for tool in (")[1].split(")")[0]
+        assert "esmfold2" not in tuple_src, (
+            "auto can now pick esmfold2 — add its repos to %REPOS_FOR_TOOL{auto} "
+            "in App-PredictStructure.pl or auto jobs will fail offline"
+        )
