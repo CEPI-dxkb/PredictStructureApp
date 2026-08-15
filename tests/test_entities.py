@@ -343,3 +343,74 @@ class TestPerlRegexParity:
         perl = (Path(__file__).resolve().parent.parent
                 / "service-scripts" / "App-PredictStructure.pl").read_text()
         assert "[A-Za-z0-9]{1,3}$/" not in perl
+
+
+class TestPerlCCDValidationBehaviour:
+    """Execute the Perl validator, don't just compare its source text.
+
+    TestPerlRegexParity asserts the two regex literals match each other. That is
+    necessary but far from sufficient: mutation testing showed the entire Perl
+    validation loop could be deleted (`next unless defined $code;` -> `next;`)
+    with the whole suite still green, and that adding `_` to the character class
+    in BOTH languages also passed — the parity test compares the copies to each
+    other, never to the real CCD grammar.
+    """
+
+    def _validate(self, codes):
+        """Run _validate_params' ligand loop against a params hash."""
+        import json
+        import re
+        import subprocess
+        from pathlib import Path
+
+        perl = (Path(__file__).resolve().parent.parent
+                / "service-scripts" / "App-PredictStructure.pl").read_text()
+        m = re.search(r"    if \(\$has_ligand\) \{.*?\n    \}\n", perl, re.S)
+        assert m, "ligand validation loop not found in the service script"
+        script = (
+            "use strict; use warnings;\n"
+            "my $params = { ligand => [@ARGV] };\n"
+            "my $has_ligand = 1;\n"
+            + m.group(0) +
+            'print "OK\\n";\n'
+        )
+        r = subprocess.run(["perl", "-e", script, *codes],
+                           capture_output=True, text=True, timeout=30)
+        return r.returncode, (r.stderr or "")
+
+    def test_accepts_valid_codes(self):
+        for code in ("A", "AT", "ATP", "NAG", "A1H1F", "A1AJ7"):
+            rc, err = self._validate([code])
+            assert rc == 0, f"{code} rejected: {err}"
+
+    def test_rejects_four_character_codes(self):
+        """wwPDB never issues 4-character component ids."""
+        rc, err = self._validate(["ABCD"])
+        assert rc != 0 and "ABCD" in err
+
+    def test_rejects_glycan_strings_with_actionable_advice(self):
+        rc, err = self._validate(["NAG(4-1 NAG(4-1 NAG))"])
+        assert rc != 0
+        assert "linked glycan strings" in err
+        assert "SMILES" in err, "the message must say what to do instead"
+
+    def test_accepts_whitespace_padded_codes_like_the_cli(self):
+        """The CLI strips; if the service does not, it refuses jobs the CLI takes."""
+        for code in (" ATP", "ATP ", "ATP\n"):
+            rc, err = self._validate([code])
+            assert rc == 0, f"{code!r} rejected by the service but accepted by the CLI: {err}"
+
+    def test_validates_every_code_not_just_the_first(self):
+        """A loop that `next`s unconditionally would pass a single-code test."""
+        rc, err = self._validate(["ATP", "ABCD"])
+        assert rc != 0 and "ABCD" in err
+
+    def test_rejects_underscores(self):
+        """Pins the real grammar, not merely agreement between our two copies."""
+        rc, _ = self._validate(["A_P"])
+        assert rc != 0
+
+    def test_message_names_a_five_character_example(self):
+        """The 1-3-only rule is what this issue is fixing; the example matters."""
+        _, err = self._validate(["ABCD"])
+        assert "A1H1F" in err

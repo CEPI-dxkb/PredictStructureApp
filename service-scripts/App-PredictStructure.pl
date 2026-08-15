@@ -129,7 +129,13 @@ sub _validate_params {
     if ($has_ligand) {
         for my $code (@{$params->{ligand}}) {
             next unless defined $code;
-            next if $code =~ /\A(?:[A-Za-z0-9]{1,3}|[A-Za-z0-9]{5})\z/;
+            # Strip surrounding whitespace exactly as validate_ccd_code does in
+            # Python. Without this the service rejects " ATP" while the CLI
+            # accepts it — the CLI would take a job the API refuses, which is
+            # the "valid input rejected with an opaque message" failure #48 was
+            # filed to fix, merely relocated.
+            (my $trimmed = $code) =~ s/\A\s+|\s+\z//g;
+            next if $trimmed =~ /\A(?:[A-Za-z0-9]{1,3}|[A-Za-z0-9]{5})\z/;
             die "Invalid ligand CCD code '$code': linked glycan strings are "
               . "not supported. List each monosaccharide as its own ligand "
               . "code (NAG, NAG), which places them as separate unlinked "
