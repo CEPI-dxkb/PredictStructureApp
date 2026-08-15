@@ -144,6 +144,15 @@ def write_pae_json(
             arr.shape,
         )
         return None
+    if not np.isfinite(arr).all():
+        # json.dumps would emit bare NaN/Infinity literals: Python parses them
+        # back, so PAELoader "succeeds" and the report then carries NaN into
+        # report.json, which strict parsers (the BV-BRC UI's JSON.parse) reject.
+        # Better no pae.json than one that breaks the report it feeds.
+        logger.warning(
+            "PAE matrix contains non-finite values — skipping pae.json"
+        )
+        return None
     if arr.shape[0] > cap:
         logger.warning(
             "PAE matrix is %dx%d, above the %d-token cap — skipping pae.json "
@@ -576,7 +585,10 @@ def normalize_boltz_output(raw_dir: Path, output_dir: Path) -> Path:
     pae_arr = None
     pae_npz = list(pred_subdir.glob(f"pae_{name}_model_0.npz"))
     if not pae_npz:
-        pae_npz = list(pred_subdir.glob("pae_*.npz"))
+        # sorted: glob order is filesystem-dependent, and on a multi-sample
+        # run an arbitrary pick could pair the PAE with a different sample
+        # than model_1.cif.
+        pae_npz = sorted(pred_subdir.glob("pae_*.npz"))
     if pae_npz:
         try:
             with np.load(str(pae_npz[0])) as pae_data:
@@ -627,7 +639,13 @@ def normalize_boltz_output(raw_dir: Path, output_dir: Path) -> Path:
                 pae_arr.shape[1],
                 len(plddt_array),
             )
-        write_pae_json(output_dir, pae_arr, ptm=ptm, iptm=iptm)
+        try:
+            write_pae_json(output_dir, pae_arr, ptm=ptm, iptm=iptm)
+        except Exception:
+            # PAE is supplementary. The npz read above is already guarded for
+            # the same reason: losing the predicted structure because a
+            # confidence matrix was malformed would be a far worse outcome.
+            logger.warning("Failed to write pae.json; continuing", exc_info=True)
 
     _copy_raw(raw_dir, output_dir)
     promote_best_model(output_dir)

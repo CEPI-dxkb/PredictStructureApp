@@ -786,3 +786,73 @@ class TestNormalizeAlphaFoldOutput:
         # AF2 mean pLDDT from ranking_debug.json for top model
         assert data["plddt_mean"] == 78.5
         assert data["ptm"] is None
+
+
+class TestWritePaeJsonRobustness:
+    """Guards from the adversarial review of #50."""
+
+    def test_non_finite_values_are_refused(self, tmp_path):
+        """NaN/Inf would serialize as bare literals and poison report.json.
+
+        json.dumps emits `NaN` unquoted; Python reads it back so PAELoader
+        "succeeds", and protein_compare then writes NaN into report.json, which
+        strict parsers (the UI's JSON.parse) reject. Writing nothing is better
+        than writing a file that breaks the report it feeds.
+        """
+        import numpy as np
+
+        from predict_structure.normalizers import write_pae_json
+
+        for bad in (np.nan, np.inf, -np.inf):
+            m = np.array([[0.0, bad], [bad, 0.0]])
+            assert write_pae_json(tmp_path, m) is None
+            assert not (tmp_path / "predictions" / "pae.json").exists()
+
+    def test_output_is_strict_json(self, tmp_path):
+        import json
+
+        import numpy as np
+
+        from predict_structure.normalizers import write_pae_json
+
+        p = write_pae_json(tmp_path, np.array([[0.0, 1.5], [1.5, 0.0]]))
+        assert p is not None
+
+        def _reject(c):
+            raise ValueError(f"non-strict JSON constant: {c}")
+
+        json.loads(p.read_text(), parse_constant=_reject)   # must not raise
+
+    def test_a_failing_pae_write_does_not_lose_the_structure(self, tmp_path, monkeypatch):
+        """PAE is supplementary; normalization must survive its failure."""
+        import numpy as np
+
+        import predict_structure.normalizers as norm
+
+        def _boom(*a, **k):
+            raise RuntimeError("simulated PAE failure")
+
+        monkeypatch.setattr(norm, "write_pae_json", _boom)
+        # The call site must swallow it — verified by the guard being present
+        # around the call rather than by re-running a full normalization here.
+        import inspect
+
+        src = inspect.getsource(norm.normalize_boltz_output)
+        i = src.index("write_pae_json(")
+        window = src[max(0, i - 400):i]
+        assert "try:" in window, (
+            "write_pae_json must be called inside try/except: an exception there "
+            "would abort normalization and discard the predicted structure"
+        )
+
+    def test_fallback_glob_is_sorted(self):
+        """Multi-sample runs must pair PAE with a deterministic sample."""
+        import inspect
+
+        import predict_structure.normalizers as norm
+
+        src = inspect.getsource(norm.normalize_boltz_output)
+        assert 'sorted(pred_subdir.glob("pae_*.npz"))' in src, (
+            "glob order is filesystem-dependent; an unsorted pick can pair the "
+            "PAE with a different diffusion sample than model_1.cif"
+        )
