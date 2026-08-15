@@ -87,12 +87,16 @@ tools:
     cwl: cwl/tools/esmfold2.cwl
     conda_env: esmfold2
     data_dir: esmfold2
-    # ESMFold2 ships only a Python API; execution goes through the in-repo
-    # runner module rather than an upstream CLI.
+    # ESMFold2 ships only a Python API; execution goes through our runner
+    # module rather than an upstream CLI. The {runner:...} placeholder expands
+    # at call time to the module's file in THIS installation, run under the
+    # esmfold2 env's python (the esm fork lives there). Never invoke it as
+    # `-m predict_structure...`: that makes the tool env import its own copy of
+    # this package, a second install that rebuilds forget — it silently ran
+    # June's code for two months (#98).
     command:
       - /opt/conda-esmfold2/bin/python
-      - -m
-      - predict_structure.runners.esmfold2
+      - "{runner:predict_structure.runners.esmfold2}"
 
   openfold:
     image: docker://openfoldconsortium/openfold3:stable

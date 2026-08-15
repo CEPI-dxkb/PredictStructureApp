@@ -69,9 +69,10 @@ class TestESMFold2Adapter:
         prepared = adapter.prepare_input(protein_entity_list, tmp_output)
         cmd = adapter.build_command(prepared, tmp_output / "raw")
 
-        # Runner invocation: python -m predict_structure.runners.esmfold2
-        assert "predict_structure.runners.esmfold2" in cmd
-        assert cmd[cmd.index("-m") + 1] == "predict_structure.runners.esmfold2"
+        # Runner invoked by FILE PATH, not -m: the tool env importing its own
+        # predict_structure is the #98 stale-copy hazard.
+        assert any(c.endswith("runners/esmfold2.py") for c in cmd)
+        assert "-m" not in cmd
         assert "--spec" in cmd
         assert cmd[cmd.index("--spec") + 1] == str(prepared)
         assert "--output-dir" in cmd
@@ -602,3 +603,66 @@ class TestHFCacheProbe:
         assert "esmfold2" not in tuple_src, (
             "auto can now pick esmfold2 — add its repos to %REPOS_FOR_TOOL{auto}"
         )
+
+
+class TestSingleRunnerCopy:
+    """#98: the ESMFold2 runner must execute from THIS package, not a second install.
+
+    predict_structure was installed in both conda-predict and conda-esmfold2, and
+    `-m predict_structure.runners.esmfold2` made the tool env import its own
+    copy — which no rebuild updated. It silently ran June's code for two months
+    while every label said otherwise.
+    """
+
+    def test_command_invokes_the_runner_by_file_path(self):
+        from pathlib import Path
+
+        from predict_structure.config import get_command
+
+        cmd = get_command("esmfold2")
+        assert "-m" not in cmd, (
+            "-m makes the tool env import its own predict_structure — the #98 "
+            "stale-copy hazard. Invoke the runner by file path."
+        )
+        runner = next((c for c in cmd if c.endswith("esmfold2.py")), None)
+        assert runner is not None, f"no runner path in {cmd}"
+        assert Path(runner).is_file()
+
+    def test_resolved_path_is_this_installation(self):
+        import predict_structure
+        from pathlib import Path
+
+        from predict_structure.config import get_command
+
+        runner = next(c for c in get_command("esmfold2") if c.endswith("esmfold2.py"))
+        pkg_root = Path(predict_structure.__file__).parent
+        assert Path(runner).is_relative_to(pkg_root), (
+            f"runner resolves outside this installation: {runner}"
+        )
+
+    def test_runner_has_no_package_relative_imports(self):
+        """It runs as a plain script, so package context must never be needed."""
+        from pathlib import Path
+
+        src = (Path(__file__).resolve().parent.parent
+               / "predict_structure" / "runners" / "esmfold2.py").read_text()
+        for line in src.splitlines():
+            stripped = line.strip()
+            assert not stripped.startswith(("from .", "from predict_structure",
+                                            "import predict_structure")), (
+                f"package-relative import breaks script-mode execution: {stripped}"
+            )
+
+    def test_unknown_runner_module_fails_loudly(self):
+        import pytest
+
+        from predict_structure.config import _resolve_runner_placeholder
+
+        with pytest.raises(FileNotFoundError, match="no.such.module"):
+            _resolve_runner_placeholder("{runner:no.such.module}")
+
+    def test_non_placeholder_parts_pass_through(self):
+        from predict_structure.config import _resolve_runner_placeholder
+
+        for part in ("/opt/conda-boltz/bin/boltz", "predict", "--flag", "{notrunner}"):
+            assert _resolve_runner_placeholder(part) == part
