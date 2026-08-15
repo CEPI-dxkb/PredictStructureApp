@@ -666,3 +666,37 @@ class TestSingleRunnerCopy:
 
         for part in ("/opt/conda-boltz/bin/boltz", "predict", "--flag", "{notrunner}"):
             assert _resolve_runner_placeholder(part) == part
+
+
+class TestBackendGuard:
+    """esmfold2 is subprocess-only: the runner file path does not exist inside
+    the docker/cwl backends' containers (they mount input/output/data only)."""
+
+    def test_docker_backend_is_refused_clearly(self, tmp_path):
+        from click.testing import CliRunner
+
+        from predict_structure.cli import main
+
+        fasta = tmp_path / "p.fasta"
+        fasta.write_text(">p\nMKTIIALSY\n")
+        result = CliRunner().invoke(main, [
+            "esmfold2", "--protein", str(fasta), "-o", str(tmp_path / "out"),
+            "--backend", "docker",
+        ])
+        assert result.exit_code == 2
+        assert "subprocess" in result.output
+        assert "Traceback" not in result.output
+
+    def test_subprocess_backend_still_builds_the_command(self, tmp_path):
+        from click.testing import CliRunner
+
+        from predict_structure.cli import main
+
+        fasta = tmp_path / "p.fasta"
+        fasta.write_text(">p\nMKTIIALSY\n")
+        result = CliRunner().invoke(main, [
+            "esmfold2", "--protein", str(fasta), "-o", str(tmp_path / "out"),
+            "--backend", "subprocess", "--debug",
+        ])
+        assert result.exit_code == 0
+        assert "runners/esmfold2.py" in result.output

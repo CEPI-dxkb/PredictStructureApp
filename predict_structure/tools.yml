@@ -94,6 +94,13 @@ tools:
     # `-m predict_structure...`: that makes the tool env import its own copy of
     # this package, a second install that rebuilds forget — it silently ran
     # June's code for two months (#98).
+    #
+    # LIMITATION: subprocess backend only. The docker backend mounts just
+    # input/output/data, so the resolved runner path does not exist inside the
+    # container (this was equally dead under -m: no dxkb/esmfold2-bvbrc image
+    # was ever built). The apptainer backend rides on the default $HOME bind
+    # and breaks under --contain. Production always uses subprocess inside the
+    # SIF, where the path resolves natively.
     command:
       - /opt/conda-esmfold2/bin/python
       - "{runner:predict_structure.runners.esmfold2}"

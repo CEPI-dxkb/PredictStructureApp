@@ -5,7 +5,8 @@
 # /opt/conda-esmfold2 env with PyTorch + Biohub `esm` (which provides the
 # `transformers.models.esmfold2` API) + the predict-structure package, and
 # exposes the unified CLI. The ESMFold2 adapter's runner subprocess
-# (`/opt/conda-esmfold2/bin/python -m predict_structure.runners.esmfold2`)
+# (the runner file from this env's own install — single-env container,
+# so the #98 dual-install hazard does not apply here)
 # shares this same env, so everything it imports is present.
 #
 # Build (output to /scout/containers; use a build scratch dir with space):
