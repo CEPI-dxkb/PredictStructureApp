@@ -16,8 +16,9 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [ ] #88 — eye-icon REPORT action, also BV-BRC-Web
 - [ ] Decide #85 (full AlphaFold decommission) — #90 already removed it from auto,
       so the urgency is lower; still the reason A01/A02/R01 are excluded
-- [ ] #50: convert the Boltz PAE npz to `predictions/pae.json` — the report side
-      is already built and shipped, only the data path is missing
+- [x] #50: convert the Boltz PAE npz to `predictions/pae.json` — the report side
+      is already built and shipped, only the data path was missing
+      (fix/50-pae-json; OpenFold's per-atom PAE still unconverted)
 - [ ] #48: the Python CLI does no CCD validation at all while the Perl enforces
       `^[A-Za-z0-9]{1,3}$`; junk reaches the tool and fails opaquely
 - [ ] Suppress the Carp backtrace on `_validate_params` dies, as the #84 path
@@ -52,7 +53,7 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [ ] #77 — Per-model protein length limits (CLI + UI)
 - [ ] #76 — DSSP as post-prediction step
 - [ ] #48 — CCD ligand input rejects glycans containing parentheses
-- [ ] #50 — Add PAE score to the report
+- [x] #50 — Add PAE score to the report (Boltz; OpenFold deferred)
 - [ ] #79 — B-factor distribution bars invisible when value is zero
 - [ ] #80 — Report TOC/index + section reorder
 - [ ] #72 — Workspace file upload not immediately visible (UI)

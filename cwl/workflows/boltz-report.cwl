@@ -81,10 +81,17 @@ steps:
       predictions: predict/predictions
     out: [structure]
 
+  extract_pae:
+    run: ../tools/select-pae.cwl
+    in:
+      predictions: predict/predictions
+    out: [pae]
+
   report:
     run: ../tools/protein-compare.cwl
     in:
       structure: extract/structure
+      pae: extract_pae/pae
       output_name: report_name
       format: report_format
     out: [report, report_json]

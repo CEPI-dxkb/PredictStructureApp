@@ -106,6 +106,41 @@ class TestPerToolCWLValidation:
         assert "is valid CWL" in combined
 
 
+class TestPaeCWLWiring:
+    """The CWL report path must receive predictions/pae.json too (#50).
+
+    The Perl service and the CWL workflows are two independent routes to the
+    same report; fixing only the Perl leaves CWL-run reports without PAE.
+    """
+
+    WORKFLOW_DIR = Path(__file__).resolve().parents[1] / "cwl" / "workflows"
+
+    def test_select_pae_validates(self):
+        result = subprocess.run(
+            ["cwltool", "--validate", str(CWL_DIR / "select-pae.cwl")],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "is valid CWL" in result.stdout + result.stderr
+
+    def test_select_pae_output_is_optional(self):
+        """Tools without PAE (ESMFold, Chai) must not fail the workflow."""
+        doc = yaml.safe_load((CWL_DIR / "select-pae.cwl").read_text())
+        assert doc["outputs"]["pae"]["type"] == "File?"
+        # pae.json lives under predictions/, one level down
+        assert doc["requirements"]["LoadListingRequirement"]["loadListing"] == \
+            "deep_listing"
+
+    @pytest.mark.parametrize("wf", ["boltz-report.cwl", "boltz-report-msa.cwl"])
+    def test_boltz_workflows_pass_pae_to_report(self, wf):
+        doc = yaml.safe_load((self.WORKFLOW_DIR / wf).read_text())
+        steps = doc["steps"]
+        assert "extract_pae" in steps, f"{wf} has no PAE extraction step"
+        assert steps["extract_pae"]["run"].endswith("select-pae.cwl")
+        assert steps["report"]["in"]["pae"] == "extract_pae/pae"
+
+
 class TestUnifiedCWLStructure:
     """Validate the unified predict-structure.cwl (kept alongside per-tool)."""
 
