@@ -76,6 +76,107 @@ def write_confidence_json(
     return path
 
 
+# Predicted Aligned Error (PAE) is an N×N matrix: the serialized JSON grows
+# quadratically (46 tokens → 13 KB, 1000 → ~6 MB, 2000 → ~24 MB). Above this
+# many tokens we skip writing pae.json rather than ship a multi-tens-of-MB
+# file into the workspace. Note the asymmetry with entities.MAX_TOTAL_RESIDUES
+# (10_000): a legal 3,000-residue job gets no PAE, only a log line.
+PAE_MAX_TOKENS = 2000
+
+# Colormap ceiling used by protein_compare when rendering PAE heatmaps
+# (structure_report.py passes ``vmax=pae.max_pae``). It is a FIXED scale, not
+# a statistic of the matrix — deriving it from the data would give every job
+# its own colour scale and make two predictions visually incomparable.
+DEFAULT_MAX_PAE = 31.75
+
+
+def write_pae_json(
+    output_dir: Path,
+    pae_matrix,
+    *,
+    ptm: float | None = None,
+    iptm: float | None = None,
+    max_pae: float | None = None,
+) -> Path | None:
+    """Write ``predictions/pae.json`` in protein_compare's "Format 1" schema.
+
+    Schema is dictated by ``PAELoader._parse_pae_data`` in
+    ``protein_compare/io/parser.py`` (Format 1 branch)::
+
+        {"pae": [[...]], "max_pae": 31.75, "ptm": 0.87, "iptm": 0.42}
+
+    Only ``pae`` is required; a dict without it raises
+    ``ValueError("Unrecognized PAE dict format")`` in the loader, and
+    ``StructureReport`` calls ``PAELoader.load`` unguarded, so a malformed
+    file aborts report generation entirely. Hence: either write a valid
+    file or write nothing at all.
+
+    The loader performs NO shape validation (a 1-D or non-square matrix
+    loads happily and breaks downstream rendering), so the guards here are
+    load-bearing.
+
+    Args:
+        output_dir: Unified output directory.
+        pae_matrix: N×N array-like of PAE values in Ångströms.
+        ptm: Predicted TM-score, omitted from the JSON when None.
+        iptm: Interface pTM, omitted when None. Do NOT pass a monomer's
+            0.0 — the report would show a misleading "ipTM 0.00" box.
+        max_pae: Colormap ceiling. Defaults to ``DEFAULT_MAX_PAE``; never
+            derived from the data.
+
+    Returns:
+        Path to ``predictions/pae.json``, or None when nothing was written
+        (non-2-D, non-square, empty, or larger than ``PAE_MAX_TOKENS``).
+    """
+    # Read the cap from the module namespace at call time so tests (and
+    # operators) can monkeypatch it; a default argument would bind at import.
+    cap = PAE_MAX_TOKENS
+
+    arr = np.asarray(pae_matrix, dtype=float)
+    if arr.ndim != 2:
+        logger.warning(
+            "PAE matrix is %d-D (expected 2-D) — skipping pae.json", arr.ndim
+        )
+        return None
+    if arr.shape[0] != arr.shape[1] or arr.shape[0] == 0:
+        logger.warning(
+            "PAE matrix is not a non-empty square (shape %s) — skipping pae.json",
+            arr.shape,
+        )
+        return None
+    if not np.isfinite(arr).all():
+        # json.dumps would emit bare NaN/Infinity literals: Python parses them
+        # back, so PAELoader "succeeds" and the report then carries NaN into
+        # report.json, which strict parsers (the BV-BRC UI's JSON.parse) reject.
+        # Better no pae.json than one that breaks the report it feeds.
+        logger.warning(
+            "PAE matrix contains non-finite values — skipping pae.json"
+        )
+        return None
+    if arr.shape[0] > cap:
+        logger.warning(
+            "PAE matrix is %dx%d, above the %d-token cap — skipping pae.json "
+            "(serialized JSON would be prohibitively large)",
+            arr.shape[0],
+            arr.shape[1],
+            cap,
+        )
+        return None
+
+    data: dict = {
+        "pae": [[round(float(v), 2) for v in row] for row in arr],
+        "max_pae": round(float(max_pae if max_pae is not None else DEFAULT_MAX_PAE), 2),
+    }
+    if ptm is not None:
+        data["ptm"] = round(float(ptm), 4)
+    if iptm is not None:
+        data["iptm"] = round(float(iptm), 4)
+
+    path = predictions_dir(output_dir) / "pae.json"
+    path.write_text(json.dumps(data))
+    return path
+
+
 METADATA_SUBDIR = "metadata"
 INPUTS_SUBDIR = "inputs"
 PREDICTIONS_SUBDIR = "predictions"
@@ -464,6 +565,7 @@ def normalize_boltz_output(raw_dir: Path, output_dir: Path) -> Path:
     plddt_array: list[float] = []
     plddt_mean = 0.0
     ptm = None
+    iptm = None
 
     # Per-residue pLDDT from NPZ (Boltz-2 writes plddt_{name}_model_0.npz)
     plddt_npz = list(pred_subdir.glob(f"plddt_{name}_model_0.npz"))
@@ -477,9 +579,32 @@ def normalize_boltz_output(raw_dir: Path, output_dir: Path) -> Path:
             plddt_array = [v * 100 for v in plddt_array]
         plddt_mean = sum(plddt_array) / len(plddt_array) if plddt_array else 0.0
 
+    # PAE matrix from NPZ (Boltz-2 writes pae_{name}_model_0.npz with a single
+    # "pae" key). Boltz never writes a PAE *JSON*, which is why the report has
+    # never received one.
+    pae_arr = None
+    pae_npz = list(pred_subdir.glob(f"pae_{name}_model_0.npz"))
+    if not pae_npz:
+        # sorted: glob order is filesystem-dependent, and on a multi-sample
+        # run an arbitrary pick could pair the PAE with a different sample
+        # than model_1.cif.
+        pae_npz = sorted(pred_subdir.glob("pae_*.npz"))
+    if pae_npz:
+        try:
+            with np.load(str(pae_npz[0])) as pae_data:
+                pae_arr = np.asarray(pae_data["pae"])
+        except (OSError, ValueError, KeyError) as exc:
+            logger.warning("Could not read PAE from %s: %s", pae_npz[0], exc)
+            pae_arr = None
+
     if conf_files:
         conf_data = json.loads(conf_files[0].read_text())
         ptm = conf_data.get("ptm")
+        # Boltz writes iptm 0.0 for monomers; surfacing that would show a
+        # misleading "ipTM 0.00" box in the report, so gate on chain count.
+        chains_ptm = conf_data.get("chains_ptm") or {}
+        if len(chains_ptm) > 1:
+            iptm = conf_data.get("iptm")
         # Use complex_plddt as mean if per-residue not available
         if not plddt_array:
             cplddt = conf_data.get("complex_plddt", conf_data.get("plddt"))
@@ -501,6 +626,26 @@ def normalize_boltz_output(raw_dir: Path, output_dir: Path) -> Path:
                               per_atom_plddt=per_atom)
     else:
         logger.warning("No confidence data found in %s", pred_subdir)
+
+    if pae_arr is not None:
+        # A size mismatch means the report's axis labels will be off, not that
+        # anything crashes (protein_compare never cross-checks PAE against the
+        # structure), so warn and still write. Do not tighten this to a raise.
+        if plddt_array and pae_arr.ndim == 2 and pae_arr.shape[0] != len(plddt_array):
+            logger.warning(
+                "PAE matrix is %dx%d but there are %d pLDDT tokens — "
+                "writing pae.json anyway",
+                pae_arr.shape[0],
+                pae_arr.shape[1],
+                len(plddt_array),
+            )
+        try:
+            write_pae_json(output_dir, pae_arr, ptm=ptm, iptm=iptm)
+        except Exception:
+            # PAE is supplementary. The npz read above is already guarded for
+            # the same reason: losing the predicted structure because a
+            # confidence matrix was malformed would be a far worse outcome.
+            logger.warning("Failed to write pae.json; continuing", exc_info=True)
 
     _copy_raw(raw_dir, output_dir)
     promote_best_model(output_dir)

@@ -63,6 +63,43 @@ scale. pTM is on the 0-1 scale.
 
 JSON Schema: `tests/acceptance/schemas/confidence.schema.json`.
 
+## 2b. `predictions/pae.json` Schema
+
+Written only when the tool emits a Predicted Aligned Error matrix (Boltz-2
+today; ESMFold and Chai have none). The key names are dictated by
+protein_compare's `PAELoader._parse_pae_data` "Format 1" branch
+(`protein_compare/io/parser.py`) -- this file exists to be consumed by
+`protein_compare characterize --pae`:
+
+```json
+{
+  "pae": [[0.25, 1.31, ...], ...],   // N x N, Angstroms, 2 decimals
+  "max_pae": 31.75,                  // colormap ceiling, NOT a data statistic
+  "ptm": 0.8763,                     // optional, omitted when unknown
+  "iptm": 0.42                       // optional, omitted for monomers
+}
+```
+
+Rules that are load-bearing:
+
+- `max_pae` is the heatmap `vmax`, fixed at 31.75 (the AF2 convention). It is
+  never derived from the matrix: doing so would give every job its own colour
+  scale and make two predictions visually incomparable.
+- `iptm` is omitted for single-chain jobs. Boltz writes `iptm: 0.0` there, and
+  passing it through renders a misleading "ipTM 0.00" box in the report. The
+  gate is `len(chains_ptm) > 1`.
+- A file lacking the `"pae"` key makes the loader raise, and `StructureReport`
+  calls it unguarded -- that aborts report generation entirely. So the writer
+  either emits a valid file or none at all (non-square, 1-D, and empty matrices
+  are dropped with a warning; the loader itself validates nothing).
+- Size is quadratic: 46 tokens = 13 KB, 1000 = ~6 MB. Above
+  `normalizers.PAE_MAX_TOKENS` (2000) the file is skipped with a warning rather
+  than truncated. Note the asymmetry with `entities.MAX_TOTAL_RESIDUES`
+  (10,000): a legal 3,000-residue job gets no PAE.
+- A PAE/pLDDT token-count mismatch is a warning, not an error: protein_compare
+  never cross-checks the matrix against the structure, so the consequence is
+  wrong axis labels, not a crash.
+
 ## 3. pLDDT Extraction Per Tool
 
 Each tool produces pLDDT in different forms; we extract both per-residue and
@@ -73,6 +110,7 @@ preserve as much accuracy as possible.
 
 **Native outputs:**
 - `predictions/*/plddt_*_model_0.npz` -- per-residue pLDDT (shape `(N,)`)
+- `predictions/*/pae_*_model_0.npz` -- PAE matrix (single key `pae`, `(N, N)`)
 - `model_0.cif` -- B-factors are per-atom
 - `confidence_*.json` -- summary scalars (no array)
 
@@ -81,6 +119,9 @@ preserve as much accuracy as possible.
 - `per_atom_plddt` <- `model_1.pdb` ATOM B-factors
 - `plddt_mean` <- mean of NPZ
 - `ptm` <- from JSON summary
+- `predictions/pae.json` <- PAE NPZ + `ptm`/`iptm` from the JSON summary (§2b).
+  Boltz emits the matrix only as an NPZ, so without this conversion the report
+  never receives a PAE panel (#50).
 
 **Rationale:** NPZ is the tool's canonical per-residue source. PDB B-factors
 give us true per-atom resolution.
@@ -278,9 +319,15 @@ We select the best model only. Users who want all samples must run with
 
 ### 8.5 Confidence metrics beyond pLDDT and pTM
 
-Tool-specific metrics (PAE, PDE, iPTM, chain_ptm, ranking_score, etc.) are
-**not** in the unified schema. They are preserved in `raw/` and consumed
-by downstream reporters (e.g. `protein_compare characterize --pae ...`).
+PAE **is** part of the unified schema as of #50: Boltz's `pae_*.npz` is
+converted to `predictions/pae.json` (§2b) and handed to the reporter by both
+the BV-BRC service script and the CWL report workflows.
+
+The remaining tool-specific metrics (PDE, chain_ptm, ranking_score, etc.) are
+**not** in the unified schema. They are preserved in `raw/` only. OpenFold 3
+reports PAE inside its `*_confidences.json`, but that array is per-atom rather
+than per-token and has not been verified against a real run, so it is not
+converted yet.
 
 ## 9. Validation
 

@@ -1031,15 +1031,26 @@ sub run_report {
         "--format", "all",
     );
 
-    # Add tool-specific confidence files if available
-    # Boltz / AlphaFold PAE
-    my @pae_files;
-    File::Find::find(
-        { wanted => sub { push @pae_files, $_ if /\bpae[_.].*\.json$/ }, no_chdir => 1 },
-        "$output_dir/raw_output"
-    ) if -d "$output_dir/raw_output";
-    if (@pae_files) {
-        push @cmd, "--pae", $pae_files[0];
+    # Add tool-specific confidence files if available.
+    #
+    # PAE: prefer the normalized predictions/pae.json that normalizers.py
+    # writes (Boltz emits pae_*.npz, never a JSON, so the raw_output scan
+    # below has never matched anything for it). The scan is kept only as a
+    # fallback for tools that do drop a PAE JSON into their native output.
+    my $pae_json = "$output_dir/predictions/pae.json";
+    if (-f $pae_json) {
+        push @cmd, "--pae", $pae_json;
+    }
+    else {
+        my @pae_files;
+        File::Find::find(
+            { wanted => sub { push @pae_files, $_ if /\bpae[_.].*\.json$/ }, no_chdir => 1 },
+            "$output_dir/raw_output"
+        ) if -d "$output_dir/raw_output";
+        @pae_files = sort @pae_files;
+        if (@pae_files) {
+            push @cmd, "--pae", $pae_files[0];
+        }
     }
 
     # Chai scores

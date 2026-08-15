@@ -19,8 +19,18 @@ Two issues wait only on write access to BV-BRC-Web: #90's UI half and #88's
 eye-icon action. The #90 patch is prepared at
 `docs/bvbrc-web-90-retire-alphafold.patch`.
 
-After that: #50 is the highest-value remaining fix — the report side already
-ships, it only needs the Boltz PAE npz converted to `predictions/pae.json`.
+#50 is fixed on `fix/50-pae-json`: `normalize_boltz_output` now converts the
+Boltz `pae_*.npz` into `predictions/pae.json` (protein_compare Format 1), the
+service script hands that file to `characterize --pae`, and the two Boltz CWL
+report workflows wire it through a new `select-pae.cwl`. Not yet seen in a
+rendered report — that needs a container run. OpenFold's per-atom PAE is still
+unconverted (shape unverified against a real OF3 run).
+
+Note for anyone reading the old #50 notes: the claim that the Perl walked a
+non-existent `raw_output/` was **wrong**. `raw_output/` is the live directory
+that `cli.py` creates for the tool's native `--out_dir`; `--chai-scores` has
+been working all along. The only reason `--pae` never fired is that Boltz emits
+an NPZ, never a JSON.
 
 ### Resolved 2026-08-13: submission failure after the container switch
 
@@ -194,7 +204,7 @@ a Perl backtrace into the user-visible message. The #84 path suppresses it via
 | 77 | Per-model protein length limits | Medium | CLI + UI validation with tool-specific error messages |
 | 76 | DSSP as post-prediction step | Medium | Secondary structure assignment for reports |
 | 48 | CCD ligand input rejects glycans with parentheses | Medium | Validation regex |
-| 50 | Add PAE score to the report | Low | protein_compare |
+| 50 | Add PAE score to the report | Low | Fixed for Boltz on fix/50-pae-json; OpenFold deferred |
 | 51 | Job progress indicator | Low | BV-BRC UI |
 | 52 | Docs: multi-chain applies to DNA/RNA too | Low | Docs |
 | 79 | B-factor distribution zero-height bars | Low | protein_compare report template |
