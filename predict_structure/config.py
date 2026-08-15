@@ -174,16 +174,48 @@ def get_conda_env(tool_name: str) -> str | None:
     return get_tool_config(tool_name).get("conda_env")
 
 
+def _resolve_runner_placeholder(part: str) -> str:
+    """Expand ``{runner:<module>}`` to the module's file in THIS installation.
+
+    ESMFold2's runner is our own code but must execute under a different conda
+    env's python (the esm fork lives there). Invoking it as
+    ``-m predict_structure.runners.esmfold2`` made that env import ITS OWN copy
+    of predict_structure — a second install that no rebuild updated, which
+    silently ran June's code while every label said otherwise (#98). Resolving
+    the file path from this package at call time means there is exactly one
+    copy of the code, found wherever this package is actually installed, and a
+    second install in the tool env is simply never imported.
+    """
+    if not (part.startswith("{runner:") and part.endswith("}")):
+        return part
+    module = part[len("{runner:"):-1]
+    import importlib.util
+
+    try:
+        spec = importlib.util.find_spec(module)
+    except ModuleNotFoundError:
+        # find_spec raises (rather than returning None) when a PARENT package
+        # is missing, e.g. resolving "no.such.module" with no "no" installed.
+        spec = None
+    if spec is None or not spec.origin:
+        raise FileNotFoundError(
+            f"runner module {module!r} not found in this installation"
+        )
+    return spec.origin
+
+
 def get_command(tool_name: str) -> list[str]:
     """Return the base command (executable + subcommand) as a list.
 
     Example: ``["boltz", "predict"]`` or
-    ``["/opt/conda-alphafold/bin/python", "/app/alphafold/run_alphafold.py"]``
+    ``["/opt/conda-alphafold/bin/python", "/app/alphafold/run_alphafold.py"]``.
+    ``{runner:<module>}`` entries expand to that module's file path in this
+    installation — see ``_resolve_runner_placeholder``.
     """
     cmd = get_tool_config(tool_name).get("command", [])
     if isinstance(cmd, str):
-        return cmd.split()
-    return list(cmd)
+        cmd = cmd.split()
+    return [_resolve_runner_placeholder(c) for c in cmd]
 
 
 def get_shared_sif() -> Path | None:

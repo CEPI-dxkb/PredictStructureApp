@@ -616,6 +616,17 @@ def run_prediction(
     backend_kwargs = {}
     if backend == "docker" and shared.get("image"):
         backend_kwargs["default_image"] = shared["image"]
+    if tool_name == "esmfold2" and backend in ("docker", "cwl"):
+        # The runner is invoked by file path from THIS installation (#98); the
+        # docker/cwl backends mount only input/output/data, so that path does
+        # not exist inside their containers. Refusing beats a cryptic
+        # "can't open file" from deep inside the backend.
+        click.echo(
+            f"Error: esmfold2 supports only the subprocess backend "
+            f"(--backend {backend} cannot reach the runner file; see "
+            f"tools.yml and issue #98).", err=True)
+        sys.exit(2)
+
     if backend == "apptainer" and shared.get("sif"):
         backend_kwargs["sif_path"] = shared["sif"]
     if backend == "cwl":
