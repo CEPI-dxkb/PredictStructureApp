@@ -120,7 +120,8 @@ Runs in **both** preflight and run_app, immediately after `_init_debug`.
 | `output_path` set | *"output_path is required"* |
 | `text_input` entries have non-empty `sequence` | *"text_input entry N has an empty sequence"* |
 | `text_input` type ∈ {auto, protein, dna, rna} | *"invalid type 'X'"* |
-| Ligand CCD codes are 1-3 alphanumeric | *"Invalid ligand CCD code 'X'"* |
+| Ligand CCD codes are 1-3 or exactly 5 alphanumeric (never 4) | *"Invalid ligand CCD code 'X'"* |
+| Ligand code is a single CCD code, not a linked glycan string | *"linked glycan strings are not supported"* |
 | SMILES strings are non-empty | *"Empty SMILES string"* |
 | boltz/openfold/chai have `msa_file` | *"tool requires an MSA upload"* |
 

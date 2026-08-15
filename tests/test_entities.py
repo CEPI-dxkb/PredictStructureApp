@@ -4,12 +4,14 @@ import pytest
 from pathlib import Path
 
 from predict_structure.entities import (
+    CCD_CODE_RE,
     Entity,
     EntityList,
     EntityType,
     detect_sequence_type,
     is_boltz_yaml,
     parse_fasta_entities,
+    validate_ccd_code,
 )
 
 
@@ -205,3 +207,139 @@ class TestIsBoltzYaml:
 
     def test_nonexistent_file(self, tmp_path):
         assert is_boltz_yaml(tmp_path / "missing.yaml") is False
+
+
+class TestCCDCodeValidation:
+    """#48 — CCD codes are 1-3 OR exactly 5 alphanumeric characters.
+
+    Four-character codes do not exist in the archive (wwPDB reserved that
+    length so component IDs cannot be confused with PDB entry IDs), and
+    5-character "extended" codes have been issued since 2023. The old
+    ``^[A-Za-z0-9]{1,3}$`` rule therefore rejected valid ligands.
+    """
+
+    @pytest.mark.parametrize("code", ["A", "AT", "ATP", "NAG", "0", "1A2"])
+    def test_short_codes_accepted(self, code):
+        assert validate_ccd_code(code) == code.upper()
+
+    @pytest.mark.parametrize("code", ["A1H1F", "A1AJ7"])
+    def test_five_char_extended_codes_accepted(self, code):
+        """Real extended CCD IDs; both present in Boltz's bundled snapshot."""
+        assert validate_ccd_code(code) == code
+
+    def test_lowercase_is_normalized(self):
+        """Archive keys are uppercase; Boltz/OpenFold look codes up verbatim."""
+        assert validate_ccd_code("atp") == "ATP"
+        assert validate_ccd_code("a1h1f") == "A1H1F"
+
+    def test_surrounding_whitespace_stripped(self):
+        assert validate_ccd_code("  ATP  ") == "ATP"
+
+    @pytest.mark.parametrize("code", ["", "   ", "ABCD", "ABCDEF", "NAG-NAG",
+                                      "NA G", "ATP;rm -rf /", "PRD_000001"])
+    def test_invalid_codes_rejected(self, code):
+        with pytest.raises(ValueError, match="Invalid ligand CCD code"):
+            validate_ccd_code(code)
+
+    def test_four_char_rejected_explicitly(self):
+        """The length that can never be a CCD id."""
+        with pytest.raises(ValueError, match="1-3 or 5 alphanumeric"):
+            validate_ccd_code("ATPX")
+
+    def test_trailing_newline_rejected(self):
+        """``$`` matches before a trailing newline — fullmatch must not."""
+        assert CCD_CODE_RE.fullmatch("ATP\n") is None
+
+    def test_glycan_string_gets_glycan_advice(self):
+        with pytest.raises(ValueError, match="linked glycan strings are not supported"):
+            validate_ccd_code("NAG(4-1 NAG(4-1 NAG))")
+
+    def test_typo_with_space_gets_generic_advice_not_glycan_advice(self):
+        """Whitespace alone must not trigger the glycan branch: 'NA G' is a
+        typo, and telling that user about glycan linkage is wrong advice."""
+        with pytest.raises(ValueError) as exc:
+            validate_ccd_code("NA G")
+        assert "glycan" not in str(exc.value)
+        assert "1-3 or 5 alphanumeric" in str(exc.value)
+
+    def test_message_names_the_offending_value_and_the_escape_hatch(self):
+        with pytest.raises(ValueError) as exc:
+            validate_ccd_code("TOOLONG")
+        assert "'TOOLONG'" in str(exc.value)
+        assert "--smiles" in str(exc.value)
+
+
+class TestEntityListLigandValidation:
+    """The validator must be WIRED IN, not merely defined.
+
+    Every TestCCDCodeValidation case calls ``validate_ccd_code`` directly and
+    would still pass if ``EntityList.add`` never invoked it. These do not.
+    """
+
+    def test_add_rejects_bad_ccd_code(self):
+        el = EntityList()
+        with pytest.raises(ValueError, match="Invalid ligand CCD code"):
+            el.add(EntityType.LIGAND, "ABCD")
+        assert len(el) == 0
+
+    def test_add_rejects_glycan_string(self):
+        el = EntityList()
+        with pytest.raises(ValueError, match="linked glycan strings"):
+            el.add(EntityType.LIGAND, "NAG(4-1 NAG)")
+
+    def test_add_accepts_extended_code(self):
+        el = EntityList()
+        el.add(EntityType.LIGAND, "A1H1F")
+        assert el.entities[0].value == "A1H1F"
+
+    def test_add_normalizes_value_and_keeps_name_in_sync(self):
+        """Uppercasing must not desync value from name — both reach
+        metadata.json and the RO-Crate independently."""
+        el = EntityList()
+        el.add(EntityType.LIGAND, "atp", name="atp", format="ccd")
+        ent = el.entities[0]
+        assert ent.value == "ATP"
+        assert ent.name == "ATP"
+
+    def test_add_preserves_a_distinct_user_label(self):
+        el = EntityList()
+        el.add(EntityType.LIGAND, "atp", name="cofactor")
+        assert el.entities[0].value == "ATP"
+        assert el.entities[0].name == "cofactor"
+
+    def test_smiles_entities_are_untouched(self):
+        """SMILES legitimately contain parentheses and lowercase atoms."""
+        el = EntityList()
+        el.add(EntityType.SMILES, "CC(=O)O", name="smiles")
+        el.add(EntityType.SMILES, "c1ccccc1", name="smiles")
+        assert [e.value for e in el.entities] == ["CC(=O)O", "c1ccccc1"]
+
+    def test_other_entity_types_are_untouched(self):
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "MKTIIAL")
+        assert el.entities[0].value == "MKTIIAL"
+
+
+class TestPerlRegexParity:
+    """The CCD rule is duplicated in Perl; keep the copies honest.
+
+    ``service-scripts/App-PredictStructure.pl`` re-implements the check for
+    the BV-BRC submit path and there are no Perl tests in this suite, so the
+    two would drift silently. Assert the Perl literal is character-for-
+    character ``CCD_CODE_RE.pattern`` wrapped in Perl's ``\\A``/``\\z``
+    anchors (``$`` would let a trailing newline through in both languages).
+    """
+
+    def test_perl_ccd_regex_matches_python_pattern(self):
+        perl = (Path(__file__).resolve().parent.parent
+                / "service-scripts" / "App-PredictStructure.pl").read_text()
+        expected = r"/\A" + CCD_CODE_RE.pattern + r"\z/"
+        assert expected in perl, (
+            f"App-PredictStructure.pl must validate CCD codes with {expected}; "
+            "the Perl and Python rules have drifted"
+        )
+
+    def test_perl_does_not_use_dollar_anchor_for_ccd(self):
+        perl = (Path(__file__).resolve().parent.parent
+                / "service-scripts" / "App-PredictStructure.pl").read_text()
+        assert "[A-Za-z0-9]{1,3}$/" not in perl

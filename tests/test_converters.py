@@ -340,6 +340,48 @@ class TestEntitiesToFasta:
             entities_to_fasta(el, tmp_output / "input.fasta")
 
 
+class TestLigandCodesReachingConverters:
+    """#48 — a malformed CCD code can no longer be written into a tool input.
+
+    The converters pass ``Entity.value`` straight through (``ccd:`` in the
+    Boltz YAML, ``ccd_codes`` in the OpenFold JSON), so the guard has to be
+    upstream: an EntityList carrying a glycan string cannot be built at all.
+    """
+
+    def test_glycan_string_cannot_be_put_in_an_entity_list(self):
+        el = EntityList()
+        with pytest.raises(ValueError, match="linked glycan strings"):
+            el.add(EntityType.LIGAND, "NAG(4-1 NAG(4-1 NAG))", format="ccd")
+        assert len(el) == 0
+
+    def test_boltz_yaml_gets_the_normalized_code(self, tmp_output):
+        import yaml as _yaml
+
+        from predict_structure.converters import entities_to_boltz_yaml
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "MKTIIALSYIFCLVFA", name="p")
+        el.add(EntityType.LIGAND, "a1h1f", name="a1h1f", format="ccd")
+        out = entities_to_boltz_yaml(el, tmp_output / "input.yaml")
+        doc = _yaml.safe_load(Path(out).read_text())
+        ccds = [s["ligand"]["ccd"] for s in doc["sequences"] if "ligand" in s]
+        assert ccds == ["A1H1F"]
+
+    def test_openfold_json_gets_the_normalized_code(self, tmp_output):
+        import json as _json
+
+        from predict_structure.converters import entities_to_openfold_json
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "MKTIIALSYIFCLVFA", name="p")
+        el.add(EntityType.LIGAND, "a1h1f", name="a1h1f", format="ccd")
+        out = entities_to_openfold_json(el, tmp_output / "input.json")
+        doc = _json.loads(Path(out).read_text())
+        text = _json.dumps(doc)
+        assert "A1H1F" in text
+        assert "a1h1f" not in text
+
+
 class TestMsaNulSanitization:
     """Regression tests for issue #67: ColabFold MSA trailing NUL bytes."""
 

@@ -146,7 +146,8 @@ The UI should prevent submission for these states:
 | Condition | Error message |
 |---|---|
 | No entity inputs (no protein/dna/rna/ligand/smiles) | "Provide at least one input" |
-| Ligand CCD code > 3 chars or non-alphanumeric | "Invalid CCD code (1-3 alphanumeric)" |
+| Ligand CCD code not 1-3 or exactly 5 chars, or non-alphanumeric | "Invalid CCD code (1-3 or 5 alphanumeric)" |
+| Ligand CCD code contains `(` (linked glycan string) | "Linked glycan strings are not supported — enter one CCD code per monosaccharide" |
 | Empty SMILES string | "SMILES string cannot be empty" |
 | Missing output_path | "Output folder is required" |
 | Missing output_file | "Job name is required" |

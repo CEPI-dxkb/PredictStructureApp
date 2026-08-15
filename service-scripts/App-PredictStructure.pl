@@ -78,6 +78,11 @@ sub _init_debug {
 sub _validate_params {
     my ($params) = @_;
 
+    # Carp::Always (line 46) appends a Perl backtrace to every die. These
+    # are user-input errors surfaced verbatim by the AppService submit
+    # path: the prose says what to change, the call stack is noise.
+    local $SIG{__DIE__} = 'DEFAULT';
+
     # At least one entity source must be present
     my $has_file  = $params->{input_file} || $params->{dna_file} || $params->{rna_file};
     my $has_text  = $params->{text_input} && ref($params->{text_input}) eq 'ARRAY'
@@ -112,13 +117,28 @@ sub _validate_params {
         }
     }
 
-    # Validate CCD ligand codes (1-3 alphanumeric)
+    # Validate CCD ligand codes: 1-3 OR exactly 5 alphanumeric characters.
+    # wwPDB never issues 4-character CCD IDs (reserved to avoid confusion
+    # with PDB entry IDs) and began issuing 5-character "extended" IDs in
+    # 2023 (A1H1F, A1AJ7, ...). \A ... \z, not ^ ... $: '$' also matches
+    # before a trailing newline.
+    #
+    # KEEP IN SYNC with CCD_CODE_RE in predict_structure/entities.py — the
+    # character class below is compared to it verbatim by
+    # tests/test_entities.py::TestPerlRegexParity.
     if ($has_ligand) {
         for my $code (@{$params->{ligand}}) {
             next unless defined $code;
-            die "Invalid ligand CCD code '$code': must be 1-3 alphanumeric "
-              . "characters (e.g. ATP, NAG, MAN).\n"
-                unless $code =~ /^[A-Za-z0-9]{1,3}$/;
+            next if $code =~ /\A(?:[A-Za-z0-9]{1,3}|[A-Za-z0-9]{5})\z/;
+            die "Invalid ligand CCD code '$code': linked glycan strings are "
+              . "not supported. List each monosaccharide as its own ligand "
+              . "code (NAG, NAG), which places them as separate unlinked "
+              . "residues, or supply the whole molecule as a SMILES string.\n"
+                if $code =~ /\(/;
+            die "Invalid ligand CCD code '$code'. A PDB Chemical Component "
+              . "Dictionary code is 1-3 or 5 alphanumeric characters "
+              . "(e.g. ATP, NAG, A1H1F). Supply a SMILES string for a "
+              . "molecule with no CCD code.\n";
         }
     }
 

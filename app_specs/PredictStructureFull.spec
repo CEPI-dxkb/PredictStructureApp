@@ -69,7 +69,7 @@
             "type": "list",
             "required": 0,
             "label": "Ligands (CCD codes)",
-            "desc": "CCD codes (1-3 alphanumeric), incl. glycans (NAG, MAN). Tools: Boltz, OpenFold, Chai.",
+            "desc": "CCD codes (1-3 or exactly 5 alphanumeric; no 4-character codes exist), incl. glycans (NAG, MAN), one per monosaccharide. Tools: Boltz, OpenFold, Chai.",
             "item": {"id": "ccd", "type": "string"}
         },
         {

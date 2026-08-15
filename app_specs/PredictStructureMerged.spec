@@ -21,7 +21,7 @@
      "section": "inputs", "tools": ["auto", "boltz", "openfold", "chai"], "tier": 2},
 
     {"id": "ligand", "type": "list", "required": 0,
-     "label": "Ligands (CCD codes)", "desc": "Ligand CCD codes, 1-3 alphanumeric (e.g. ATP, NAG). Glycans use CCD codes here too.",
+     "label": "Ligands (CCD codes)", "desc": "Ligand CCD codes, 1-3 or exactly 5 alphanumeric (e.g. ATP, NAG, A1H1F); 4-character codes do not exist. Glycans use CCD codes here too, one code per monosaccharide.",
      "item": {"id": "ccd_code", "type": "string"},
      "section": "inputs", "tools": ["auto", "boltz", "openfold", "chai"], "tier": 2},
 
