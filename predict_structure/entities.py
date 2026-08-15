@@ -30,13 +30,16 @@ class EntityType(Enum):
 
     Glycans are intentionally NOT a separate type: neither Boltz nor Chai
     has a distinct glycan entity, both expect glycans as CCD-coded
-    ligands. Pass glycans via ``--ligand <CCD>`` to the relevant adapter.
+    ligands. Pass each monosaccharide via ``--ligand <CCD>`` (e.g.
+    ``--ligand NAG --ligand NAG``); they are placed as separate, unlinked
+    residues. Linked glycan strings (``NAG(4-1 NAG)``) are not supported —
+    supply the whole molecule as SMILES instead.
     """
 
     PROTEIN = "protein"
     DNA = "dna"
     RNA = "rna"
-    LIGAND = "ligand"   # CCD code (1-3 alphanumeric chars)
+    LIGAND = "ligand"   # CCD code (1-3 or exactly 5 alphanumeric chars)
     SMILES = "smiles"   # SMILES string for arbitrary small molecules
 
 
@@ -48,6 +51,84 @@ _INLINE_TYPES = frozenset({EntityType.LIGAND, EntityType.SMILES})
 
 # Chain ID alphabet for entity assignment
 _CHAIN_IDS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+# ---------------------------------------------------------------------------
+# Ligand CCD codes
+# ---------------------------------------------------------------------------
+#
+# A PDB Chemical Component Dictionary (CCD) ID is 1-3 OR exactly 5
+# alphanumeric characters. Four is impossible by design: wwPDB reserved
+# that length so component IDs can never be confused with 4-character PDB
+# entry IDs, and when the 3-character space neared exhaustion it began
+# issuing 5-character "extended" IDs in 2023 (A1H1F, A1AJ7, ...), asking
+# developers to lift any hard-coded length limits.
+#
+# Verified by enumerating RCSB's entire component space (50,983 IDs):
+#   len 1: 16 | len 2: 129 | len 3: 43,387 | len 4: 0 | len 5: 6,647
+# Boltz's own bundled CCD snapshot has the same shape (no 4-character
+# entries) and does contain A1H1F. The remaining 804 10-character IDs are
+# ``PRD_xxxxxx`` BIRD identifiers — a different namespace, deliberately
+# excluded here (they are not CCD codes and carry an underscore).
+#
+# All archive IDs are uppercase, so codes are upper-cased on the way in.
+#
+# The pattern is intentionally UNANCHORED and must always be applied with
+# ``fullmatch``: ``$`` also matches just before a trailing newline, so an
+# anchored ``match`` would accept ``"ATP\n"``. Keeping it anchor-free also
+# lets tests compare it character-for-character against the Perl copy in
+# service-scripts/App-PredictStructure.pl (which anchors with \A ... \z).
+CCD_CODE_RE = re.compile(r"(?:[A-Za-z0-9]{1,3}|[A-Za-z0-9]{5})")
+
+
+def _invalid_ccd_message(code: str) -> str:
+    """Build the user-facing message for a rejected CCD code.
+
+    One builder for both branches so the generic and glycan wordings
+    cannot drift (mirrors ``ChaiAdapter._ccd_ligand_message``).
+
+    The glycan branch is gated on ``(`` alone: a linked-glycan string is
+    the only thing that looks like ``NAG(4-1 NAG)``. Whitespace is NOT a
+    trigger — ``"NA G"`` is just a typo, and telling that user about
+    glycan linkage would be wrong advice.
+    """
+    if "(" in code:
+        return (
+            f"Invalid ligand CCD code '{code}': linked glycan strings are not "
+            f"supported. Pass each monosaccharide as its own --ligand code "
+            f"(--ligand NAG --ligand NAG), which places them as separate "
+            f"unlinked residues, or supply the whole molecule as SMILES with "
+            f"--smiles."
+        )
+    return (
+        f"Invalid ligand CCD code '{code}'. A PDB Chemical Component "
+        f"Dictionary code is 1-3 or 5 alphanumeric characters "
+        f"(e.g. ATP, NAG, A1H1F). Use --smiles for a molecule with no "
+        f"CCD code."
+    )
+
+
+def validate_ccd_code(code: str) -> str:
+    """Validate and normalize a ligand CCD code.
+
+    Surrounding whitespace is stripped and the code is upper-cased to match
+    the archive (every CCD ID is uppercase, and Boltz/OpenFold look codes up
+    by exact key).
+
+    Args:
+        code: User-supplied CCD code.
+
+    Returns:
+        The normalized (stripped, uppercased) code.
+
+    Raises:
+        ValueError: If the code is not 1-3 or exactly 5 alphanumeric
+            characters. SMILES strings are never routed here — they are a
+            separate entity type and legitimately contain parentheses.
+    """
+    stripped = (code or "").strip()
+    if not CCD_CODE_RE.fullmatch(stripped):
+        raise ValueError(_invalid_ccd_message(stripped))
+    return stripped.upper()
 
 # DNA-only nucleotides (no U)
 _DNA_BASES = set("ACGTN")
@@ -126,7 +207,27 @@ class EntityList:
         source_path: Path | None = None,
         format: str | None = None,
     ) -> None:
-        """Add an entity and assign the next available chain ID."""
+        """Add an entity and assign the next available chain ID.
+
+        Ligand values are validated and normalized here rather than at the
+        CLI edge: a malformed CCD code is invalid for every tool, so it is
+        a data-model invariant. Enforcing it at ``add`` also covers the
+        batch job-file path, adapters, and direct library use.
+
+        Raises:
+            ValueError: If ``entity_type`` is LIGAND and ``value`` is not a
+                valid CCD code.
+        """
+        if entity_type is EntityType.LIGAND:
+            normalized = validate_ccd_code(value)
+            # Callers commonly use the raw code as the name (``name=code``).
+            # Re-point that at the normalized code so Entity.name and
+            # Entity.value cannot disagree — both reach metadata.json and
+            # the RO-Crate independently. A distinct label is left alone.
+            if name.strip() == value.strip():
+                name = normalized
+            value = normalized
+
         chain_id = _CHAIN_IDS[len(self.entities) % len(_CHAIN_IDS)]
         self.entities.append(Entity(
             entity_type=entity_type,

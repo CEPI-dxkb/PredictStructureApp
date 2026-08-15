@@ -148,9 +148,12 @@ inputs:
         inputBinding:
           prefix: --ligand
           position: 2
-    doc: "Ligand CCD code(s), 1-3 alphanumeric (e.g. ATP). Glycans use
-          their CCD codes here (NAG, MAN, etc.) — there is no separate
-          glycan type. Repeatable."
+    doc: "Ligand CCD code(s), 1-3 or exactly 5 alphanumeric (e.g. ATP,
+          A1H1F); wwPDB issues no 4-character codes. Glycans use their CCD
+          codes here (NAG, MAN, etc.) — there is no separate glycan type —
+          one code per monosaccharide; linked glycan strings such as
+          NAG(4-1 NAG) are rejected. Repeatable. Validation happens in the
+          CLI, not here."
 
   smiles:
     type:
