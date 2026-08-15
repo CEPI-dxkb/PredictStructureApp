@@ -19,9 +19,11 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [x] #50: convert the Boltz PAE npz to `predictions/pae.json` — the report side
       is already built and shipped, only the data path was missing
       (fix/50-pae-json; OpenFold's per-atom PAE still unconverted)
-- [ ] #48: the Python CLI does no CCD validation at all while the Perl enforces
-      `^[A-Za-z0-9]{1,3}$`; junk reaches the tool and fails opaquely
-- [ ] Suppress the Carp backtrace on `_validate_params` dies, as the #84 path
+- [x] #48: the Python CLI does no CCD validation at all while the Perl enforces
+      `^[A-Za-z0-9]{1,3}$`; junk reaches the tool and fails opaquely — validated
+      in `EntityList.add`, and the rule corrected to 1-3 **or exactly 5** (wwPDB
+      issues no 4-character codes; the old rule rejected valid ligands)
+- [x] Suppress the Carp backtrace on `_validate_params` dies, as the #84 path
       already does (`local $SIG{__DIE__} = 'DEFAULT'`)
 - [ ] GoWe: test CWL tool submission through CPU workers
 - [ ] GoWe: test predict-structure CWL tool through GPU workers
@@ -52,7 +54,8 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [ ] #75 — ESMFold2 in UI but not functional (cache permissions fixed; recheck)
 - [ ] #77 — Per-model protein length limits (CLI + UI)
 - [ ] #76 — DSSP as post-prediction step
-- [ ] #48 — CCD ligand input rejects glycans containing parentheses
+- [x] #48 — CCD ligand input rejects glycans containing parentheses (validation
+      half done; linked-glycan support split to its own issue)
 - [x] #50 — Add PAE score to the report (Boltz; OpenFold deferred)
 - [ ] #79 — B-factor distribution bars invisible when value is zero
 - [ ] #80 — Report TOC/index + section reorder

@@ -874,3 +874,98 @@ class TestAlphaFoldApiContractPinned:
 
         assert get_adapter("alphafold").tool_name == "alphafold"
         assert CliRunner().invoke(main, ["alphafold", "--help"]).exit_code == 0
+
+
+class TestLigandCCDValidation:
+    """#48 — junk CCD codes must be rejected at the CLI, not at the tool.
+
+    Before this, ``--ligand 'NAG(4-1 NAG)'`` logged "Entity validation passed"
+    and wrote the whole string into the Boltz YAML / OpenFold JSON, where it
+    failed opaquely much later.
+    """
+
+    def _fasta(self, tmp_path):
+        f = tmp_path / "p.fasta"
+        f.write_text(">p\nMKTIIALSYIFCLVFA\n")
+        return f
+
+    def test_glycan_string_is_a_clean_error_not_a_traceback(self, tmp_path):
+        result = CliRunner().invoke(main, [
+            "boltz", "--protein", str(self._fasta(tmp_path)),
+            "--ligand", "NAG(4-1 NAG(4-1 NAG))",
+            "-o", str(tmp_path / "out"), "--debug",
+        ])
+        assert result.exit_code == 2
+        assert "Error:" in result.output
+        assert "Traceback" not in result.output
+        assert "NAG(4-1 NAG(4-1 NAG))" in result.output      # names the value
+        assert "--smiles" in result.output                   # says what to do
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+
+    def test_four_char_code_rejected(self, tmp_path):
+        result = CliRunner().invoke(main, [
+            "boltz", "--protein", str(self._fasta(tmp_path)),
+            "--ligand", "ATPX", "-o", str(tmp_path / "out"), "--debug",
+        ])
+        assert result.exit_code == 2
+        assert "Invalid ligand CCD code 'ATPX'" in result.output
+        assert "Traceback" not in result.output
+
+    def test_five_char_extended_code_accepted(self, tmp_path):
+        """A1H1F is a real CCD id present in Boltz's bundled snapshot; the
+        old 1-3 rule would have rejected it."""
+        result = CliRunner().invoke(main, [
+            "boltz", "--protein", str(self._fasta(tmp_path)),
+            "--ligand", "A1H1F", "-o", str(tmp_path / "out"), "--debug",
+        ])
+        assert result.exit_code == 0, result.output
+
+    def test_lowercase_code_is_uppercased_in_value_and_name(self, tmp_path):
+        from predict_structure.cli import _build_entity_list
+
+        entities = _build_entity_list(
+            protein=(str(self._fasta(tmp_path)),), dna=(), rna=(),
+            ligand=("atp",), smiles=(),
+        )
+        ligands = [e for e in entities if e.entity_type == EntityType.LIGAND]
+        assert [e.value for e in ligands] == ["ATP"]
+        assert [e.name for e in ligands] == ["ATP"]
+
+    def test_smiles_with_parentheses_still_accepted(self, tmp_path):
+        """SMILES legitimately contain parentheses — acetic acid must pass."""
+        result = CliRunner().invoke(main, [
+            "boltz", "--protein", str(self._fasta(tmp_path)),
+            "--smiles", "CC(=O)O", "-o", str(tmp_path / "out"), "--debug",
+        ])
+        assert result.exit_code == 0, result.output
+
+    def test_job_file_ligand_is_validated(self, tmp_path):
+        """The batch path builds its own EntityList (``_run_job_file``);
+        validation lives in ``EntityList.add`` so it is covered too."""
+        import yaml
+
+        job = tmp_path / "job.yaml"
+        job.write_text(yaml.dump([{
+            "tool": "boltz",
+            "protein": [str(self._fasta(tmp_path))],
+            "ligands": ["NAG(4-1 NAG)"],
+            "options": {"debug": True},
+        }]))
+        result = CliRunner().invoke(
+            main, ["--job", str(job), "-o", str(tmp_path / "out")]
+        )
+        assert result.exit_code == 2
+        assert "Invalid ligand CCD code" in result.output
+        assert "Traceback" not in result.output
+
+    def test_preflight_placeholder_entities_still_pass(self):
+        """Preflight synthesizes placeholder ligand entities; an add()-level
+        validator must not break the declare-only --has-* contract (#84)."""
+        import json as _json
+
+        result = CliRunner().invoke(
+            main, ["preflight", "--tool", "boltz", "--has-protein", "--has-ligand"]
+        )
+        assert result.exit_code == 0, result.output
+        payload = _json.loads(result.output.strip().splitlines()[-1])
+        assert payload["resolved_tool"] == "boltz"

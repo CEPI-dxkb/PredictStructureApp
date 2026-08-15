@@ -23,6 +23,7 @@
     {"id": "B07", "name": "boltz_dna_ligand", "tool": "boltz", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "msa_file": "crambin.a3m", "ligand": ["ATP"], "expected": "pass"},
     {"id": "B08", "name": "boltz_multi_ligand", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["ATP", "NAD"], "expected": "pass"},
     {"id": "B09", "name": "boltz_multi_smiles", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "smiles": ["CCO", "c1ccccc1"], "expected": "pass"},
+    {"id": "B10", "name": "boltz_ligand_5char", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["A1H1F"], "expected": "pass", "note": "#48 extended 5-character CCD id; present in Boltz's bundled CCD snapshot"},
 
     {"id": "O01", "name": "openfold_msa_upload", "tool": "openfold", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "expected": "pass"},
     {"id": "O02", "name": "openfold_msa_server", "tool": "openfold", "input_file": "simple_protein.fasta", "expected": "pass", "note": "MSA via ColabFold server"},
@@ -70,6 +71,8 @@
     {"id": "N05", "name": "neg_af_dna", "tool": "alphafold", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "expected": "reject", "expected_error": "does not support"},
     {"id": "N06", "name": "neg_esm_ligand", "tool": "esmfold", "input_file": "simple_protein.fasta", "ligand": ["ATP"], "expected": "reject", "expected_error": "does not support"},
     {"id": "N07", "name": "neg_bad_smiles", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "smiles": ["not_valid_smiles_xyz"], "expected": "fail", "expected_error": "Invalid SMILES"},
-    {"id": "N08", "name": "neg_auto_no_input", "tool": "auto", "expected": "reject", "expected_error": "No inputs supplied"}
+    {"id": "N08", "name": "neg_auto_no_input", "tool": "auto", "expected": "reject", "expected_error": "No inputs supplied"},
+    {"id": "N09", "name": "neg_glycan_chain", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["NAG(4-1 NAG(4-1 NAG))"], "expected": "reject", "expected_error": "Invalid ligand CCD code"},
+    {"id": "N10", "name": "neg_4char_ccd", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["ATPX"], "expected": "reject", "expected_error": "Invalid ligand CCD code", "note": "#48 wwPDB never issues 4-character CCD ids"}
   ]
 }

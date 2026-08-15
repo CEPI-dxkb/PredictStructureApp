@@ -291,10 +291,12 @@ def _build_entity_list(
 
     FASTA files (--protein, --dna, --rna) are parsed and each sequence
     becomes a separate entity. Inline values (--ligand, --smiles) become
-    one entity each. ``--ligand`` accepts a CCD code (1-3 alphanumeric
-    chars; e.g. ``ATP``); ``--smiles`` accepts a SMILES string for arbitrary
-    small molecules. Glycans are submitted as CCD-coded ligands (use
-    ``--ligand <CCD>``); the upstream tools have no separate glycan type.
+    one entity each. ``--ligand`` accepts a CCD code (1-3 or exactly 5
+    alphanumeric chars; e.g. ``ATP``, ``A1H1F``); ``--smiles`` accepts a
+    SMILES string for arbitrary small molecules. Glycans are submitted as
+    CCD-coded ligands, one ``--ligand <CCD>`` per monosaccharide; the
+    upstream tools have no separate glycan type and linked glycan strings
+    such as ``NAG(4-1 NAG)`` are rejected.
 
     Also handles Boltz YAML pass-through: if a single --protein path points
     to a .yaml/.yml file, it's treated as a YAML entity for Boltz.
@@ -310,7 +312,11 @@ def _build_entity_list(
 
     for fasta_path in protein:
         path = Path(fasta_path)
-        # Boltz YAML pass-through: single .yaml file passed as --protein
+        # Boltz YAML pass-through: single .yaml file passed as --protein.
+        # Known uncovered path (#48): the YAML is typed as PROTEIN and handed
+        # to Boltz verbatim, so a user-authored `ccd:` entry inside it never
+        # reaches the CCD check in EntityList.add. Deliberate — parsing and
+        # rewriting a hand-written Boltz YAML is a separate concern.
         if is_boltz_yaml(path):
             entities.add(
                 EntityType.PROTEIN, str(path), name=path.stem,
@@ -354,7 +360,10 @@ def _build_entity_list(
             )
 
     for code in ligand:
-        entities.add(EntityType.LIGAND, code, name=code, format="ccd")
+        try:
+            entities.add(EntityType.LIGAND, code, name=code, format="ccd")
+        except ValueError as exc:
+            raise click.UsageError(str(exc)) from exc
 
     for smi in smiles:
         entities.add(EntityType.SMILES, smi, name="smiles", format="smiles")
@@ -390,9 +399,10 @@ def entity_options(func):
     @optgroup.option("--sequence", "sequence_files", multiple=True, type=click.Path(exists=True),
                      help="FASTA file with auto-detected sequence type (repeatable)")
     @optgroup.option("--ligand", multiple=True, type=str,
-                     help="Ligand CCD code, 1-3 alphanumeric chars (e.g. ATP). "
-                          "Use this for any CCD-coded compound including "
-                          "glycans (e.g. NAG, MAN). Repeatable.")
+                     help="Ligand CCD code: 1-3 or exactly 5 alphanumeric "
+                          "chars (e.g. ATP, A1H1F). Use this for any "
+                          "CCD-coded compound including glycans (e.g. NAG, "
+                          "MAN) — one code per monosaccharide. Repeatable.")
     @optgroup.option("--smiles", multiple=True, type=str,
                      help="SMILES string for an arbitrary small molecule. "
                           "Use --ligand for CCD-coded compounds. Repeatable.")
@@ -909,7 +919,10 @@ def _run_job_file(job_path: Path, base_output_dir: Path | None) -> None:
                     source_path=ent.source_path, format=ent.format,
                 )
         for code in job.get("ligands", []):
-            entities.add(EntityType.LIGAND, code, name=code, format="ccd")
+            try:
+                entities.add(EntityType.LIGAND, code, name=code, format="ccd")
+            except ValueError as exc:
+                raise click.UsageError(f"Job {idx:03d}: {exc}") from exc
         for smi in job.get("smiles", []):
             entities.add(EntityType.SMILES, smi, name="smiles", format="smiles")
 

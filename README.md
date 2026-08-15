@@ -53,7 +53,7 @@ Input is specified via explicit entity flags instead of a positional file argume
 | `--protein` | file path | Protein FASTA file (repeatable for multi-chain) |
 | `--dna` | file path | DNA FASTA file (repeatable) |
 | `--rna` | file path | RNA FASTA file (repeatable) |
-| `--ligand` | string | Ligand CCD code, e.g. `ATP`. Use this for glycans too (e.g. `NAG`, `MAN`) — there is no separate glycan type. (repeatable) |
+| `--ligand` | string | Ligand CCD code — 1-3 or 5 alphanumeric characters (e.g. `ATP`, `NAG`, `A1H1F`). Use this for single glycan residues too (`NAG`, `MAN`); linked glycan strings like `NAG(4-1 NAG)` are rejected — pass each residue separately or use `--smiles`. (repeatable) |
 | `--smiles` | string | SMILES string for arbitrary small molecules (repeatable) |
 
 A multi-sequence FASTA file passed to `--protein` is treated as a multi-chain complex (not a batch of separate predictions).
@@ -175,7 +175,7 @@ Each job entry supports:
 | `protein` | list of paths | Protein FASTA files |
 | `dna` | list of paths | DNA FASTA files |
 | `rna` | list of paths | RNA FASTA files |
-| `ligands` | list of strings | Ligand CCD codes (incl. glycans like NAG, MAN) |
+| `ligands` | list of strings | Ligand CCD codes, 1-3 or 5 alphanumeric (incl. single glycan residues like NAG, MAN; linked glycan strings are rejected) |
 | `smiles` | list of strings | SMILES strings |
 | `tool` | string | Tool name (optional — auto-selected if omitted) |
 | `options` | dict | Any shared or tool-specific options |
