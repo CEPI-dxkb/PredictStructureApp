@@ -1,0 +1,17 @@
+[
+  {
+    "task_id": 23425749,
+    "label": "B01_boltz_msa_upload",
+    "params": {
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz"
+    },
+    "output_file": "matrix_B01_boltz_msa_upload_20260817_084004",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:40",
+    "host": "coconut"
+  }
+]

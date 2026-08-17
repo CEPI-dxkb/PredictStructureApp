@@ -1,285 +1,226 @@
 # Project Status
 
-**Last updated:** 2026-08-13
-**Current version:** v0.17.0 (HEAD: 160dc09)
-**Production container:** `folding_260813.3.sif`
+**Last updated:** 2026-08-17
+**Current version:** v0.17.0 (HEAD: c350a68)
+**Production container:** `folding_260815.1.sif` (predict_structure 42d6171)
 
 ## Next action
 
-`folding_260813.3.sif` is deployed and registered (predict_structure 160dc09,
-carrying #90 + #75). Nothing is blocked on infrastructure.
+Steady state — nothing is blocked on us. The two open work fronts:
 
-Run the matrix with `--include-negative` to re-verify against it, and in
-particular **F01-F03 — the first ESMFold2 cases ever submitted through BV-BRC**.
-That run is what closes #75. Expect the first submission to take several minutes
-while the SIF is staged into the container cache; the runner now allows 900s, so
-a slow first call is no longer a spurious failure.
+1. **Next container rebuild** picks up the protein_compare report fixes
+   (#79 zero-count histogram bins, #80 report TOC — merged to
+   wilke/protein_structure_analysis main, `7105946`). protein_compare is
+   pip-installed from that repo's main in runtime_build's
+   `reqts-predict-structure.def`, so no code change here is needed — just
+   batch the rebuild with whatever lands next.
+2. **Upstream PRs await BV-BRC maintainers:** BV-BRC-Web#1400 (retire
+   AlphaFold from UI, add ESMFold2, runtime hints — closes #90's UI half)
+   and BV-BRC-Docs#283 (docs sweep — close #52 when it merges). Both were
+   consolidated fork-first: reviewed, fixed, and merged in wilke's forks,
+   then opened as single upstream PRs.
 
-Two issues wait only on write access to BV-BRC-Web: #90's UI half and #88's
-eye-icon action. The #90 patch is prepared at
-`docs/bvbrc-web-90-retire-alphafold.patch`.
-
-#50 is fixed on `fix/50-pae-json`: `normalize_boltz_output` now converts the
-Boltz `pae_*.npz` into `predictions/pae.json` (protein_compare Format 1), the
-service script hands that file to `characterize --pae`, and the two Boltz CWL
-report workflows wire it through a new `select-pae.cwl`. Not yet seen in a
-rendered report — that needs a container run. OpenFold's per-atom PAE is still
-unconverted (shape unverified against a real OF3 run).
-
-Note for anyone reading the old #50 notes: the claim that the Perl walked a
-non-existent `raw_output/` was **wrong**. `raw_output/` is the live directory
-that `cli.py` creates for the tool's native `--out_dir`; `--chai-scores` has
-been working all along. The only reason `--pae` never fired is that Boltz emits
-an NPZ, never a JSON.
-
-### Resolved 2026-08-13: submission failure after the container switch
-
-Every `start_app2` call returned HTTP 500 with an empty detail
-(`"Error submitting job: \n"`). Root cause: the **ApplicationDefaultContainer**
-row for PredictStructure pointed at `folding_260513.1`, whose SIF no longer
-exists anywhere. The scheduler runs preflight *inside* the registered
-container, so a missing container produces no output and hence an empty error.
-Repointing the row at `folding_260813.2` fixed it.
-
-Diagnostic order that worked, for next time:
-1. Submit the trivial `Date` app — it succeeded, proving the scheduler, auth,
-   and workspace paths were fine and the fault was app-specific.
-2. Run preflight the way the scheduler does (`--preflight` + `--user-error-file`
-   against the deployed `plbin` copy) — exit 0 and valid JSON exonerated the
-   app code.
-3. Check `p3x-show-container-config` on `gum` and confirm the app's container
-   filename actually exists.
-
-Do **not** use `AppService.enumerate_apps` to check whether an app is
-registered: it returns a curated 39-app list that never includes
-PredictStructure, on production, www, and alpha alike. That misled this
-investigation.
-
-After repointing, the first submission still took **464 s** while a 32 GB SIF
-was staged into the container cache — the runner's flat 120 s timeout turned
-that routine cold start into three more spurious failures. Fixed in #89.
+New issues #104–#109 (filed 2026-08-17, see below) are all small and
+unscheduled; #106 (raw output uploaded twice) is the one with real user
+impact — GBs of duplicate workspace bytes per Boltz/Chai job.
 
 ## What's done
 
-### AlphaFold retirement + ESMFold2 unblock (2026-08-13, later)
+### Session 2026-08-17: reviewer queue emptied + housekeeping
 
-- **Fix #90: AlphaFold retired from auto** (56b1e5a, PR #91) — `auto` no longer
-  selects it in either `_auto_select_tool` or the legacy `discover_tool`; API and
-  CLI access deliberately preserved and now pinned by tests. The issue's premise
-  turned out to be wrong: a 432-case sweep showed ESMFold already ranked ahead of
-  AlphaFold with the same supported entities, so AlphaFold was only reachable when
-  ESMFold was absent. Production behavior is byte-identical.
-- **Fix #75 blockers: ESMFold2** (160dc09, PR #92) — verified end-to-end with four
-  real GPU predictions (crambin 50.4s, ubiquitin 37.8s, ubiquitin+ATP 24.7s, peak
-  ~14 GB, sane geometry). Two production faults found and fixed: preflight
-  requested `A100|H100|H200` while the env ships torch+cu130, which needs driver
-  >= 580 — only coconut qualifies, so a job on mango would have failed exactly as
-  Boltz did (#38); and `min_gpu_memory_mb` was unset, inheriting 8000 MiB against
-  a ~14 GB peak, so the VRAM precheck would pass a host that then OOMs. Now H200
-  and 18000. Added matrix cases F01-F03 — ESMFold2 had zero coverage.
-- **#75 rewritten** — its title and all five listed blockers were stale.
-- **Container `folding_260813.3.sif`** built, verified (21/21 env checks; both
-  fixes confirmed in the packed image), deployed and registered.
+- **#79 fixed** (wilke/protein_structure_analysis#12) — empty histogram
+  bins rendered as blank canvas; now a thin colored baseline sliver,
+  capped below the smallest populated bar. Reproduction corrected the
+  premise: zero-*count* bins, not zero-value data.
+- **#80 fixed** (wilke/protein_structure_analysis#13) — Contents nav from
+  pre-rendered sections (dead links impossible by construction),
+  per-residue profile now precedes the distribution histogram. First
+  tests in that repo (5, container-passing).
+- **#51 closed** — decision: per-tool runtime expectation hints (live in
+  BV-BRC-Web#1400) suffice; the AppService API exposes no within-job
+  progress to build a real progress bar from.
+- **#103 merged** (c350a68) — README multi-chain wording, corrected during
+  review: the 26-record limit is per FASTA file, only the 10,000-residue
+  limit counts chains combined. That review surfaced #108.
+- **Follow-up issues filed:** #104 (boltz-report-msa.cwl byte-identical
+  copy), #105 (select-pae.cwl validate-only coverage), #106 (raw_output/
+  + raw/ both uploaded), #107 (test_config.py env restore), #108 (chain
+  IDs silently wrap past 26 combined entities), #109 (upstream
+  dev_container PYTHONPATH trailing colon — tracking).
+- **/local_databases cleanup:** 66 GB reclaimed. Deleted transitional
+  ESMC-6B/ESMFold2 copies from `cache/hub` and `esmfold/hub`, plus a
+  third `esmfold_v1` copy in `cache/hub`. Canonical layout now:
+  `esmfold2/hub` (25 G, ESMFold2 + ESMC-6B), `esmfold/hub` (16 G,
+  esmfold_v1 only). Verified before deleting: refs/main → snapshots with
+  config.json, no broken symlinks; probe prefers per-tool dirs.
 
-### Preflight validation + container rebuild (2026-08-13)
+### Session 2026-08-14/15: ESMFold2 end-to-end + PAE in production
 
-- **Fix #84: reject tool/entity mismatches at submit** (abda889, PR #86) —
-  jobs whose inputs a tool cannot handle were scheduled on a GPU node and only
-  then failed with a traceback; prod job 23403506 held an 8h GPU reservation
-  before dying in 8s. Preflight cannot read workspace files, so validation now
-  runs off declared kinds (`--has-protein/--has-dna/--has-rna/--has-ligand/
-  --has-smiles`). Rejections travel as exit 3 + a JSON error payload, which the
-  Perl converts into a clean `die`. Also fixed a pre-existing bug where
-  `return` inside a `Try::Tiny` catch was dead code, silently scheduling GPU
-  tools with no GPU constraint.
-- **Fix #82: Chai CCD ligands** (8ac583f, PR #83) — Chai's FASTA needs SMILES,
-  so a CCD code was silently dropped and it folded protein-only, exit 0.
-- **Container env vars corrected** (cbc9ab0) — `OPENFOLD_CACHE` (the variable
-  openfold3 actually reads; the old one was inert), `TORCH_HOME` pointed at a
-  nonexistent directory, `DISABLE_PANDERA_IMPORT_WARNING` kept after verifying
-  pandera does read it.
-- **Two containers built** — `folding_260813.1.sif` (#67/#81/#82) and
-  `folding_260813.2.sif` (adds #84). Both deployed to
-  `/vol/patric3/production/containers/`.
-- **ESMFold2 cache unblocked** — weights were already at
-  `/local_databases/esmfold/hub/models--biohub--ESMFold2` but the directory was
-  not group-writable, so the Perl's `-w` probe rejected it, fell through to
-  `/local_databases/cache` (which lacks ESMFold2), and forced
-  `HF_HUB_OFFLINE=1`. Permissions fixed; both ESMFold and ESMFold2 now resolve
-  offline from the same cache. Likely the mechanism behind #75.
-- **Issues filed** — #84 (preflight validation, fixed), #85 (decommission
-  AlphaFold 2 in favour of ESMFold2, blocked by #75).
+Full arc from "ESMFold2 has never completed a BV-BRC job" to verified in
+production. Three nested causes, each hidden by the previous:
 
-### Bug fixes (2026-07-08, on main)
+- **#94/#95/#97** — anchored regex missed esmfold2 in the
+  `--use-msa-server` exclusion; A3M upload enabled (esm ships no MSA
+  server client — #96 tracks pulling from our ColabFold server).
+- **#98/#102** (42d6171) — the runner executed a stale June copy via
+  `-m` from conda-esmfold2's site-packages. Now invoked by file path via
+  a `{runner:...}` placeholder; conda-esmfold2 no longer installs
+  predict-structure at all (runtime_build repacked, single-install
+  assertion in the def + 22-check env suite).
+- **#99** — writability-based HF cache probe picked a dir lacking
+  ESMC-6B. Now content-based (`%REPOS_FOR_TOOL`, refs/main + snapshot
+  config.json), per-tool dir preferred, dies fast when nothing
+  qualifies. ESMFold2 weights staged canonically at
+  `/local_databases/esmfold2` (both repos: ESMFold2 1.3 G + ESMC-6B 24 G).
+- **#48/#100** — CCD codes: 1–3 **or exactly 5** alphanumeric (wwPDB
+  5-char era; zero 4-char codes exist). Validated in `EntityList.add`
+  (Python) and the Perl ligand loop; glycan-specific message on `(`.
+- **#50/#101** — Boltz `pae_*.npz` → `predictions/pae.json` (PAELoader
+  Format 1, max_pae = 31.75 colormap ceiling, iptm gated on multichain).
+  **Verified end-to-end in production**: B01 (task 23425749) produced a
+  46×46 pae.json and a report rendering Mean PAE/pTM — first time ever.
+- **PYTHONPATH sanitizer** in 90-environment.sh — dev_container's
+  user-env.sh leaves a trailing colon = cwd on sys.path for every python
+  in the container (the enabler of #98's stale-copy hazard). Upstream
+  report tracked as #109.
 
-- **Fix #67: MSA NUL byte stripping** (83e4c17) — ColabFold MSA servers append trailing `\x00` that crashes OpenFold 3's parser and corrupts Chai A3M→Parquet conversion. Added `_stage_msa_sanitized()` in converters.py; applied in OpenFold JSON builder, A3M parser, and Chai Parquet converter.
-- **Fix #81: Boltz normalizer crash with SMILES ligands** (a00dc8a) — Boltz CIF with SMILES ligands labels all atoms as HETATM, causing `_extract_bfactors()` to return empty arrays and `write_confidence_json()` to crash. Fixed: HETATM fallback in extractor + graceful omission of per_atom_plddt when empty/short.
-- **CLAUDE.md branching rule** (e653c5a) — Added convention: never commit fixes/features directly to main, always use feature branches.
+Containers: `folding_260814.1.sif` (full matrix) → `folding_260815.1.sif`
+(adds #48+#50+#98+sanitizer; current production, B01-verified after
+repoint).
 
-### New issues created (2026-07-08)
+### Session 2026-08-13: retirement, preflight, matrix (see git history)
 
-| # | Title | Type |
-|---|---|---|
-| 72 | Workspace file upload not immediately visible | UI bug |
-| 73 | File browser: cannot re-highlight a different file | UI bug |
-| 74 | 3Dmol.js viewer not showing secondary structures in cartoon mode | Report bug |
-| 75 | Add ESMFold2 to UI tool selector | Enhancement |
-| 76 | Add DSSP as post-prediction step | Enhancement |
-| 77 | Per-model protein length limits with clear error messages | Enhancement |
-| 78 | Report viewer: Reset View / Spin button issues | Report bug |
-| 79 | B-factor distribution bars invisible when value is zero | Report bug |
-| 80 | Report: add TOC/index, reorder B-factor sections | Report enhancement |
-| 81 | Boltz normalizer crash with SMILES ligands | Bug (fixed) |
+#90 AlphaFold retired from auto (56b1e5a); #84 submit-time tool/entity
+validation via declared kinds (abda889); #82 Chai CCD rejection; matrix
+48/48 on folding_260813.2. Details in the git log and closed issues.
 
-### v0.17.0 — ESMFold2 adapter + report provenance (2026-06-09 → 2026-06-22)
+## Test results
 
-- **ESMFold2 adapter** (PR #44, merged) — new diffusion-based tool, multi-entity support
-- **Report provenance** (PR #70 + protein_compare PR #7) — HTML reports now include Job Provenance section showing tool, version, status, runtime, container, parameters, and inputs from `metadata.json`
-- **Version bump** — predict-structure 0.17.0, pyproject.toml synced
-- **11 PRs merged** (#57-68) — preflight fixes, container boltz CUDA-13 libs, alphafold multimer preset, chai token validation, openfold MSA server URL, ESMFold2 tests, CI container build, app_spec text_input, HF_HUB_OFFLINE, Phase1 test tiers
+### Unit tests (2026-08-17, HEAD c350a68)
 
-### Test results (folding_260622.3.sif, 2026-06-23)
+**589 passed, 10 skipped** —
+`python -m pytest tests/ -q --timeout=60 --ignore=tests/acceptance`
+(`tests/acceptance/` shells out to real 32 GB containers; run it
+deliberately, not in the normal loop).
 
-| Category | Cases | Pass | Fail | Notes |
-|---|---|---|---|---|
-| Tool × entity | 24 | 24 | 0 | Boltz, OpenFold, Chai, ESMFold, auto |
-| Parameter variations | 14 | 14 | 0 | samples, recycles, mmcif, debug, seed |
-| **Total** | **38** | **38** | **0** | All 3 GPU hosts exercised |
+### API test matrix (folding_260814.1.sif, 2026-08-14)
 
-### Host coverage (folding_260622.3.sif)
+`docs/test-reports/matrix_20260814_205320.json` — **56/56 as expected:**
+43 completed, 11 refused at submit by design (submit-time rejections,
+no task created), 2 worker-side failures that were expected failures
+(N03 bad format, N07 bad SMILES).
 
-| Host | Jobs | Tools |
-|---|---|---|
-| coconut (H200) | 23 | Boltz, ESMFold, auto, some OpenFold/Chai |
-| mango (H100) | 11 | OpenFold (MSA/DNA/RNA/SMILES), Chai, param variants |
-| peach (V100) | 4 | Chai (MSA/RNA/2samples) |
+Highlights: **F01–F04 ESMFold2 pass** (first ever through BV-BRC);
+**A01 AlphaFold pass** (26:05 on coconut — first run since June);
+X01 confirms no-MSA auto → Boltz with a server-side ColabFold MSA (the
+docs/UI claim that auto picks ESMFold was false and has been corrected
+everywhere).
 
-### Unit test results (2026-08-13)
+### B01 re-verification (folding_260815.1.sif, 2026-08-17)
 
-473 passed, 10 skipped. Run with
-`python -m pytest tests/ -q --ignore=tests/acceptance` — `tests/acceptance/`
-shells out to real 32 GB containers via `apptainer exec` and takes far longer
-than the rest of the suite combined.
-
-### API test matrix (folding_260813.2.sif, 2026-08-13)
-
-`docs/test-reports/matrix_20260813_160754.json` — **48 pass, 0 fail.**
-
-| Category | Cases | Result |
-|---|---|---|
-| Boltz | 9 | all pass (coconut only — cu130 needs H200) |
-| OpenFold | 6 | all pass (mango) |
-| Chai | 5 | all pass (peach, mango, coconut) |
-| ESMFold / auto / parameter variations | 20 | all pass |
-| **Submit-time rejections** | **8** | **all refused before scheduling** |
-| Worker-side failures (N03, N07) | 2 | scheduled, then failed as expected |
-
-Hosts: coconut 25, mango 10, peach 5.
-
-**#84 verified in production.** E02, C05, R02, N04, N06 were refused at submit
-with no task created and no GPU allocated, and the messages reach the client
-intact inside the JSON-RPC error body, e.g.:
-
-> Error submitting job: Error running preflight checks: Chai-1 cannot accept
-> CCD-coded ligands; its FASTA format requires SMILES strings. Supply the
-> ligand as SMILES via --smiles, or use Boltz-2 or OpenFold 3 …
-
-R03 also passes: `auto` + DNA + CCD ligand resolves to a tool that accepts
-them, confirming auto no longer routes CCD ligands to Chai.
-
-Not covered: R01/A01/A02 (AlphaFold), excluded by default — revisit with #85.
-
-Known wart: the older `_validate_params` rejections (N01, N02, N08) still leak
-a Perl backtrace into the user-visible message. The #84 path suppresses it via
-`local $SIG{__DIE__} = 'DEFAULT'`; the same one-liner would clean these up.
+`docs/test-reports/matrix_20260817_084004.json` — B01 completed in 1:40
+on coconut against the repointed production container; PAE JSON and
+report rendering confirmed in the output (task 23425749).
 
 ## What's pending
 
-### Open issues (by priority)
+### Open issues
 
-| # | Issue | Priority | Notes |
-|---|---|---|---|
-| 85 | Decommission AlphaFold 2, replace with ESMFold2 | High | Blocked by #75 |
-| 75 | ESMFold2 in UI but not functional | High | Cache permissions fixed 2026-08-13; recheck |
-| 77 | Per-model protein length limits | Medium | CLI + UI validation with tool-specific error messages |
-| 76 | DSSP as post-prediction step | Medium | Secondary structure assignment for reports |
-| 48 | CCD ligand input rejects glycans with parentheses | Medium | Validation regex |
-| 50 | Add PAE score to the report | Low | Fixed for Boltz on fix/50-pae-json; OpenFold deferred |
-| 51 | Job progress indicator | Low | BV-BRC UI |
-| 52 | Docs: multi-chain applies to DNA/RNA too | Low | Docs |
-| 79 | B-factor distribution zero-height bars | Low | protein_compare report template |
-| 80 | Report TOC/index + section reorder | Low | protein_compare report template |
-| 72 | Workspace file upload not immediately visible | Low | BV-BRC UI |
-| 73 | File browser re-highlight broken | Low | BV-BRC UI |
-| 18 | Nucleic acid secondary structure (DSSR) | Low | Enhancement |
-
-Closed since last update: #67, #74, #78, #81, #82, #84 (plus #8, #11, #12, #15,
-#45 triaged closed).
-
-### Host coverage gaps
-
-| Tool | Host | Why |
+| # | Issue | Notes |
 |---|---|---|
-| ESMFold | mango, peach | No GPU constraint; scheduler always picks coconut |
-| OpenFold | peach | H100\|H200 constraint excludes V100 |
-| AlphaFold | Not tested | Not included in 260622 matrix run |
+| 106 | raw_output/ + raw/ both uploaded | Real user impact: duplicate GBs per job |
+| 108 | Chain IDs wrap past 26 combined entities | Silent duplicate chains; hard-stop in `EntityList.add` |
+| 104 | boltz-report-msa.cwl byte-identical to boltz-report.cwl | Rename/implement/delete |
+| 105 | select-pae.cwl has no executable coverage | Validate-only today |
+| 107 | test_config.py deletes env var instead of restoring | Use monkeypatch |
+| 109 | Upstream dev_container PYTHONPATH trailing colon | We're sanitized; report upstream, then close |
+| 96 | ESMFold2 MSA from our ColabFold server | Needs server address; reuse `scripts/_colabfold_api_msa.py`, follow the openfold interface pattern |
+| 90 | Retire AlphaFold — UI half | Closes when BV-BRC-Web#1400 merges |
+| 52 | Docs: multi-chain applies to DNA/RNA | Repo half done (#103); closes when BV-BRC-Docs#283 merges |
+| 88 | Eye-icon REPORT action | BV-BRC-Web; candidate for next consolidated fork PR |
+| 85 | Decommission AlphaFold 2 | Deferred — review 2026-11-13 |
+| 77 | Per-model length limits | CLI + UI |
+| 76 | DSSP post-prediction step | Enhancement |
+| 72, 73 | Workspace upload visibility / re-highlight | BV-BRC UI |
+| 18 | Nucleic acid secondary structure (DSSR) | Enhancement |
+
+Closed since 2026-08-13: #48, #50, #51, #75, #79, #80, #82, #84, #91–#95,
+#97–#103 (fix PRs and their issues).
 
 ## Infrastructure
 
-### Folding tools (production SIF: folding_260813.2.sif)
+### Folding tools (production SIF: folding_260815.1.sif)
 
-| Tool | Package | Version | PyTorch / Framework | ML Model | Checkpoint / Weights |
-|---|---|---|---|---|---|
-| Boltz | `boltz[cuda]` | 2.2.1 | torch 2.11.0 (cu130) | Boltz-2 | Auto-downloaded to `$BOLTZ_CACHE` |
-| OpenFold | `openfold3` | 0.4.1 | torch 2.5.1+cu121 | OpenFold 3 (AF3-class) | `of3-p2-155k.pt` |
-| Chai | `chai-lab` | 0.6.1 | torch 2.5.1+cu121 | Chai-1 | Auto-downloaded to `$CHAI_DOWNLOADS_DIR` |
-| AlphaFold | `wilke/alphafold` (fork) | git HEAD | JAX 0.4.26 + jaxlib 0.4.26+cuda12.cudnn89 | AlphaFold 2 | Genetic DBs (~2TB) in `$AF2_DATA_DIR` |
-| ESMFold | `transformers` | 5.8.0 | torch 2.6.0+cu124 | ESMFold v1 (ESM-2 3B backbone) | HuggingFace Hub → `$HF_HOME` |
+| Tool | Package | Version | PyTorch / Framework | Weights |
+|---|---|---|---|---|
+| Boltz | `boltz[cuda]` | 2.2.1 | torch 2.11.0 (cu130) | `$BOLTZ_CACHE` |
+| OpenFold | `openfold3` | 0.4.1 | torch 2.5.1+cu121 | `of3-p2-155k.pt` |
+| Chai | `chai-lab` | 0.6.1 | torch 2.5.1+cu121 | `$CHAI_DOWNLOADS_DIR` |
+| AlphaFold (retired) | `wilke/alphafold` fork | git HEAD | JAX 0.4.26 | `$AF2_DATA_DIR` (~2 TB) |
+| ESMFold | `transformers` | 5.8.0 | torch 2.6.0+cu124 | `/local_databases/esmfold/hub` |
+| ESMFold2 | `esm` (biohub) | — | torch cu130 (driver ≥ 580 → H200 only) | `/local_databases/esmfold2/hub` (ESMFold2 + ESMC-6B) |
 
-- Boltz torch+cu130 requires CUDA 13.0+ — only runs on coconut (H200)
-- OpenFold/Chai share torch+cu121 — run on all three hosts
-- ESMFold uses HuggingFace `transformers` (`EsmForProteinFolding`), not legacy fair-esm
-- AlphaFold uses a custom fork with JAX (not PyTorch), no pinned version
+- ESMFold2: subprocess backend only, `min_gpu_memory_mb` 18000, runner
+  invoked by file path (never `-m`), own env `/opt/conda-esmfold2` that
+  does **not** contain predict-structure.
+- Boltz + ESMFold2 (cu130) run only on coconut (H200); OF/Chai (cu121)
+  run on all three hosts.
 
 ### GPU hosts
 
-| Host | GPU | Count | VRAM | CUDA | Boltz (cu130) | OF/Chai (cu121) | ESMFold (cu124) |
-|---|---|---|---|---|---|---|---|
-| coconut | H200 NVL | 8x | 141 GB | 13.0 | YES | YES | YES |
-| mango | H100 NVL | 8x | 95 GB | 12.6 | NO | YES | YES |
-| peach | V100 PCIE | 2x | 32 GB | 12.2 | NO | YES | YES |
+| Host | GPU | VRAM | CUDA | cu130 (Boltz, ESMFold2) | cu121 (OF/Chai) |
+|---|---|---|---|---|---|
+| coconut | 8× H200 NVL | 141 GB | 13.0 | YES | YES |
+| mango | 8× H100 NVL | 95 GB | 12.6 | NO | YES |
+| peach | 2× V100 | 32 GB | 12.2 | NO | YES |
 
-### Container history
+### Container history (recent)
 
 | SIF | Date | Status | Notes |
 |---|---|---|---|
-| folding_260813.2.sif | 2026-08-13 | **Production** | +#84 preflight validation; predict_structure abda889. API matrix not yet run (blocked) |
-| folding_260813.1.sif | 2026-08-13 | Superseded | #67 + #81 + #82, corrected cache env vars; predict_structure 8ac583f |
-| folding_260622.3.sif | 2026-06-22 | Previous prod | v0.17.0 + report provenance; 38/38 tests pass |
-| folding_260622.2.sif | 2026-06-22 | Previous prod | v0.17.0 + report provenance (PR #70); 38/38 tests pass |
-| folding_260622.1.sif | 2026-06-22 | Retired | v0.17.0, ESMFold2 adapter, 11 PRs merged; 38/38 tests pass |
-| folding_260602.1.sif | 2026-06-02 | Previous prod | v0.16.1, GPU precheck, MSA validation, run log; 47/47 tests pass |
-| folding_260601.1.sif | 2026-06-01 | Bad build | Broken on mango (CUDA 12.6); all OF/Chai/AF jobs failed in ~9s |
-| folding_260522.1.sif | 2026-05-22 | Retired | Fixed 90-environment.sh, env vars; 48/49 tests pass |
-| folding_260515.2.sif | 2026-05-15 | Retired | v0.16.1, 101/101 tests pass; broken 90-environment.sh |
+| folding_260815.1.sif | 2026-08-15 | **Production** | +#48 +#50 +#98 + PYTHONPATH sanitizer; 42d6171; B01 verified after repoint |
+| folding_260814.1.sif | 2026-08-14 | Superseded | ESMFold2 arc (#94–#99); 56/56 matrix incl. A01 |
+| folding_260813.3.sif | 2026-08-13 | Superseded | #90 + #75 blockers |
+| folding_260813.2.sif | 2026-08-13 | Superseded | +#84 preflight validation; 48/48 matrix |
+| folding_260813.1.sif | 2026-08-13 | Superseded | #67 + #81 + #82 |
+
+Older history: see git log of this file.
 
 ### Key paths
 
 | Path | Purpose |
 |---|---|
-| /scout/containers/folding_prod.sif | Local testing symlink → folding_260813.2.sif |
-| /scout/containers/folding_260813.2.sif | Current SIF, local build (32 GB) |
-| /vol/patric3/production/containers/folding_260813.2.sif | BV-BRC copy — promotion step: `cp` here |
+| /scout/containers/folding_prod.sif | Local testing symlink → folding_260815.1.sif |
+| /vol/patric3/production/containers/ | Promotion target — `cp` the SIF here (needs user) |
 | /disks/patric-common/container-cache/ | BV-BRC scheduler container cache |
-| /local_databases/ | All tool weights + caches (bind-mounted) |
+| /local_databases/esmfold2/hub | Canonical ESMFold2 + ESMC-6B cache (svcbvbrc) |
+| /local_databases/esmfold/hub | esmfold_v1 cache |
 | ~/.patric_token | BV-BRC auth token |
+| ~/Development/runtime_build/gpu-builds/cuda-12.2-cudnn-8.9.6/ | Container build defs + BUILD-SOP.md |
 
 ### Repos
 
-| Repo | Version | Branch | Last commit | Pushed? |
-|---|---|---|---|---|
-| PredictStructureApp | v0.17.0 | main | abda889 (#84 preflight validation) | YES |
-| protein_compare | v0.2.1 | main | c7cd9c6 (PR #7 merged) | YES |
+| Repo | Branch | HEAD | Notes |
+|---|---|---|---|
+| PredictStructureApp | main | c350a68 | pushed |
+| protein_structure_analysis (wilke) | main | 7105946 | #79 + #80 merged; feeds next container build |
+| BV-BRC-Web (wilke fork) | alpha | 10c90676d | consolidated UI changes; upstream PR #1400 open |
+| BV-BRC-Docs (wilke fork) | master | — | docs sweep merged; upstream PR #283 open |
+
+## Operational notes (validated the hard way)
+
+- **After a container repoint, verify with a probe job's stderr
+  "Container path:" line** — the repoint silently failed to take twice.
+  `enumerate_apps` never lists PredictStructure; don't use it.
+- First submission after a container switch takes ~8 min of SIF staging;
+  the test runner allows 900 s.
+- If `start_app2` returns an empty "Error submitting job:", check
+  `p3x-show-container-config` (on gum, as p3) for a pointer at a deleted
+  SIF; the scheduler runs preflight *inside* the registered container.
+- Production Perl runs from `/opt/p3/deployment/plbin/`, not the git
+  checkout — a rebuild must refresh both copies.
+- Task stderr: `https://p3.theseed.org/services/app_service/task_info/<id>/stderr`;
+  Shock downloads need `Authorization: OAuth $(cat ~/.patric_token)`.
 
 ## How to resume
 
@@ -288,38 +229,30 @@ Closed since last update: #67, #74, #78, #81, #82, #84 (plus #8, #11, #12, #15,
 python3 scripts/submit_api_tests.py matrix --include-alphafold
 ```
 
-### Re-run saturation for a single tool
-```bash
-python3 scripts/submit_api_tests.py saturate <tool> -n 10
-```
-
-### Test a new SIF locally (Boltz+SMILES, hardest case)
+### Test a new SIF locally before handing over for deployment
+Acceptance harness (17 checks incl. single-install, path-invocation,
+service-script preflight): see session scratchpad `acceptance/run.sh`
+pattern, or run the Boltz+SMILES case:
 ```bash
 WORKDIR=$(mktemp -d)
 apptainer exec --nv \
     --bind $WORKDIR:/work --bind /local_databases:/local_databases \
     --bind $PWD/test_data:/data \
-    --env P3_WORKDIR=/work --env HF_HOME=/local_databases/cache \
+    --env P3_WORKDIR=/work \
     /scout/containers/<new>.sif \
-    perl /build/dev_container/modules/PredictStructureApp/service-scripts/App-PredictStructure.pl \
+    perl /opt/p3/deployment/plbin/App-PredictStructure.pl \
         "" /build/dev_container/modules/PredictStructureApp/app_specs/PredictStructure.json \
         /tmp/test_boltz_smiles.json
-ls $WORKDIR/output/{model_1.pdb,model_1.cif,report.html,results.json}
+ls $WORKDIR/output/{model_1.pdb,report.html,results.json,predictions/pae.json}
 ```
 
-### Verify SIF has correct code (don't trust version alone)
+### Verify a SIF carries the intended commit
 ```bash
-SIF=/scout/containers/<new>.sif
-apptainer exec $SIF /opt/conda-predict/bin/python -c "import predict_structure; print(predict_structure.__version__)"
-apptainer exec $SIF grep "constraint" /opt/conda-predict/lib/python3.12/site-packages/predict_structure/adapters/boltz.py
-apptainer exec $SIF grep "MMCIFParser" /opt/conda-predict/lib/python3.12/site-packages/predict_structure/normalizers.py
-apptainer exec $SIF grep -A3 "cif_src = src.with_suffix" /opt/conda-predict/lib/python3.12/site-packages/predict_structure/normalizers.py
-apptainer exec $SIF grep "Boltz PDB" /opt/conda-predict/lib/python3.12/site-packages/protein_compare/io/parser.py
+apptainer inspect /scout/containers/<new>.sif | grep predict_structure_commit
+apptainer exec <sif> /opt/conda-predict/bin/python -c "import predict_structure as p; print(p.__version__)"
 ```
 
-### After BV-BRC image switch
-1. Wait 60s for scheduler to cache SIF
-2. Submit one ESMFold job first (`python3 scripts/submit_api_tests.py matrix --tests E01`)
-3. If instant-fail: check container cache disk space on compute nodes
-4. If API hangs: preflight is mounting SIF for first time, retry with patience
-5. Once ESMFold passes, submit full matrix
+### After a BV-BRC image switch
+1. Submit one ESMFold job (`matrix --tests E01`) — expect a slow first call
+2. Pull its stderr and confirm the "Container path:" line names the new SIF
+3. Then submit the full matrix

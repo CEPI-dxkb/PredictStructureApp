@@ -12,3 +12,6 @@ container/deps/
 
 # Local test/build run artifacts (logs, JSON reports, MSAs from runs)
 output/
+
+# Git worktrees (CLAUDE.md convention)
+.worktree/

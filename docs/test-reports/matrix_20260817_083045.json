@@ -1,0 +1,16 @@
+[
+  {
+    "task_id": 23425748,
+    "label": "E01_esmfold",
+    "params": {
+      "tool": "esmfold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "matrix_E01_esmfold_20260817_083045",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:02:23",
+    "host": "coconut"
+  }
+]

@@ -1,0 +1,49 @@
+[
+  {
+    "task_id": 23418893,
+    "label": "F04_esmfold2_msa_upload",
+    "params": {
+      "tool": "esmfold2",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "matrix_F04_esmfold2_msa_upload_20260814_170119",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:36",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23418894,
+    "label": "F02_esmfold2_smiles",
+    "params": {
+      "tool": "esmfold2",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "smiles": [
+        "CCO"
+      ]
+    },
+    "output_file": "matrix_F02_esmfold2_smiles_20260814_170119",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:04",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23418895,
+    "label": "F03_esmfold2_dna",
+    "params": {
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta",
+      "tool": "esmfold2",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "matrix_F03_esmfold2_dna_20260814_170119",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:06",
+    "host": "coconut"
+  }
+]
