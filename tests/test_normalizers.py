@@ -856,3 +856,169 @@ class TestWritePaeJsonRobustness:
             "glob order is filesystem-dependent; an unsorted pick can pair the "
             "PAE with a different diffusion sample than model_1.cif"
         )
+
+
+class TestPerlRawOutputPruning:
+    """Execute the service script's raw_output pruning, don't read its source.
+
+    The CLI hands the tool ``output/raw_output`` and the normalizers copy that
+    tree to ``output/raw``; ``upload_results`` ships the whole output dir, so
+    both used to reach the workspace (#106). ``prune_raw_output`` deletes the
+    working copy before upload -- but only when ``raw/`` demonstrably holds
+    everything, so a mutation that always prunes (or never prunes) is caught.
+    """
+
+    def _prune(self, output_dir):
+        """Run prune_raw_output() from the service script against a real tree."""
+        import re
+        import subprocess
+
+        perl = (Path(__file__).resolve().parent.parent
+                / "service-scripts" / "App-PredictStructure.pl").read_text()
+        subs = []
+        for name in ("_count_files", "prune_raw_output"):
+            m = re.search(r"^sub %s \{.*?\n\}\n" % name, perl, re.S | re.M)
+            assert m, f"{name} not found in the service script"
+            subs.append(m.group(0))
+
+        script = (
+            "use strict; use warnings;\n"
+            "use File::Find;\n"
+            "use File::Path qw(remove_tree);\n"
+            + "\n".join(subs) +
+            'print "RESULT=", prune_raw_output($ARGV[0]), "\\n";\n'
+        )
+        r = subprocess.run(["perl", "-e", script, str(output_dir)],
+                           capture_output=True, text=True, timeout=30)
+        assert r.returncode == 0, r.stderr
+        m = re.search(r"RESULT=(\d)", r.stdout)
+        assert m, f"no RESULT in {r.stdout!r} / {r.stderr!r}"
+        return int(m.group(1)), r.stderr
+
+    def _tree(self, root, files):
+        for rel, text in files.items():
+            p = root / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text)
+
+    def test_prunes_when_raw_holds_the_same_tree(self, tmp_path):
+        payload = {"predictions/a/model_0.cif": "cif",
+                   "predictions/a/scores.model_idx_0.npz": "npz",
+                   "log.txt": "log"}
+        self._tree(tmp_path / "raw_output", payload)
+        self._tree(tmp_path / "raw", payload)
+
+        pruned, _ = self._prune(tmp_path)
+
+        assert pruned == 1
+        assert not (tmp_path / "raw_output").exists()
+        # The surviving copy must be untouched, not collaterally emptied.
+        assert (tmp_path / "raw" / "predictions" / "a" / "model_0.cif").read_text() == "cif"
+        assert len(list((tmp_path / "raw").rglob("*.npz"))) == 1
+
+    def test_keeps_raw_output_when_raw_is_missing(self, tmp_path):
+        """Never delete the only copy of the tool output."""
+        self._tree(tmp_path / "raw_output", {"predictions/model_0.cif": "cif"})
+
+        pruned, err = self._prune(tmp_path)
+
+        assert pruned == 0
+        assert (tmp_path / "raw_output" / "predictions" / "model_0.cif").exists()
+        assert "raw" in err
+
+    def test_keeps_raw_output_when_raw_is_a_partial_copy(self, tmp_path):
+        """A normalizer that copies only some files must not cost us the rest."""
+        self._tree(tmp_path / "raw_output",
+                   {"a.cif": "a", "nested/b.npz": "b", "nested/c.json": "c"})
+        self._tree(tmp_path / "raw", {"a.cif": "a", "nested/b.npz": "b"})
+
+        pruned, err = self._prune(tmp_path)
+
+        assert pruned == 0
+        assert (tmp_path / "raw_output" / "nested" / "c.json").exists()
+        assert "2" in err and "3" in err, f"warning should name the counts: {err!r}"
+
+    def test_counts_nested_files_not_just_top_level(self, tmp_path):
+        """Both trees are deep; a top-level-only count would compare 0 to 0."""
+        self._tree(tmp_path / "raw_output", {"deep/deeper/x.cif": "x"})
+        self._tree(tmp_path / "raw", {"deep/deeper/x.cif": "x", "extra.txt": "e"})
+
+        pruned, _ = self._prune(tmp_path)
+
+        assert pruned == 1
+        assert not (tmp_path / "raw_output").exists()
+
+    def test_is_a_noop_when_there_is_no_raw_output(self, tmp_path):
+        """CWL/CLI layouts without a working dir must not warn or die."""
+        self._tree(tmp_path / "raw", {"a.cif": "a"})
+
+        pruned, err = self._prune(tmp_path)
+
+        assert pruned == 0
+        assert err == ""
+        assert (tmp_path / "raw" / "a.cif").exists()
+
+    def test_real_boltz_normalization_survives_the_prune(self, tmp_path, tmp_output):
+        """End-to-end: nothing results.json points at is deleted by the prune."""
+        from predict_structure.normalizers import (
+            normalize_boltz_output,
+            write_metadata_json,
+        )
+        from predict_structure.results import write_results_json
+
+        # Lay the run out the way cli.py does: tool writes into raw_output/.
+        raw_output = tmp_output / "raw_output"
+        _make_boltz_raw(tmp_output, pae=np.zeros((3, 3))).rename(raw_output)
+        before = sorted(p.relative_to(raw_output)
+                        for p in raw_output.rglob("*") if p.is_file())
+
+        normalize_boltz_output(raw_output, tmp_output)
+        write_metadata_json(
+            tmp_output, tool="boltz", version="0.1.0", tool_version="2.1.0",
+            status="success", started_at="2026-05-04T14:00:00+00:00",
+            completed_at="2026-05-04T14:30:00+00:00", runtime_seconds=1800.0,
+            command=["predict-structure", "boltz"], container_image=None,
+            backend="subprocess", params={}, inputs=[],
+        )
+        results = json.loads(write_results_json(tmp_output).read_text())
+
+        pruned, _ = self._prune(tmp_output)
+
+        assert pruned == 1
+        assert not raw_output.exists()
+        # Every raw byte the tool produced is still on disk under raw/.
+        after = sorted(p.relative_to(tmp_output / "raw")
+                       for p in (tmp_output / "raw").rglob("*") if p.is_file())
+        assert after == before
+
+        def _locations(node):
+            if isinstance(node, dict):
+                if "location" in node:
+                    yield node["location"]
+                for child in node.get("listing") or []:
+                    yield from _locations(child)
+
+        for entry in results["outputs"].values():
+            for loc in _locations(entry):
+                assert (tmp_output / loc).exists(), f"{loc} lost to the prune"
+
+
+class TestPerlPruneOrdering:
+    """prune_raw_output must land between the raw_output readers and upload."""
+
+    def test_prune_runs_after_run_report_and_before_upload(self):
+        import re
+
+        perl = (Path(__file__).resolve().parent.parent
+                / "service-scripts" / "App-PredictStructure.pl").read_text()
+        body = re.search(r"sub run_app \{.*?\n\}\n", perl, re.S)
+        assert body, "run_app not found in the service script"
+        body = body.group(0)
+
+        report = body.index("run_report($output_dir)")
+        prune = body.index("prune_raw_output($output_dir)")
+        upload = body.index("upload_results(")
+        assert report < prune < upload, (
+            "run_report scans raw_output/ for PAE + Chai scores, so the prune "
+            "must follow it and still precede the upload"
+        )
