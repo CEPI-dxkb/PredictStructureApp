@@ -6,6 +6,9 @@ cwltool --validate. No Docker or GPU required.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -106,6 +109,37 @@ class TestPerToolCWLValidation:
         assert "is valid CWL" in combined
 
 
+class TestNoDuplicateCWLDefinitions:
+    """No two CWL definitions may be byte-identical copies (#104).
+
+    boltz-report-msa.cwl was a byte-for-byte copy of boltz-report.cwl, so its
+    name promised MSA behavior it did not add. A distinctly named CWL file has
+    to differ from every other one, or it is a lie about what it does.
+    """
+
+    CWL_ROOT = Path(__file__).resolve().parents[1] / "cwl"
+
+    def test_no_two_cwl_files_are_identical(self):
+        by_digest: dict[str, list[str]] = {}
+        for path in sorted(self.CWL_ROOT.rglob("*.cwl")):
+            digest = hashlib.md5(path.read_bytes()).hexdigest()
+            by_digest.setdefault(digest, []).append(str(path.relative_to(self.CWL_ROOT)))
+        dupes = [names for names in by_digest.values() if len(names) > 1]
+        assert not dupes, f"Byte-identical CWL definitions: {dupes}"
+
+    def test_boltz_report_msa_variant_is_gone(self):
+        """Removed in favor of boltz-report.cwl's use_msa_server input."""
+        assert not (self.CWL_ROOT / "workflows" / "boltz-report-msa.cwl").exists()
+
+    def test_boltz_report_exposes_msa_server_toggle(self):
+        """The MSA behavior the deleted variant promised lives here."""
+        doc = yaml.safe_load(
+            (self.CWL_ROOT / "workflows" / "boltz-report.cwl").read_text()
+        )
+        assert "use_msa_server" in doc["inputs"]
+        assert doc["steps"]["predict"]["in"]["use_msa_server"] == "use_msa_server"
+
+
 class TestPaeCWLWiring:
     """The CWL report path must receive predictions/pae.json too (#50).
 
@@ -132,13 +166,75 @@ class TestPaeCWLWiring:
         assert doc["requirements"]["LoadListingRequirement"]["loadListing"] == \
             "deep_listing"
 
-    @pytest.mark.parametrize("wf", ["boltz-report.cwl", "boltz-report-msa.cwl"])
+    @pytest.mark.parametrize("wf", ["boltz-report.cwl"])
     def test_boltz_workflows_pass_pae_to_report(self, wf):
         doc = yaml.safe_load((self.WORKFLOW_DIR / wf).read_text())
         steps = doc["steps"]
         assert "extract_pae" in steps, f"{wf} has no PAE extraction step"
         assert steps["extract_pae"]["run"].endswith("select-pae.cwl")
         assert steps["report"]["in"]["pae"] == "extract_pae/pae"
+
+
+@pytest.mark.timeout(180)
+@pytest.mark.skipif(shutil.which("cwltool") is None, reason="cwltool not on PATH")
+class TestSelectPaeExecution:
+    """Actually run select-pae.cwl (#105).
+
+    --validate only proves the schema parses; a broken glob or JavaScript
+    expression still passes it and fails in production. These run the tool
+    against tiny fixture directories -- no real prediction output needed.
+    """
+
+    @staticmethod
+    def _run(predictions: Path, outdir: Path) -> dict:
+        result = subprocess.run(
+            [
+                "cwltool",
+                "--outdir", str(outdir),
+                str(CWL_DIR / "select-pae.cwl"),
+                "--predictions", str(predictions),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, (
+            f"select-pae.cwl execution failed (rc={result.returncode}):\n{result.stderr}"
+        )
+        return json.loads(result.stdout)
+
+    def test_selects_pae_under_predictions(self, tmp_path):
+        """The normalized layout: pae.json one level down, under predictions/."""
+        preds = tmp_path / "out" / "predictions"
+        preds.mkdir(parents=True)
+        (preds / "model_1.pdb").write_text("ATOM\n")
+        (preds / "pae.json").write_text('{"pae": [[0.5]]}')
+
+        outputs = self._run(tmp_path / "out", tmp_path / "outdir")
+
+        assert outputs["pae"] is not None, "pae.json under predictions/ was not selected"
+        assert outputs["pae"]["basename"] == "pae.json"
+        assert Path(outputs["pae"]["path"]).read_text() == '{"pae": [[0.5]]}'
+
+    def test_selects_pae_at_top_level(self, tmp_path):
+        """A raw tool directory may hold pae.json directly."""
+        preds = tmp_path / "out"
+        preds.mkdir()
+        (preds / "pae.json").write_text('{"pae": [[0.25]]}')
+
+        outputs = self._run(preds, tmp_path / "outdir")
+
+        assert outputs["pae"]["basename"] == "pae.json"
+        assert Path(outputs["pae"]["path"]).read_text() == '{"pae": [[0.25]]}'
+
+    def test_returns_null_when_no_pae(self, tmp_path):
+        """Tools without PAE (ESMFold, Chai) must not fail the workflow."""
+        preds = tmp_path / "out" / "predictions"
+        preds.mkdir(parents=True)
+        (preds / "model_1.pdb").write_text("ATOM\n")
+
+        outputs = self._run(tmp_path / "out", tmp_path / "outdir")
+
+        assert outputs["pae"] is None
 
 
 class TestUnifiedCWLStructure:

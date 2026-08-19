@@ -5,6 +5,12 @@
 **Runner:** GoWe cwl-runner 1.2.1-dev
 **Prior round:** [Round 1](cwl-test-report-260329.1.md) — ESMFold-only execution, predict-structure.cwl parameter sweep
 
+> **Historical record — do not follow its recommendations.** `boltz-report-msa.cwl`,
+> referenced throughout (case D5), was deleted in #104: `boltz-report.cwl` gained a
+> `use_msa_server` input, which made the two files byte-identical. Use
+> `boltz-report.cwl` with `use_msa_server: true` for anything this report describes
+> as the `-msa` variant.
+
 ---
 
 ## 1. Environment & Provenance

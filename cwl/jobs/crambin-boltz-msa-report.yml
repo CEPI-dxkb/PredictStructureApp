@@ -1,4 +1,4 @@
-# boltz-report-msa workflow with use_msa_server (for D5)
+# boltz-report workflow with use_msa_server explicitly on (for D5)
 protein:
   - class: File
     path: ../../test_data/simple_protein.fasta
