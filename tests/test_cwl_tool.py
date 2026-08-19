@@ -6,6 +6,7 @@ cwltool --validate. No Docker or GPU required.
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -106,6 +107,37 @@ class TestPerToolCWLValidation:
         assert "is valid CWL" in combined
 
 
+class TestNoDuplicateCWLDefinitions:
+    """No two CWL definitions may be byte-identical copies (#104).
+
+    boltz-report-msa.cwl was a byte-for-byte copy of boltz-report.cwl, so its
+    name promised MSA behavior it did not add. A distinctly named CWL file has
+    to differ from every other one, or it is a lie about what it does.
+    """
+
+    CWL_ROOT = Path(__file__).resolve().parents[1] / "cwl"
+
+    def test_no_two_cwl_files_are_identical(self):
+        by_digest: dict[str, list[str]] = {}
+        for path in sorted(self.CWL_ROOT.rglob("*.cwl")):
+            digest = hashlib.md5(path.read_bytes()).hexdigest()
+            by_digest.setdefault(digest, []).append(str(path.relative_to(self.CWL_ROOT)))
+        dupes = [names for names in by_digest.values() if len(names) > 1]
+        assert not dupes, f"Byte-identical CWL definitions: {dupes}"
+
+    def test_boltz_report_msa_variant_is_gone(self):
+        """Removed in favor of boltz-report.cwl's use_msa_server input."""
+        assert not (self.CWL_ROOT / "workflows" / "boltz-report-msa.cwl").exists()
+
+    def test_boltz_report_exposes_msa_server_toggle(self):
+        """The MSA behavior the deleted variant promised lives here."""
+        doc = yaml.safe_load(
+            (self.CWL_ROOT / "workflows" / "boltz-report.cwl").read_text()
+        )
+        assert "use_msa_server" in doc["inputs"]
+        assert doc["steps"]["predict"]["in"]["use_msa_server"] == "use_msa_server"
+
+
 class TestPaeCWLWiring:
     """The CWL report path must receive predictions/pae.json too (#50).
 
@@ -132,7 +164,7 @@ class TestPaeCWLWiring:
         assert doc["requirements"]["LoadListingRequirement"]["loadListing"] == \
             "deep_listing"
 
-    @pytest.mark.parametrize("wf", ["boltz-report.cwl", "boltz-report-msa.cwl"])
+    @pytest.mark.parametrize("wf", ["boltz-report.cwl"])
     def test_boltz_workflows_pass_pae_to_report(self, wf):
         doc = yaml.safe_load((self.WORKFLOW_DIR / wf).read_text())
         steps = doc["steps"]
