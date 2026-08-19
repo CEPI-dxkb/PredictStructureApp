@@ -7,6 +7,8 @@ cwltool --validate. No Docker or GPU required.
 from __future__ import annotations
 
 import hashlib
+import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -171,6 +173,68 @@ class TestPaeCWLWiring:
         assert "extract_pae" in steps, f"{wf} has no PAE extraction step"
         assert steps["extract_pae"]["run"].endswith("select-pae.cwl")
         assert steps["report"]["in"]["pae"] == "extract_pae/pae"
+
+
+@pytest.mark.timeout(180)
+@pytest.mark.skipif(shutil.which("cwltool") is None, reason="cwltool not on PATH")
+class TestSelectPaeExecution:
+    """Actually run select-pae.cwl (#105).
+
+    --validate only proves the schema parses; a broken glob or JavaScript
+    expression still passes it and fails in production. These run the tool
+    against tiny fixture directories -- no real prediction output needed.
+    """
+
+    @staticmethod
+    def _run(predictions: Path, outdir: Path) -> dict:
+        result = subprocess.run(
+            [
+                "cwltool",
+                "--outdir", str(outdir),
+                str(CWL_DIR / "select-pae.cwl"),
+                "--predictions", str(predictions),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, (
+            f"select-pae.cwl execution failed (rc={result.returncode}):\n{result.stderr}"
+        )
+        return json.loads(result.stdout)
+
+    def test_selects_pae_under_predictions(self, tmp_path):
+        """The normalized layout: pae.json one level down, under predictions/."""
+        preds = tmp_path / "out" / "predictions"
+        preds.mkdir(parents=True)
+        (preds / "model_1.pdb").write_text("ATOM\n")
+        (preds / "pae.json").write_text('{"pae": [[0.5]]}')
+
+        outputs = self._run(tmp_path / "out", tmp_path / "outdir")
+
+        assert outputs["pae"] is not None, "pae.json under predictions/ was not selected"
+        assert outputs["pae"]["basename"] == "pae.json"
+        assert Path(outputs["pae"]["path"]).read_text() == '{"pae": [[0.5]]}'
+
+    def test_selects_pae_at_top_level(self, tmp_path):
+        """A raw tool directory may hold pae.json directly."""
+        preds = tmp_path / "out"
+        preds.mkdir()
+        (preds / "pae.json").write_text('{"pae": [[0.25]]}')
+
+        outputs = self._run(preds, tmp_path / "outdir")
+
+        assert outputs["pae"]["basename"] == "pae.json"
+        assert Path(outputs["pae"]["path"]).read_text() == '{"pae": [[0.25]]}'
+
+    def test_returns_null_when_no_pae(self, tmp_path):
+        """Tools without PAE (ESMFold, Chai) must not fail the workflow."""
+        preds = tmp_path / "out" / "predictions"
+        preds.mkdir(parents=True)
+        (preds / "model_1.pdb").write_text("ATOM\n")
+
+        outputs = self._run(tmp_path / "out", tmp_path / "outdir")
+
+        assert outputs["pae"] is None
 
 
 class TestUnifiedCWLStructure:
