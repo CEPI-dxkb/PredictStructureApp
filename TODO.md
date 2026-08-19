@@ -7,14 +7,6 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [ ] Next container rebuild: picks up protein_compare #79 + #80 report fixes
       automatically (pip from wilke/protein_structure_analysis main); batch
       with the next code change rather than rebuilding for it alone
-- [x] #106 — stop uploading raw bytes twice (`prune_raw_output` drops
-      `raw_output/` after `run_report`/finalize, before upload; keeps it if
-      `raw/` is incomplete) — branch `fix/106-double-raw-upload`, awaiting review
-- [ ] #108 — hard-stop in `EntityList.add` when chain IDs are exhausted
-      (silent wrap past 26 combined entities today)
-- [ ] #109 — file the upstream dev_container issue (PYTHONPATH trailing
-      colon), link it, close ours
-- [ ] #104/#105/#107 — small CWL/test cleanups, good batch candidates
 - [ ] #110 — make BUILD-SOP Step 4b unconditional + assert cross-copy app_spec
       agreement in the acceptance harness (sandbox already refreshed, so the
       next build ships the current spec)
@@ -30,6 +22,21 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [ ] GoWe: test predict-structure CWL tool through GPU workers
 
 ## Done (since 2026-08-13 — see STATUS.md for detail)
+
+- [x] #106 — `prune_raw_output` drops `raw_output/` after `run_report`/finalize
+      and before the upload, guarded on `raw/` being complete (PR #111)
+- [x] #108 — `EntityList.add` refuses past chain ID Z instead of wrapping to A;
+      not bypassable by `--force` (PR #112)
+- [x] #104 — deleted `boltz-report-msa.cwl`; `boltz-report.cwl` already carries
+      `use_msa_server`. Duplicate-CWL guard test added (PR #113)
+- [x] #105 — executable `cwltool` coverage for `select-pae.cwl` (PR #113)
+- [x] #107 — `monkeypatch.setenv` instead of deleting the env var (PR #113)
+- [x] #109 — reported upstream as BV-BRC/dev_container#20; the sh branch of
+      `deploy-user-env` is unguarded while the csh branch of the same target
+      already guards it. We were never affected (sanitizer ships since
+      folding_260815.1)
+- [x] Archived the orphan root `app_spec.json` under `app_specs/archive/` for
+      build forensics; canonical spec is `app_specs/PredictStructure.json`
 
 - [x] ESMFold2 end-to-end in production: #94/#95/#97 (A3M + regex),
       #98/#102 (runner by path, env repack), #99 (content-based cache
