@@ -15,6 +15,9 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [ ] #109 — file the upstream dev_container issue (PYTHONPATH trailing
       colon), link it, close ours
 - [ ] #104/#105/#107 — small CWL/test cleanups, good batch candidates
+- [ ] #110 — make BUILD-SOP Step 4b unconditional + assert cross-copy app_spec
+      agreement in the acceptance harness (sandbox already refreshed, so the
+      next build ships the current spec)
 - [ ] Watch upstream PRs: BV-BRC-Web#1400 (→ closes #90) and
       BV-BRC-Docs#283 (→ closes #52); nudge maintainers if idle
 - [ ] #96 — ESMFold2 MSA via our ColabFold server; blocked on the server
@@ -53,8 +56,9 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 
 Items captured mid-work — triage into the queue or MEMORY/PLAN later.
 
-- `app_spec.json` sits untracked at the repo root — looks generated; decide
-  whether to delete or ignore
+- ~~`app_spec.json` untracked at the repo root~~ — resolved: it was a stale
+  orphan copy (no esmfold2, no text_input, referenced by nothing), moved out
+  of the repo. The canonical spec is `app_specs/PredictStructure.json`
 - `docs/bvbrc-web-90-retire-alphafold.patch` is superseded by the fork-first
   BV-BRC-Web#1400 flow; delete once #1400 merges
 - ~48 GB still reclaimable later: nothing pending — cleanup done 2026-08-17
