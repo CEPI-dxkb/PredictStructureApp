@@ -7,9 +7,9 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [ ] Next container rebuild: picks up protein_compare #79 + #80 report fixes
       automatically (pip from wilke/protein_structure_analysis main); batch
       with the next code change rather than rebuilding for it alone
-- [ ] #106 — stop uploading raw bytes twice (exclude `raw_output/` from the
-      workspace upload, or clean it after `run_report`); highest-impact of the
-      new batch
+- [x] #106 — stop uploading raw bytes twice (`prune_raw_output` drops
+      `raw_output/` after `run_report`/finalize, before upload; keeps it if
+      `raw/` is incomplete) — branch `fix/106-double-raw-upload`, awaiting review
 - [ ] #108 — hard-stop in `EntityList.add` when chain IDs are exhausted
       (silent wrap past 26 combined entities today)
 - [ ] #109 — file the upstream dev_container issue (PYTHONPATH trailing

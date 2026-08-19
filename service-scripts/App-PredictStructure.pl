@@ -40,7 +40,7 @@ use warnings;
 use Carp::Always;
 use Data::Dumper;
 use File::Basename;
-use File::Path qw(make_path);
+use File::Path qw(make_path remove_tree);
 use File::Slurp;
 use File::Copy;
 use File::Find;
@@ -832,6 +832,11 @@ sub run_app {
             . ($rw_rc >> 8) . "); locations will remain relative\n";
     }
 
+    # 4b. Drop the tool's working output directory now that run_report has
+    # scanned it and the manifests are written -- raw/ carries the same
+    # bytes, and uploading both doubles workspace usage (#106).
+    prune_raw_output($output_dir);
+
     print "Uploading results to workspace: $output_folder\n";
     upload_results($app, $output_dir, $output_folder);
 
@@ -1124,6 +1129,66 @@ sub download_workspace_file {
     }
 
     return $local_path;
+}
+
+=head2 prune_raw_output
+
+Drop the working copy of the tool's native output ($output_dir/raw_output)
+so the workspace upload does not carry the same bytes twice (#106).
+
+The CLI hands the tool $output_dir/raw_output as its output directory; the
+normalizers then copy that tree to $output_dir/raw, the documented location
+in the output contract. upload_results ships the whole output directory, so
+both copies land in the workspace -- multiple GB of duplicates for Boltz/Chai.
+
+Only prunes when raw/ demonstrably holds everything raw_output/ does (at
+least as many regular files); otherwise it keeps raw_output/ and uploads it,
+because losing the only copy of the tool output is far worse than uploading
+it twice. Must run AFTER run_report, which scans raw_output/ for PAE JSON
+and Chai scores.
+
+Returns 1 if raw_output/ was removed, 0 if it was kept.
+
+=cut
+
+sub _count_files {
+    my ($dir) = @_;
+    my $n = 0;
+    File::Find::find({ wanted => sub { $n++ if -f $_ }, no_chdir => 1 }, $dir);
+    return $n;
+}
+
+sub prune_raw_output {
+    my ($output_dir) = @_;
+
+    my $raw_output = "$output_dir/raw_output";
+    return 0 unless -d $raw_output;
+
+    my $raw = "$output_dir/raw";
+    unless (-d $raw) {
+        print STDERR "Warning: $raw missing; keeping raw_output/ so the "
+            . "tool output still uploads\n";
+        return 0;
+    }
+
+    my $kept = _count_files($raw);
+    my $working = _count_files($raw_output);
+    if ($kept < $working) {
+        print STDERR "Warning: raw/ has $kept files but raw_output/ has "
+            . "$working; keeping raw_output/ to avoid losing tool output\n";
+        return 0;
+    }
+
+    my $err;
+    remove_tree($raw_output, { error => \$err });
+    if (($err && @$err) || -d $raw_output) {
+        print STDERR "Warning: failed to remove $raw_output; "
+            . "raw output will upload twice\n";
+        return 0;
+    }
+
+    print "Pruned raw_output/ ($working files already present in raw/)\n";
+    return 1;
 }
 
 =head2 upload_results
