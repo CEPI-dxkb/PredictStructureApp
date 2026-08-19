@@ -130,6 +130,28 @@ def validate_ccd_code(code: str) -> str:
         raise ValueError(_invalid_ccd_message(stripped))
     return stripped.upper()
 
+
+def _chain_ids_exhausted_message() -> str:
+    """Build the user-facing message for chain-ID exhaustion (#108).
+
+    Spells out that the budget is shared across *all* inputs, because the
+    way users hit this is one FASTA per flag (``--protein a.fasta --dna
+    b.fasta``), each under the per-file limit but over it combined.
+    """
+    return (
+        f"Too many entities: a prediction can have at most {len(_CHAIN_IDS)} "
+        f"chains, one per chain ID {_CHAIN_IDS[0]}-{_CHAIN_IDS[-1]}. That "
+        f"budget is shared by every input — one chain per FASTA record "
+        f"across all --protein/--dna/--rna/--sequence files, plus one per "
+        f"--ligand and --smiles entity. Submit fewer entities, or split the "
+        f"complex into separate jobs. --force does not lift this limit: it "
+        f"is a structural limit of single-letter chain IDs, not a size "
+        f"guard. A 27th entity would have to reuse chain ID "
+        f"'{_CHAIN_IDS[0]}', giving the tool duplicate chains and a "
+        f"silently wrong complex."
+    )
+
+
 # DNA-only nucleotides (no U)
 _DNA_BASES = set("ACGTN")
 
@@ -212,12 +234,24 @@ class EntityList:
         Ligand values are validated and normalized here rather than at the
         CLI edge: a malformed CCD code is invalid for every tool, so it is
         a data-model invariant. Enforcing it at ``add`` also covers the
-        batch job-file path, adapters, and direct library use.
+        batch job-file path, adapters, and direct library use. The chain-ID
+        cap below is enforced here for the same reason.
 
         Raises:
             ValueError: If ``entity_type`` is LIGAND and ``value`` is not a
-                valid CCD code.
+                valid CCD code, or if all chain IDs are already taken.
         """
+        # Chain IDs come from a fixed 26-letter alphabet, so the entity count
+        # is capped by the data model itself (#108). This used to wrap with
+        # ``% len(_CHAIN_IDS)``, handing entity 27 chain ID 'A' again:
+        # duplicate chains that Boltz YAML and Chai FASTA headers both accept
+        # and then fold as the wrong complex. Refusing is the only honest
+        # answer, and it is deliberately not bypassable by --force (which
+        # lifts the per-file sequence and residue limits) — there is no 27th
+        # chain ID to hand out.
+        if len(self.entities) >= len(_CHAIN_IDS):
+            raise ValueError(_chain_ids_exhausted_message())
+
         if entity_type is EntityType.LIGAND:
             normalized = validate_ccd_code(value)
             # Callers commonly use the raw code as the name (``name=code``).
@@ -228,7 +262,7 @@ class EntityList:
                 name = normalized
             value = normalized
 
-        chain_id = _CHAIN_IDS[len(self.entities) % len(_CHAIN_IDS)]
+        chain_id = _CHAIN_IDS[len(self.entities)]
         self.entities.append(Entity(
             entity_type=entity_type,
             value=value,
