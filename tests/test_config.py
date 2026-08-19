@@ -56,9 +56,8 @@ class TestImageHelpers:
             img = get_docker_image(tool)
             assert "/" in img  # registry/image format
 
-    def test_docker_image_for_file_uri_raises(self, tmp_path):
+    def test_docker_image_for_file_uri_raises(self, tmp_path, monkeypatch):
         """get_docker_image raises if tool has a file:// URI."""
-        import os
         import yaml
 
         config = {
@@ -72,7 +71,9 @@ class TestImageHelpers:
         cfg_path = tmp_path / "test_config.yml"
         cfg_path.write_text(yaml.dump(config))
 
-        os.environ["PREDICT_STRUCTURE_CONFIG"] = str(cfg_path)
+        # monkeypatch restores the previous value (or unsets it again) on
+        # teardown -- a bare `del` would erase a developer's own setting.
+        monkeypatch.setenv("PREDICT_STRUCTURE_CONFIG", str(cfg_path))
         try:
             from predict_structure.config import _load_config
             _load_config.cache_clear()
@@ -80,7 +81,6 @@ class TestImageHelpers:
             with pytest.raises(ValueError, match="not a Docker image"):
                 get_docker_image("test_tool")
         finally:
-            del os.environ["PREDICT_STRUCTURE_CONFIG"]
             _load_config.cache_clear()
 
 
