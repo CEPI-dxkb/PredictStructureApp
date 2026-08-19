@@ -302,13 +302,28 @@ def _build_entity_list(
     to a .yaml/.yml file, it's treated as a YAML entity for Boltz.
 
     Raises:
-        click.UsageError: If no entities are provided.
+        click.UsageError: If no entities are provided, or if an entity is
+            rejected by the data model (bad CCD code, chain IDs exhausted).
     """
     from predict_structure.entities import MAX_SEQUENCES, MAX_TOTAL_RESIDUES
 
     max_seq = None if force else MAX_SEQUENCES
     max_res = None if force else MAX_TOTAL_RESIDUES
     entities = EntityList()
+
+    def add(*args, **kwargs) -> None:
+        """Add via EntityList, reporting its invariants as usage errors.
+
+        ``EntityList.add`` enforces data-model invariants (valid CCD code,
+        chain IDs not exhausted — #48, #108) that are all user-fixable input
+        problems. Funnelling every call through here means the user gets
+        ``Error: <message>`` at submit time instead of a traceback, whichever
+        entity flag tripped it.
+        """
+        try:
+            entities.add(*args, **kwargs)
+        except ValueError as exc:
+            raise click.UsageError(str(exc)) from exc
 
     for fasta_path in protein:
         path = Path(fasta_path)
@@ -318,7 +333,7 @@ def _build_entity_list(
         # reaches the CCD check in EntityList.add. Deliberate — parsing and
         # rewriting a hand-written Boltz YAML is a separate concern.
         if is_boltz_yaml(path):
-            entities.add(
+            add(
                 EntityType.PROTEIN, str(path), name=path.stem,
                 source_path=path, format="boltz-yaml",
             )
@@ -326,7 +341,7 @@ def _build_entity_list(
         for ent in parse_fasta_entities(
             path, explicit_type=EntityType.PROTEIN, max_sequences=max_seq,
         ):
-            entities.add(
+            add(
                 ent.entity_type, ent.value, name=ent.name,
                 source_path=ent.source_path, format=ent.format,
             )
@@ -335,7 +350,7 @@ def _build_entity_list(
         for ent in parse_fasta_entities(
             Path(fasta_path), explicit_type=EntityType.DNA, max_sequences=max_seq,
         ):
-            entities.add(
+            add(
                 ent.entity_type, ent.value, name=ent.name,
                 source_path=ent.source_path, format=ent.format,
             )
@@ -344,7 +359,7 @@ def _build_entity_list(
         for ent in parse_fasta_entities(
             Path(fasta_path), explicit_type=EntityType.RNA, max_sequences=max_seq,
         ):
-            entities.add(
+            add(
                 ent.entity_type, ent.value, name=ent.name,
                 source_path=ent.source_path, format=ent.format,
             )
@@ -354,19 +369,16 @@ def _build_entity_list(
         for ent in parse_fasta_entities(
             Path(fasta_path), explicit_type=None, max_sequences=max_seq,
         ):
-            entities.add(
+            add(
                 ent.entity_type, ent.value, name=ent.name,
                 source_path=ent.source_path, format=ent.format,
             )
 
     for code in ligand:
-        try:
-            entities.add(EntityType.LIGAND, code, name=code, format="ccd")
-        except ValueError as exc:
-            raise click.UsageError(str(exc)) from exc
+        add(EntityType.LIGAND, code, name=code, format="ccd")
 
     for smi in smiles:
-        entities.add(EntityType.SMILES, smi, name="smiles", format="smiles")
+        add(EntityType.SMILES, smi, name="smiles", format="smiles")
 
     if not entities:
         raise click.UsageError(
@@ -909,33 +921,39 @@ def _run_job_file(job_path: Path, base_output_dir: Path | None) -> None:
     for idx, job in enumerate(data):
         job_dir = base_output_dir / f"job_{idx:03d}"
 
-        # Build entity list from job entry
+        # Build entity list from job entry. Every add goes through `add` so
+        # the data-model invariants (CCD code #48, chain-ID cap #108) are
+        # reported as "Job NNN: <message>" rather than a traceback.
         entities = EntityList()
+
+        def add(*args, _idx: int = idx, **kwargs) -> None:
+            try:
+                entities.add(*args, **kwargs)
+            except ValueError as exc:
+                raise click.UsageError(f"Job {_idx:03d}: {exc}") from exc
+
         for fasta_path in job.get("protein", []):
             for ent in parse_fasta_entities(Path(fasta_path), explicit_type=EntityType.PROTEIN):
-                entities.add(
+                add(
                     ent.entity_type, ent.value, name=ent.name,
                     source_path=ent.source_path, format=ent.format,
                 )
         for fasta_path in job.get("dna", []):
             for ent in parse_fasta_entities(Path(fasta_path), explicit_type=EntityType.DNA):
-                entities.add(
+                add(
                     ent.entity_type, ent.value, name=ent.name,
                     source_path=ent.source_path, format=ent.format,
                 )
         for fasta_path in job.get("rna", []):
             for ent in parse_fasta_entities(Path(fasta_path), explicit_type=EntityType.RNA):
-                entities.add(
+                add(
                     ent.entity_type, ent.value, name=ent.name,
                     source_path=ent.source_path, format=ent.format,
                 )
         for code in job.get("ligands", []):
-            try:
-                entities.add(EntityType.LIGAND, code, name=code, format="ccd")
-            except ValueError as exc:
-                raise click.UsageError(f"Job {idx:03d}: {exc}") from exc
+            add(EntityType.LIGAND, code, name=code, format="ccd")
         for smi in job.get("smiles", []):
-            entities.add(EntityType.SMILES, smi, name="smiles", format="smiles")
+            add(EntityType.SMILES, smi, name="smiles", format="smiles")
 
         if not entities:
             click.echo(f"Warning: job {idx} has no entities, skipping", err=True)

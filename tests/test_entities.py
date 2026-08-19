@@ -188,6 +188,113 @@ class TestEntityListValidation:
         el.validate_size(max_residues=None)  # should not raise
 
 
+class TestChainIdExhaustion:
+    """#108 — chain IDs are A-Z, so entity 27 has nowhere to go.
+
+    ``EntityList.add`` used to assign ``_CHAIN_IDS[len(entities) % 26]``,
+    which silently wrapped: entity 27 got chain ID 'A' again. Duplicate
+    chain IDs are accepted by the downstream input formats (Boltz YAML,
+    Chai FASTA headers) and fold the wrong complex, so ``add`` must refuse
+    instead. The cap is structural, so ``--force`` must not lift it.
+    """
+
+    @staticmethod
+    def _fill(el: EntityList, n: int) -> None:
+        for _ in range(n):
+            el.add(EntityType.PROTEIN, "MKTIIAL")
+
+    def test_26_entities_ok_with_distinct_chain_ids(self):
+        el = EntityList()
+        self._fill(el, 26)
+        assert len(el) == 26
+        assert [e.chain_id for e in el] == list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+    def test_27th_entity_raises(self):
+        el = EntityList()
+        self._fill(el, 26)
+        with pytest.raises(ValueError, match="at most 26 chains"):
+            el.add(EntityType.PROTEIN, "MKTIIAL")
+
+    def test_rejected_entity_is_not_appended(self):
+        el = EntityList()
+        self._fill(el, 26)
+        with pytest.raises(ValueError):
+            el.add(EntityType.PROTEIN, "MKTIIAL")
+        assert len(el) == 26
+
+    def test_ligands_and_smiles_share_the_budget(self):
+        """A ligand is a chain too — 26 sequences leave room for nothing."""
+        el = EntityList()
+        self._fill(el, 26)
+        with pytest.raises(ValueError, match="at most 26 chains"):
+            el.add(EntityType.LIGAND, "ATP", name="ATP")
+        with pytest.raises(ValueError, match="at most 26 chains"):
+            el.add(EntityType.SMILES, "CCO")
+
+    def test_message_says_what_why_and_how_to_fix(self):
+        el = EntityList()
+        self._fill(el, 26)
+        with pytest.raises(ValueError) as exc:
+            el.add(EntityType.PROTEIN, "MKTIIAL")
+        msg = str(exc.value)
+        assert "at most 26 chains" in msg          # what
+        assert "A-Z" in msg                        # why
+        assert "shared by every input" in msg      # why it triggered
+        assert "split the complex into separate jobs" in msg   # what to do
+        assert "--force does not lift this limit" in msg       # not a soft cap
+
+    def test_invalid_ligand_still_reported_as_ccd_error(self):
+        """The chain check must not shadow the CCD check below the cap."""
+        el = EntityList()
+        with pytest.raises(ValueError, match="Invalid ligand CCD code"):
+            el.add(EntityType.LIGAND, "TOOLONG")
+
+
+class TestChainIdExhaustionViaCLI:
+    """The per-file sequence limit does not add up across inputs (#108)."""
+
+    @staticmethod
+    def _fasta(tmp_path, name: str, count: int, seq: str) -> str:
+        path = tmp_path / name
+        path.write_text("".join(f">{name}_{i}\n{seq}\n" for i in range(count)))
+        return str(path)
+
+    def _build(self, tmp_path, *, force: bool):
+        import click
+
+        from predict_structure.cli import _build_entity_list
+
+        protein = self._fasta(tmp_path, "prot.fasta", 20, "MKTIIALSYIFCLVFA")
+        dna = self._fasta(tmp_path, "dna.fasta", 20, "ACGTACGTACGTACGT")
+        with pytest.raises(click.UsageError) as exc:
+            _build_entity_list(
+                protein=(protein,), dna=(dna,), rna=(), ligand=(), smiles=(),
+                force=force,
+            )
+        return str(exc.value)
+
+    def test_two_files_under_the_per_file_limit_still_exhaust(self, tmp_path):
+        """20 protein + 20 DNA records: each file passes, 40 chains do not."""
+        assert "at most 26 chains" in self._build(tmp_path, force=False)
+
+    def test_force_does_not_bypass(self, tmp_path):
+        """--force lifts the sequence/residue limits, never the chain cap."""
+        msg = self._build(tmp_path, force=True)
+        assert "at most 26 chains" in msg
+        assert "--force does not lift this limit" in msg
+
+    def test_26_entities_across_two_files_still_build(self, tmp_path):
+        from predict_structure.cli import _build_entity_list
+
+        protein = self._fasta(tmp_path, "prot.fasta", 13, "MKTIIALSYIFCLVFA")
+        dna = self._fasta(tmp_path, "dna.fasta", 13, "ACGTACGTACGTACGT")
+        entities = _build_entity_list(
+            protein=(protein,), dna=(dna,), rna=(), ligand=(), smiles=(),
+        )
+        assert len(entities) == 26
+        assert len({e.chain_id for e in entities}) == 26
+
+
 class TestIsBoltzYaml:
     def test_valid_boltz_yaml(self, tmp_path):
         import yaml
