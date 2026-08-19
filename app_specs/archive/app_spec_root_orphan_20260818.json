@@ -1,0 +1,92 @@
+{
+    "id": "PredictStructure",
+    "script": "App-PredictStructure",
+    "label": "Protein Structure Prediction",
+    "description": "Predict biomolecular structures (proteins, complexes, protein-DNA/RNA, protein-ligand) using Boltz-2, OpenFold 3, Chai-1, AlphaFold 2, or ESMFold. Provides a unified interface with automatic parameter mapping, format conversion, output normalization, and confidence scoring. Advanced knobs (num_samples, num_recycles, seed, output_format, all tool-specific parameters) use sensible defaults from the predict-structure CLI; expose them via the PredictStructureFull spec or direct CLI / CWL invocation.",
+    "default_memory": "64G",
+    "default_cpu": 8,
+    "default_runtime": 14400,
+    "parameters": [
+        {
+            "id": "tool",
+            "type": "enum",
+            "enum": ["auto", "boltz", "openfold", "chai", "alphafold", "esmfold"],
+            "default": "auto",
+            "required": 1,
+            "label": "Prediction Tool",
+            "desc": "Structure prediction engine. 'auto' picks the best available tool: Boltz > OpenFold > Chai > ESMFold > AlphaFold. Boltz-2, OpenFold 3, and Chai-1 are diffusion-based and support protein/DNA/RNA/ligand complexes (MSA fetched automatically via ColabFold server; optional msa_file upload overrides). ESMFold is fastest (single-sequence, protein-only, CPU-capable). AlphaFold 2 builds its own MSA from local databases (protein-only, hours)."
+        },
+        {
+            "id": "input_file",
+            "type": "wsfile",
+            "required": 0,
+            "label": "Protein FASTA",
+            "desc": "Protein sequence(s) in FASTA format (.fasta, .fa). Multi-chain complexes: include multiple sequences in one file. Maximum 26 sequences and 10,000 total residues per job. Boltz also accepts a YAML manifest for full feature support."
+        },
+        {
+            "id": "dna_file",
+            "type": "wsfile",
+            "required": 0,
+            "label": "DNA FASTA",
+            "desc": "DNA sequence(s) in FASTA format. Tools that support DNA: Boltz-2, OpenFold 3, Chai-1."
+        },
+        {
+            "id": "rna_file",
+            "type": "wsfile",
+            "required": 0,
+            "label": "RNA FASTA",
+            "desc": "RNA sequence(s) in FASTA format. Tools that support RNA: Boltz-2, OpenFold 3, Chai-1."
+        },
+        {
+            "id": "ligand",
+            "type": "list",
+            "required": 0,
+            "label": "Ligands (CCD codes)",
+            "desc": "Ligand CCD codes, 1-3 alphanumeric chars each (e.g. ATP, NAD). Glycans use their CCD codes here too (NAG, MAN, BMA, etc.) -- no separate glycan input. Tools with ligand support: Boltz-2, OpenFold 3, Chai-1.",
+            "item": {
+                "id": "ccd_code",
+                "type": "string"
+            }
+        },
+        {
+            "id": "smiles",
+            "type": "list",
+            "required": 0,
+            "label": "SMILES Strings",
+            "desc": "SMILES strings for arbitrary small molecules (use 'ligand' for CCD-coded compounds). Tools with SMILES support: Boltz-2, OpenFold 3, Chai-1.",
+            "item": {
+                "id": "smiles_str",
+                "type": "string"
+            }
+        },
+        {
+            "id": "msa_file",
+            "type": "wsfile",
+            "required": 0,
+            "label": "MSA File",
+            "desc": "Pre-computed Multiple Sequence Alignment (.a3m, .sto). Required for Boltz, OpenFold, and Chai (their dummy single-sequence fallback produces unusable predictions; external MSA servers are disabled by BV-BRC policy). ESMFold ignores MSA; AlphaFold builds its own from local databases. Auto-converted to tool-native format (Parquet for Chai, injected into YAML for Boltz, JSON for OpenFold)."
+        },
+        {
+            "id": "debug",
+            "type": "bool",
+            "default": false,
+            "required": 0,
+            "label": "Debug Mode",
+            "desc": "Enable verbose debug logging. Sets P3_DEBUG=1 for the Perl service script and passes --verbose to the predict-structure CLI."
+        },
+        {
+            "id": "output_path",
+            "type": "folder",
+            "required": 1,
+            "label": "Output Folder",
+            "desc": "Workspace folder for prediction results. Output includes the rank-1 PDB, an HTML report, results.json (CWL-style outputs map), and structured subdirs for inputs/, predictions/, reports/, metadata/, and raw/."
+        },
+        {
+            "id": "output_file",
+            "type": "wsfile",
+            "required": 1,
+            "label": "Output Name",
+            "desc": "Job output name. Results land at ${output_path}/.${output_file}/ in the workspace."
+        }
+    ]
+}
