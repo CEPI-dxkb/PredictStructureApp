@@ -71,8 +71,7 @@ Items captured mid-work — triage into the queue or MEMORY/PLAN later.
 - ~~`app_spec.json` untracked at the repo root~~ — resolved: it was a stale
   orphan copy (no esmfold2, no text_input, referenced by nothing), moved out
   of the repo. The canonical spec is `app_specs/PredictStructure.json`
-- `docs/bvbrc-web-90-retire-alphafold.patch` is superseded by the fork-first
-  BV-BRC-Web#1400 flow; delete once #1400 merges
+- ~~`docs/bvbrc-web-90-retire-alphafold.patch`~~ — deleted 2026-08-21; #1400 merged
 - ~48 GB still reclaimable later: nothing pending — cleanup done 2026-08-17
 - There is no `v0.17.0` git tag; newest tag is `v0.16.1` while pyproject has
   been on 0.17.0 since June. Tags are not a usable release marker right now
