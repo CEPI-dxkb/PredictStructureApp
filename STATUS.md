@@ -1,30 +1,70 @@
 # Project Status
 
-**Last updated:** 2026-08-17
-**Current version:** v0.17.0 (HEAD: c350a68)
-**Production container:** `folding_260815.1.sif` (predict_structure 42d6171)
+**Last updated:** 2026-08-21
+**Current version:** v0.17.0 (HEAD: ef0914b)
+**Production (alpha) container:** `folding_260821.1.sif` (predict_structure b3f8bfc) — known regression O02/O04, fix built into `folding_260821.2.sif`
 
 ## Next action
 
-Steady state — nothing is blocked on us. The two open work fronts:
+**Deploy `folding_260821.2.sif`** (building from `all-build.def`, pin ef0914b —
+carries the #114 fix). When the self-verifying build reports
+"Build complete and verified":
 
-1. **Next container rebuild** picks up the protein_compare report fixes
-   (#79 zero-count histogram bins, #80 report TOC — merged to
-   wilke/protein_structure_analysis main, `7105946`). protein_compare is
-   pip-installed from that repo's main in runtime_build's
-   `reqts-predict-structure.def`, so no code change here is needed — just
-   batch the rebuild with whatever lands next.
-2. **Upstream PRs await BV-BRC maintainers:** BV-BRC-Web#1400 (retire
-   AlphaFold from UI, add ESMFold2, runtime hints — closes #90's UI half)
-   and BV-BRC-Docs#283 (docs sweep — close #52 when it merges). Both were
-   consolidated fork-first: reviewed, fixed, and merged in wilke's forks,
-   then opened as single upstream PRs.
+1. Local acceptance: `EXPECT=ef0914b ./test-container-acceptance.sh <sif> <workdir>`
+   (26/26, 0 skipped) + one real prediction.
+2. Promote (p3): `cp` to `/vol/patric3/production/containers/`, repoint via
+   `p3x-show-container-config` on gum.
+3. Probe E01, confirm the stderr `Container path:` line, then re-run at least
+   O01–O06 (`matrix --tests O01,O02,O03,O04,O05,O06`).
 
-New issues #104–#109 (filed 2026-08-17, see below) are all small and
-unscheduled; #106 (raw output uploaded twice) is the one with real user
-impact — GBs of duplicate workspace bytes per Boltz/Chai job.
+**Watch the preflight host's cache** on every future deploy: staging 260821.1
+failed five times because *one* host (identity still unknown — not coconut,
+not mango) could only write 22.0 GB into
+`/disks/patric-common/container-cache`. Nothing evicts old images; the
+user-visible error is an empty "Error submitting job: \n". Worth an upstream
+issue to BV-BRC infra: cache eviction + surfacing the curl failure.
 
 ## What's done
+
+### Session 2026-08-21: reproducible container in production + #114
+
+- **`folding_260821.1.sif` deployed to alpha** — first from-scratch
+  reproducible build in production (`all-build.def`, digest-pinned bases,
+  27 G vs 32 G; the 5 G is the pruned KB runtime, 15 G → 75 M, plus 92 other
+  apps' plbin scripts that never belonged in our image). Every BV-BRC
+  tool/lib the service uses verified present; host constraints byte-identical
+  to 260815.1.
+- **Deployment war story:** five submit failures with the blank
+  `"Error submitting job: \n"` — the preflight host's cache could not write
+  more than 22.0 GB (`curl: (23)` at 82% every time). Diagnosis wandered
+  (registry table → mango → gum) before the fix landed: user cleared the
+  right cache. Rolled back to 260815.1 in between (verified in 43 s — the
+  probe-first discipline paid for itself). `p3x-run-preflight` inside the
+  image was clean the whole time.
+- **Matrix vs 260821.1** (`matrix_20260821_162056.json`): **42/44 as
+  expected**, all hosts exercised (coconut 28, mango 13, peach 3), A01
+  AlphaFold 23:54. First production runs of #106 prune, #79/#80 report
+  fixes, stabiliNNator.
+- **#114 found by that matrix** — O02/O04 failed: openfold3 0.4.5 (bumped in
+  the reproducible build; 0.4.1 before) writes `msas/` into the output dir,
+  and `normalize_openfold_output` picked its query dir as the first entry of
+  an **unordered** `iterdir()`. Fixed (ef0914b, PR #115): selection by
+  content (must contain `seed_*`), deterministic regression test (msas/
+  distractor that sorts first, verified failing on old code). 612 tests.
+- **Closed:** #90 (UI half = BV-BRC-Web#1400, merged 2026-08-18), #52
+  (BV-BRC-Docs#283, merged 2026-08-18), #110 (SOP Step 4b unconditional +
+  cross-copy gate, verified in 260821.1's 41/41), #114.
+- **BUILD-SOP rewritten** (2026-08-20 session): incremental path documented,
+  Step 4b unconditional, Step 4 matched to the def (it never installed
+  protein_compare!), Step 8 split local/promotion/verify. Acceptance harness
+  committed as `test-container-acceptance.sh` (was session-scratch only).
+  Env suite grew cross-copy checks (mutation-tested).
+- **`test-folding` skill** added (`.claude/skills/test-folding/` — note
+  `.claude/` is gitignored, machine-local only): local three-layer gate
+  (structural 41 / behavioural 26 / real prediction) then alpha
+  (container-path proof, then matrix, and how to read the results JSON —
+  submit-time rejections carry no `status` key).
+
 
 ### Session 2026-08-17: reviewer queue emptied + housekeeping
 
@@ -96,12 +136,21 @@ validation via declared kinds (abda889); #82 Chai CCD rejection; matrix
 
 ## Test results
 
-### Unit tests (2026-08-17, HEAD c350a68)
+### Unit tests (2026-08-21, HEAD ef0914b)
 
-**589 passed, 10 skipped** —
+**612 passed, 10 skipped** —
 `python -m pytest tests/ -q --timeout=60 --ignore=tests/acceptance`
 (`tests/acceptance/` shells out to real 32 GB containers; run it
 deliberately, not in the normal loop).
+
+### API test matrix (folding_260821.1.sif, 2026-08-21)
+
+`docs/test-reports/matrix_20260821_162056.json` — **42/44 as expected** with
+`--include-alphafold`. The 2 unexpected failures are #114 (O02/O04, openfold3
+0.4.5 `msas/` dir vs normalizer), fixed in ef0914b / folding_260821.2. Hosts:
+coconut 28, mango 13, peach 3. A01 AlphaFold 23:54. First production runs of
+the #106 prune, #79/#80 report fixes, ESMFold2 F01–F04 on this build, and
+stabiliNNator in the image.
 
 ### API test matrix (folding_260814.1.sif, 2026-08-14)
 
@@ -128,33 +177,26 @@ report rendering confirmed in the output (task 23425749).
 
 | # | Issue | Notes |
 |---|---|---|
-| 106 | raw_output/ + raw/ both uploaded | Real user impact: duplicate GBs per job |
-| 108 | Chain IDs wrap past 26 combined entities | Silent duplicate chains; hard-stop in `EntityList.add` |
-| 104 | boltz-report-msa.cwl byte-identical to boltz-report.cwl | Rename/implement/delete |
-| 105 | select-pae.cwl has no executable coverage | Validate-only today |
-| 107 | test_config.py deletes env var instead of restoring | Use monkeypatch |
-| 109 | Upstream dev_container PYTHONPATH trailing colon | We're sanitized; report upstream, then close |
-| 96 | ESMFold2 MSA from our ColabFold server | Needs server address; reuse `scripts/_colabfold_api_msa.py`, follow the openfold interface pattern |
-| 90 | Retire AlphaFold — UI half | Closes when BV-BRC-Web#1400 merges |
-| 52 | Docs: multi-chain applies to DNA/RNA | Repo half done (#103); closes when BV-BRC-Docs#283 merges |
-| 88 | Eye-icon REPORT action | BV-BRC-Web; candidate for next consolidated fork PR |
+| 96 | ESMFold2 MSA from our ColabFold server | Blocked on server address; reuse `scripts/_colabfold_api_msa.py`, openfold pattern |
+| 88 | Eye-icon REPORT action | BV-BRC-Web; next consolidated fork PR |
 | 85 | Decommission AlphaFold 2 | Deferred — review 2026-11-13 |
 | 77 | Per-model length limits | CLI + UI |
 | 76 | DSSP post-prediction step | Enhancement |
 | 72, 73 | Workspace upload visibility / re-highlight | BV-BRC UI |
 | 18 | Nucleic acid secondary structure (DSSR) | Enhancement |
 
-Closed since 2026-08-13: #48, #50, #51, #75, #79, #80, #82, #84, #91–#95,
-#97–#103 (fix PRs and their issues).
+No open defects. Closed since 2026-08-17: #51, #52, #90, #103–#110, #114.
+Upstream: BV-BRC/dev_container#20 open (PYTHONPATH trailing colon, reported
+with fix; we ship a sanitizer and are unaffected).
 
 ## Infrastructure
 
-### Folding tools (production SIF: folding_260815.1.sif)
+### Folding tools (production SIF: folding_260821.1.sif → 260821.2 pending)
 
 | Tool | Package | Version | PyTorch / Framework | Weights |
 |---|---|---|---|---|
 | Boltz | `boltz[cuda]` | 2.2.1 | torch 2.11.0 (cu130) | `$BOLTZ_CACHE` |
-| OpenFold | `openfold3` | 0.4.1 | torch 2.5.1+cu121 | `of3-p2-155k.pt` |
+| OpenFold | `openfold3` | 0.4.5 | torch 2.5.1+cu121 | `of3-p2-155k.pt` |
 | Chai | `chai-lab` | 0.6.1 | torch 2.5.1+cu121 | `$CHAI_DOWNLOADS_DIR` |
 | AlphaFold (retired) | `wilke/alphafold` fork | git HEAD | JAX 0.4.26 | `$AF2_DATA_DIR` (~2 TB) |
 | ESMFold | `transformers` | 5.8.0 | torch 2.6.0+cu124 | `/local_databases/esmfold/hub` |
@@ -178,7 +220,9 @@ Closed since 2026-08-13: #48, #50, #51, #75, #79, #80, #82, #84, #91–#95,
 
 | SIF | Date | Status | Notes |
 |---|---|---|---|
-| folding_260815.1.sif | 2026-08-15 | **Production** | +#48 +#50 +#98 + PYTHONPATH sanitizer; 42d6171; B01 verified after repoint |
+| folding_260821.2.sif | 2026-08-21 | **Building** | +#114 fix; pin ef0914b; deploy next |
+| folding_260821.1.sif | 2026-08-21 | **Production (alpha)** | First reproducible def build; 27 G; +#104–#108, #79/#80, stabiliNNator; known O02/O04 regression (#114) |
+| folding_260815.1.sif | 2026-08-15 | Rollback standby | +#48 +#50 +#98 + PYTHONPATH sanitizer; 42d6171; B01 verified after repoint |
 | folding_260814.1.sif | 2026-08-14 | Superseded | ESMFold2 arc (#94–#99); 56/56 matrix incl. A01 |
 | folding_260813.3.sif | 2026-08-13 | Superseded | #90 + #75 blockers |
 | folding_260813.2.sif | 2026-08-13 | Superseded | +#84 preflight validation; 48/48 matrix |

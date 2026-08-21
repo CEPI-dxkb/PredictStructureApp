@@ -4,14 +4,16 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 
 ## Next up
 
-- [ ] Next container rebuild: picks up protein_compare #79 + #80 report fixes
-      automatically (pip from wilke/protein_structure_analysis main); batch
-      with the next code change rather than rebuilding for it alone
-- [ ] #110 — make BUILD-SOP Step 4b unconditional + assert cross-copy app_spec
-      agreement in the acceptance harness (sandbox already refreshed, so the
-      next build ships the current spec)
-- [ ] Watch upstream PRs: BV-BRC-Web#1400 (→ closes #90) and
-      BV-BRC-Docs#283 (→ closes #52); nudge maintainers if idle
+- [ ] Deploy folding_260821.2 (building; pin ef0914b = #114 fix): local
+      acceptance 26/26 → promote (p3 cp + repoint) → E01 probe with
+      Container-path check → re-run O01–O06 → full matrix if desired
+- [ ] File upstream (BV-BRC infra): container-cache has no eviction and a
+      failed image pull surfaces as an empty "Error submitting job" —
+      both bit the 260821.1 deploy (5 failed submits, ~22 GB write ceiling
+      on the still-unidentified preflight host)
+- [ ] Identify the preflight host (which machine writes the scheduler log?)
+      and record it in MEMORY/STATUS — third deploy in a row where this
+      unknown cost round trips
 - [ ] #96 — ESMFold2 MSA via our ColabFold server; blocked on the server
       address; reuse `scripts/_colabfold_api_msa.py`, follow the openfold
       interface pattern (do not write a new client)
@@ -58,6 +60,9 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [x] /local_databases: 66 GB of duplicate weights reclaimed; canonical
       layout esmfold2/ + esmfold/
 - [x] Filed #104–#109
+- [x] 2026-08-21: folding_260821.1 deployed to alpha (first reproducible def
+      build); matrix 42/44; #114 found by the matrix, fixed (ef0914b), and
+      folding_260821.2 kicked off; #90/#52/#110 closed (upstream PRs merged)
 
 ## Inbox
 
