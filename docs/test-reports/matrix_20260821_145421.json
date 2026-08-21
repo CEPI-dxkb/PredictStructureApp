@@ -1,0 +1,9 @@
+[
+  {
+    "task_id": null,
+    "label": "E01_esmfold",
+    "error": "HTTP 500 from https://p3.theseed.org/services/app_service: {\"id\":1,\"jsonrpc\":\"2.0\",\"error\":{\"data\":\"Error submitting job: \\n\",\"message\":\"Error submitting job: \\n\",\"code\":-32603}}",
+    "expected": "pass",
+    "expected_error": null
+  }
+]
