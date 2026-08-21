@@ -821,16 +821,26 @@ def normalize_openfold_output(raw_dir: Path, output_dir: Path) -> Path:
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Find the first query subdirectory
-    query_dirs = [d for d in raw_dir.iterdir() if d.is_dir() and d.name != "raw"]
+    # Find the query subdirectory BY CONTENT: only a directory holding
+    # seed_* subdirectories is a query dir. Excluding known names is not
+    # enough — openfold3 0.4.5 writes a msas/ directory into the output
+    # dir whenever it generates MSAs (ColabFold server, RNA dummy MSA),
+    # and iterdir() is unordered, so "first dir that isn't raw/" grabbed
+    # msas/ non-deterministically and normalization died (#114).
+    candidates = sorted(d for d in raw_dir.iterdir() if d.is_dir() and d.name != "raw")
+    query_dirs = [
+        d for d in candidates
+        if any(c.is_dir() and c.name.startswith("seed_") for c in d.iterdir())
+    ]
     if not query_dirs:
-        raise FileNotFoundError(f"No query output directories in {raw_dir}")
+        found = ", ".join(d.name for d in candidates) or "<none>"
+        raise FileNotFoundError(
+            f"No query output directory with seed_* subdirectories in "
+            f"{raw_dir} (directories found: {found})"
+        )
     query_dir = query_dirs[0]
 
-    # Find the first seed subdirectory
     seed_dirs = sorted(d for d in query_dir.iterdir() if d.is_dir() and d.name.startswith("seed_"))
-    if not seed_dirs:
-        raise FileNotFoundError(f"No seed_* directories in {query_dir}")
     seed_dir = seed_dirs[0]
 
     # Find model CIF files and select the best sample by ranking score

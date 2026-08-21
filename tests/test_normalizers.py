@@ -546,6 +546,64 @@ class TestNormalizeESMFoldOutput:
 
 
 class TestNormalizeOpenFoldOutput:
+    @staticmethod
+    def _make_query_output(raw, query_name="prediction"):
+        """Minimal valid OF3 query output: <query>/seed_42/ with model + confidences."""
+        import json as _json
+        seed_dir = raw / query_name / "seed_42"
+        seed_dir.mkdir(parents=True)
+        pdb_content = (
+            "ATOM      1  CA  ALA A   1       1.000   2.000   3.000  1.00 85.00           C\n"
+            "ATOM      2  CA  GLY A   2       4.000   5.000   6.000  1.00 72.00           C\n"
+            "END\n"
+        )
+        pdb_tmp = seed_dir / "temp.pdb"
+        pdb_tmp.write_text(pdb_content)
+        from predict_structure.converters import pdb_to_mmcif
+        pdb_to_mmcif(pdb_tmp, seed_dir / "prediction_seed_42_sample_1_model.cif")
+        pdb_tmp.unlink()
+        (seed_dir / "prediction_seed_42_sample_1_confidences_aggregated.json").write_text(
+            _json.dumps({"avg_plddt": 78.5, "ptm": 0.88, "iptm": 0.85,
+                         "sample_ranking_score": 0.75})
+        )
+        (seed_dir / "prediction_seed_42_sample_1_confidences.json").write_text(
+            _json.dumps({"plddt": [85.0, 72.0]})
+        )
+
+    def test_msas_dir_is_not_mistaken_for_query_dir(self, tmp_path, tmp_output):
+        """openfold3 0.4.5 writes msas/ into the output dir (#114).
+
+        'msas' sorts before 'prediction', so with the old first-directory
+        selection this reproduces the O02/O04 production failure
+        deterministically rather than depending on iterdir() order.
+        """
+        import json
+        from predict_structure.normalizers import normalize_openfold_output
+
+        raw = tmp_path / "raw"
+        self._make_query_output(raw)
+        msas = raw / "msas"
+        msas.mkdir()
+        (msas / "colabfold_output.a3m").write_text(">query\nACDEF\n")
+
+        normalize_openfold_output(raw, tmp_output)
+
+        assert (tmp_output / "predictions" / "model_1.cif").exists()
+        data = json.loads((tmp_output / "predictions" / "confidence.json").read_text())
+        assert data["plddt_mean"] == 78.5
+
+    def test_no_query_dir_error_lists_what_was_found(self, tmp_path, tmp_output):
+        """A tree with only msas/ (no seed_* anywhere) must fail with a
+        message naming the directories present, not a bare path."""
+        import pytest
+        from predict_structure.normalizers import normalize_openfold_output
+
+        raw = tmp_path / "raw"
+        (raw / "msas").mkdir(parents=True)
+
+        with pytest.raises(FileNotFoundError, match="seed_.*msas"):
+            normalize_openfold_output(raw, tmp_output)
+
     def test_normalize(self, tmp_path, tmp_output):
         from predict_structure.normalizers import normalize_openfold_output
 
