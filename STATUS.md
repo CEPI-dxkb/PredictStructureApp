@@ -2,13 +2,19 @@
 
 **Last updated:** 2026-08-21
 **Current version:** v0.17.0 (HEAD: ef0914b)
-**Production (alpha) container:** `folding_260821.1.sif` (predict_structure b3f8bfc) — known regression O02/O04, fix built into `folding_260821.2.sif`
+**Production (alpha) container:** `folding_260821.2.sif` — **OpenFold 0/6 broken (openfold3 0.5.0 drift); roll back to 260821.1 until `folding_260821.3.sif` (pinned, building) is verified**
 
 ## Next action
 
-**Deploy `folding_260821.2.sif`** (building from `all-build.def`, pin ef0914b —
-carries the #114 fix). When the self-verifying build reports
-"Build complete and verified":
+**Deploy `folding_260821.3.sif`** (building from `all-build.def`, pin ef0914b +
+ALL tool installs pinned, runtime_build ad709be). 260821.2 shipped
+**openfold3 0.5.0** — the def installed it unpinned from PyPI and a release
+landed between the .1 and .2 builds; 0.5.0's diffusion-transformer
+architecture doesn't match `of3-p2-155k.pt`, so every OpenFold case fails
+(`Checkpoint state_dict keys do not match`). Only openfold3 drifted
+(boltz 2.2.1 / chai 0.6.1 / esm / transformers identical), but all five are
+now pinned to the 260821.1-verified versions. When the self-verifying build
+reports "Build complete and verified":
 
 1. Local acceptance: `EXPECT=ef0914b ./test-container-acceptance.sh <sif> <workdir>`
    (26/26, 0 skipped) + one real prediction.
@@ -220,7 +226,8 @@ with fix; we ship a sanitizer and are unaffected).
 
 | SIF | Date | Status | Notes |
 |---|---|---|---|
-| folding_260821.2.sif | 2026-08-21 | **Building** | +#114 fix; pin ef0914b; deploy next |
+| folding_260821.3.sif | 2026-08-21 | **Building** | 260821.2 + all tool installs pinned (openfold3==0.4.5) |
+| folding_260821.2.sif | 2026-08-21 | **Broken — do not use** | +#114 fix but openfold3 0.5.0 drift: OpenFold 0/6; E01 fine |
 | folding_260821.1.sif | 2026-08-21 | **Production (alpha)** | First reproducible def build; 27 G; +#104–#108, #79/#80, stabiliNNator; known O02/O04 regression (#114) |
 | folding_260815.1.sif | 2026-08-15 | Rollback standby | +#48 +#50 +#98 + PYTHONPATH sanitizer; 42d6171; B01 verified after repoint |
 | folding_260814.1.sif | 2026-08-14 | Superseded | ESMFold2 arc (#94–#99); 56/56 matrix incl. A01 |

@@ -4,7 +4,9 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 
 ## Next up
 
-- [ ] Deploy folding_260821.2 (building; pin ef0914b = #114 fix): local
+- [ ] Deploy folding_260821.3 (building; = 260821.2 + every tool install
+      pinned — 260821.2 is BROKEN for OpenFold, openfold3 0.5.0 drifted in
+      from an unpinned PyPI install; roll back to 260821.1 meanwhile): local
       acceptance 26/26 → promote (p3 cp + repoint) → E01 probe with
       Container-path check → re-run O01–O06 → full matrix if desired
 - [ ] File upstream (BV-BRC infra): container-cache has no eviction and a
