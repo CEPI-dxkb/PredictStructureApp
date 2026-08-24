@@ -41,6 +41,8 @@ APP_PARAM_KEYS = {
     "tool", "input_file", "dna_file", "rna_file", "msa_file",
     "ligand", "smiles", "output_format", "debug",
     "num_samples", "num_recycles", "seed",
+    # StabiliNNator (same container, different app -- see submit_job)
+    "app", "analysis_type", "accelerator", "theme", "hidden_dim",
 }
 
 
@@ -85,9 +87,18 @@ SUBMIT_TIMEOUT = 900
 
 
 def submit_job(token: str, app_params: dict, output_file: str) -> int:
-    """Submit a single PredictStructure job. Returns task ID."""
-    params = {**app_params, "output_path": WS_OUTPUT, "output_file": output_file}
-    data = rpc(token, "start_app2", ["PredictStructure", params, {"base_url": BASE_URL}],
+    """Submit a single job. Returns task ID.
+
+    The app defaults to PredictStructure but a case may name another app via
+    an "app" key -- StabiliNNator ships in the same container and had NO
+    matrix coverage at all, so "the matrix passed" silently meant one of the
+    two apps. Its first real submission failed at dispatch (tasks 23450684,
+    23450690) long after the container was deployed and declared green.
+    """
+    params = {k: v for k, v in app_params.items() if k != "app"}
+    app = app_params.get("app", "PredictStructure")
+    params = {**params, "output_path": WS_OUTPUT, "output_file": output_file}
+    data = rpc(token, "start_app2", [app, params, {"base_url": BASE_URL}],
                timeout=SUBMIT_TIMEOUT)
     return data["result"][0]["id"]
 
@@ -311,7 +322,8 @@ def cmd_matrix(args):
     if not args.include_negative:
         tests = [t for t in tests if t.get("expected") not in ("fail", "reject")]
     if not args.include_alphafold:
-        tests = [t for t in tests if t["tool"] != "alphafold"]
+        # .get(): non-PredictStructure cases (StabiliNNator) have no "tool"
+        tests = [t for t in tests if t.get("tool") != "alphafold"]
     jobs, expectations = build_matrix_jobs(tests)
     run_submit(token, jobs, "matrix", poll=not args.no_poll, expectations=expectations)
 
