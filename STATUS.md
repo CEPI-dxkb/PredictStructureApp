@@ -2,35 +2,51 @@
 
 **Last updated:** 2026-08-21
 **Current version:** v0.17.0 (HEAD: ef0914b)
-**Production (alpha) container:** `folding_260821.2.sif` — **OpenFold 0/6 broken (openfold3 0.5.0 drift); roll back to 260821.1 until `folding_260821.3.sif` (pinned, building) is verified**
+**Production (alpha) container:** `folding_260821.3.sif` (predict_structure ef0914b) — **59/59 matrix, all tool installs pinned**
 
 ## Next action
 
-**Deploy `folding_260821.3.sif`** (building from `all-build.def`, pin ef0914b +
-ALL tool installs pinned, runtime_build ad709be). 260821.2 shipped
-**openfold3 0.5.0** — the def installed it unpinned from PyPI and a release
-landed between the .1 and .2 builds; 0.5.0's diffusion-transformer
-architecture doesn't match `of3-p2-155k.pt`, so every OpenFold case fails
-(`Checkpoint state_dict keys do not match`). Only openfold3 drifted
-(boltz 2.2.1 / chai 0.6.1 / esm / transformers identical), but all five are
-now pinned to the 260821.1-verified versions. When the self-verifying build
-reports "Build complete and verified":
+Steady state. `folding_260821.3.sif` is deployed, registered for both
+PredictStructure and StabiliNNator, and verified **59/59** (2026-08-24,
+`matrix_20260824_111704.json`).
 
-1. Local acceptance: `EXPECT=ef0914b ./test-container-acceptance.sh <sif> <workdir>`
-   (26/26, 0 skipped) + one real prediction.
-2. Promote (p3): `cp` to `/vol/patric3/production/containers/`, repoint via
-   `p3x-show-container-config` on gum.
-3. Probe E01, confirm the stderr `Container path:` line, then re-run at least
-   O01–O06 (`matrix --tests O01,O02,O03,O04,O05,O06`).
+Open work is all enhancement or externally blocked (see Open issues). Two
+infrastructure items worth raising with BV-BRC:
 
-**Watch the preflight host's cache** on every future deploy: staging 260821.1
-failed five times because *one* host (identity still unknown — not coconut,
-not mango) could only write 22.0 GB into
-`/disks/patric-common/container-cache`. Nothing evicts old images; the
-user-visible error is an empty "Error submitting job: \n". Worth an upstream
-issue to BV-BRC infra: cache eviction + surfacing the curl failure.
+1. **Which host runs preflight is still unknown.** Its container-cache had a
+   ~22 GB write ceiling and cost five failed submits on the 260821.1 deploy;
+   the user-visible error is an empty `"Error submitting job: \n"`. Nothing
+   evicts old images from these caches. Worth an upstream issue: eviction
+   policy + surface the curl failure instead of swallowing it.
+2. **openfold3's `--use-msa-server` path depends on RCSB** for template
+   chain-ID remapping and treats a fetch failure as fatal (O02 failed once
+   on 2026-08-24, passed on retry). `--no-templates` is the escape hatch if
+   RCSB has a bad day.
 
 ## What's done
+
+### Session 2026-08-24: 260821.3 clean, all tool installs pinned
+
+- **`folding_260821.3.sif` → 59/59** (`matrix_20260824_111704.json`): 44
+  completed, 13 refused at submit by design, 2 expected worker-side failures
+  (N03/N07). Hosts coconut 29, mango 12, peach 5. Registered for
+  PredictStructure **and** StabiliNNator.
+- **#114 confirmed fixed in production** — O04 (RNA) failing → passing;
+  O01–O06 now 6/6.
+- **260821.2 was broken and rolled past, not deployed long:** the def
+  installed `openfold3` **unpinned**, 0.5.0 released between the .1 and .2
+  builds, its diffusion-transformer architecture no longer matches
+  `of3-p2-155k.pt`, and every OpenFold case died with
+  `Checkpoint state_dict keys do not match`. Only openfold3 had drifted.
+- **All five floating installs now pinned** to the versions 260821.1 verified
+  (runtime_build `ad709be`): `openfold3==0.4.5`, `boltz[cuda]==2.2.1`,
+  `chai-lab==0.6.1`, `esm@1b52073`, `ESMFoldApp@7cae913`. Rule added to the
+  build skill: a reproducible build with a floating install is not
+  reproducible; bumping a tool is a deliberate pin change plus that tool's
+  matrix.
+- **O02 transient:** openfold3's ColabFold path fetches template chain-ID
+  mappings from RCSB and treats failure as fatal. Failed once for 31
+  entries, passed on retry; RCSB answers fine from coconut.
 
 ### Session 2026-08-21: reproducible container in production + #114
 
@@ -149,6 +165,14 @@ validation via declared kinds (abda889); #82 Chai CCD rejection; matrix
 (`tests/acceptance/` shells out to real 32 GB containers; run it
 deliberately, not in the normal loop).
 
+### API test matrix (folding_260821.3.sif, 2026-08-24)
+
+`docs/test-reports/matrix_20260824_111704.json` — **59/59 as expected** with
+`--include-alphafold --include-negative`: 44 completed, 13 refused at submit
+(no task created — the pass condition for those), 2 expected worker-side
+failures (N03 bad format, N07 bad SMILES). Hosts: coconut 29, mango 12,
+peach 5.
+
 ### API test matrix (folding_260821.1.sif, 2026-08-21)
 
 `docs/test-reports/matrix_20260821_162056.json` — **42/44 as expected** with
@@ -197,12 +221,12 @@ with fix; we ship a sanitizer and are unaffected).
 
 ## Infrastructure
 
-### Folding tools (production SIF: folding_260821.1.sif → 260821.2 pending)
+### Folding tools (production SIF: folding_260821.3.sif — all installs pinned)
 
 | Tool | Package | Version | PyTorch / Framework | Weights |
 |---|---|---|---|---|
 | Boltz | `boltz[cuda]` | 2.2.1 | torch 2.11.0 (cu130) | `$BOLTZ_CACHE` |
-| OpenFold | `openfold3` | 0.4.5 | torch 2.5.1+cu121 | `of3-p2-155k.pt` |
+| OpenFold | `openfold3` | 0.4.5 (pinned) | torch 2.5.1+cu121 | `of3-p2-155k.pt` |
 | Chai | `chai-lab` | 0.6.1 | torch 2.5.1+cu121 | `$CHAI_DOWNLOADS_DIR` |
 | AlphaFold (retired) | `wilke/alphafold` fork | git HEAD | JAX 0.4.26 | `$AF2_DATA_DIR` (~2 TB) |
 | ESMFold | `transformers` | 5.8.0 | torch 2.6.0+cu124 | `/local_databases/esmfold/hub` |
@@ -226,8 +250,8 @@ with fix; we ship a sanitizer and are unaffected).
 
 | SIF | Date | Status | Notes |
 |---|---|---|---|
-| folding_260821.3.sif | 2026-08-21 | **Building** | 260821.2 + all tool installs pinned (openfold3==0.4.5) |
-| folding_260821.2.sif | 2026-08-21 | **Broken — do not use** | +#114 fix but openfold3 0.5.0 drift: OpenFold 0/6; E01 fine |
+| folding_260821.3.sif | 2026-08-21 | **Production (alpha)** | 260821.2 + every tool install pinned; **59/59**; PredictStructure + StabiliNNator |
+| folding_260821.2.sif | 2026-08-21 | **Broken — do not use** | +#114 fix but openfold3 0.5.0 drift: OpenFold 0/6 |
 | folding_260821.1.sif | 2026-08-21 | **Production (alpha)** | First reproducible def build; 27 G; +#104–#108, #79/#80, stabiliNNator; known O02/O04 regression (#114) |
 | folding_260815.1.sif | 2026-08-15 | Rollback standby | +#48 +#50 +#98 + PYTHONPATH sanitizer; 42d6171; B01 verified after repoint |
 | folding_260814.1.sif | 2026-08-14 | Superseded | ESMFold2 arc (#94–#99); 56/56 matrix incl. A01 |

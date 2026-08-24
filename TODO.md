@@ -4,11 +4,6 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 
 ## Next up
 
-- [ ] Deploy folding_260821.3 (building; = 260821.2 + every tool install
-      pinned — 260821.2 is BROKEN for OpenFold, openfold3 0.5.0 drifted in
-      from an unpinned PyPI install; roll back to 260821.1 meanwhile): local
-      acceptance 26/26 → promote (p3 cp + repoint) → E01 probe with
-      Container-path check → re-run O01–O06 → full matrix if desired
 - [ ] File upstream (BV-BRC infra): container-cache has no eviction and a
       failed image pull surfaces as an empty "Error submitting job" —
       both bit the 260821.1 deploy (5 failed submits, ~22 GB write ceiling
@@ -62,6 +57,10 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [x] /local_databases: 66 GB of duplicate weights reclaimed; canonical
       layout esmfold2/ + esmfold/
 - [x] Filed #104–#109
+- [x] 2026-08-24: folding_260821.3 deployed + registered (PredictStructure and
+      StabiliNNator), **59/59 matrix**; #114 confirmed fixed in production
+      (O04 failing → passing, O01–O06 6/6); all five floating tool installs
+      pinned after openfold3 0.5.0 broke 260821.2
 - [x] 2026-08-21: folding_260821.1 deployed to alpha (first reproducible def
       build); matrix 42/44; #114 found by the matrix, fixed (ef0914b), and
       folding_260821.2 kicked off; #90/#52/#110 closed (upstream PRs merged)

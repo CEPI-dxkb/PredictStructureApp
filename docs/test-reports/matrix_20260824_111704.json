@@ -1,0 +1,833 @@
+[
+  {
+    "task_id": 23450618,
+    "label": "E01_esmfold",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "esmfold"
+    },
+    "output_file": "matrix_E01_esmfold_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:00:37",
+    "host": "coconut"
+  },
+  {
+    "task_id": null,
+    "label": "E02_esmfold_dna_reject",
+    "error": "HTTP 500 from https://p3.theseed.org/services/app_service: {\"error\":{\"data\":\"Error submitting job: Error running preflight checks: ESMFold does not support dna input (it supports protein only). Use Boltz-2, Chai-1, ESMFold2, and OpenFold 3, which support dna. Otherwise remove the dna input to run ESMFold.\\n\\n\\n\",\"message\":\"Error submitting job: Error running preflight checks: ESMFold does not support dna input (it supports protein only). Use Boltz-2, Chai-1, ESMFold2, and OpenFold 3, which support dna. Otherwise remove the dna input to run ESMFold.\\n\\n\\n\",\"code\":-32603},\"id\":1,\"jsonrpc\":\"2.0\"}",
+    "expected": "reject",
+    "expected_error": "does not support"
+  },
+  {
+    "task_id": 23450619,
+    "label": "F01_esmfold2_protein",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "esmfold2"
+    },
+    "output_file": "matrix_F01_esmfold2_protein_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:02",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450620,
+    "label": "F04_esmfold2_msa_upload",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "esmfold2",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_F04_esmfold2_msa_upload_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:03",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450621,
+    "label": "F02_esmfold2_smiles",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "esmfold2",
+      "smiles": [
+        "CCO"
+      ]
+    },
+    "output_file": "matrix_F02_esmfold2_smiles_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:00:59",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450622,
+    "label": "F03_esmfold2_dna",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "esmfold2",
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta"
+    },
+    "output_file": "matrix_F03_esmfold2_dna_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:05",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450623,
+    "label": "B01_boltz_msa_upload",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_B01_boltz_msa_upload_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:29",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450624,
+    "label": "B02_boltz_msa_server",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz"
+    },
+    "output_file": "matrix_B02_boltz_msa_server_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:23",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450625,
+    "label": "B03_boltz_dna",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta"
+    },
+    "output_file": "matrix_B03_boltz_dna_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:20",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450626,
+    "label": "B04_boltz_rna",
+    "params": {
+      "rna_file": "/awilke@bvbrc/home/AppTests/inputs/rna.fasta",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_B04_boltz_rna_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:32",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450627,
+    "label": "B05_boltz_ligand",
+    "params": {
+      "ligand": [
+        "ATP"
+      ],
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_B05_boltz_ligand_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:27",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450628,
+    "label": "B06_boltz_smiles",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "smiles": [
+        "CCO"
+      ]
+    },
+    "output_file": "matrix_B06_boltz_smiles_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:22",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450629,
+    "label": "B07_boltz_dna_ligand",
+    "params": {
+      "ligand": [
+        "ATP"
+      ],
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta"
+    },
+    "output_file": "matrix_B07_boltz_dna_ligand_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:32",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450630,
+    "label": "B08_boltz_multi_ligand",
+    "params": {
+      "ligand": [
+        "ATP",
+        "NAD"
+      ],
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_B08_boltz_multi_ligand_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:40",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450631,
+    "label": "B09_boltz_multi_smiles",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "smiles": [
+        "CCO",
+        "c1ccccc1"
+      ]
+    },
+    "output_file": "matrix_B09_boltz_multi_smiles_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:29",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450632,
+    "label": "B10_boltz_ligand_5char",
+    "params": {
+      "ligand": [
+        "A1H1F"
+      ],
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_B10_boltz_ligand_5char_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:22",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450633,
+    "label": "O01_openfold_msa_upload",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "openfold",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_O01_openfold_msa_upload_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:24",
+    "host": "mango"
+  },
+  {
+    "task_id": 23450634,
+    "label": "O02_openfold_msa_server",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "openfold"
+    },
+    "output_file": "matrix_O02_openfold_msa_server_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:30",
+    "host": "mango"
+  },
+  {
+    "task_id": 23450635,
+    "label": "O03_openfold_dna",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "openfold",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta"
+    },
+    "output_file": "matrix_O03_openfold_dna_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:31",
+    "host": "mango"
+  },
+  {
+    "task_id": 23450637,
+    "label": "O04_openfold_rna",
+    "params": {
+      "rna_file": "/awilke@bvbrc/home/AppTests/inputs/rna.fasta",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "openfold",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_O04_openfold_rna_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:27",
+    "host": "mango"
+  },
+  {
+    "task_id": 23450638,
+    "label": "O05_openfold_ligand",
+    "params": {
+      "ligand": [
+        "ATP"
+      ],
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "openfold",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_O05_openfold_ligand_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:24",
+    "host": "mango"
+  },
+  {
+    "task_id": 23450639,
+    "label": "O06_openfold_smiles",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "openfold",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "smiles": [
+        "CCO"
+      ]
+    },
+    "output_file": "matrix_O06_openfold_smiles_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:27",
+    "host": "mango"
+  },
+  {
+    "task_id": 23450640,
+    "label": "C01_chai_msa_upload",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "chai",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_C01_chai_msa_upload_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:02:04",
+    "host": "peach"
+  },
+  {
+    "task_id": 23450641,
+    "label": "C02_chai_msa_server",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "chai"
+    },
+    "output_file": "matrix_C02_chai_msa_server_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:02:10",
+    "host": "peach"
+  },
+  {
+    "task_id": 23450642,
+    "label": "C03_chai_dna",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "chai",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta"
+    },
+    "output_file": "matrix_C03_chai_dna_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:38",
+    "host": "mango"
+  },
+  {
+    "task_id": 23450643,
+    "label": "C04_chai_rna",
+    "params": {
+      "rna_file": "/awilke@bvbrc/home/AppTests/inputs/rna.fasta",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "chai",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_C04_chai_rna_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:34",
+    "host": "mango"
+  },
+  {
+    "task_id": null,
+    "label": "C05_chai_ccd_ligand_reject",
+    "error": "HTTP 500 from https://p3.theseed.org/services/app_service: {\"id\":1,\"error\":{\"data\":\"Error submitting job: Error running preflight checks: Chai-1 cannot accept CCD-coded ligands; its FASTA format requires SMILES strings. Supply the ligand as SMILES via --smiles, or use Boltz-2 or OpenFold 3, which accept CCD codes (--ligand) natively.\\n\\n\\n\",\"code\":-32603,\"message\":\"Error submitting job: Error running preflight checks: Chai-1 cannot accept CCD-coded ligands; its FASTA format requires SMILES strings. Supply the ligand as SMILES via --smiles, or use Boltz-2 or OpenFold 3, which accept CCD codes (--ligand) natively.\\n\\n\\n\"},\"jsonrpc\":\"2.0\"}",
+    "expected": "reject",
+    "expected_error": "CCD"
+  },
+  {
+    "task_id": 23450644,
+    "label": "C06_chai_smiles",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "chai",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "smiles": [
+        "CCO"
+      ]
+    },
+    "output_file": "matrix_C06_chai_smiles_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:02:12",
+    "host": "peach"
+  },
+  {
+    "task_id": 23450645,
+    "label": "A01_alphafold",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "alphafold"
+    },
+    "output_file": "matrix_A01_alphafold_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:21:10",
+    "host": "mango"
+  },
+  {
+    "task_id": null,
+    "label": "A02_alphafold_dna_reject",
+    "error": "HTTP 500 from https://p3.theseed.org/services/app_service: {\"jsonrpc\":\"2.0\",\"error\":{\"data\":\"Error submitting job: Error running preflight checks: AlphaFold 2 does not support dna input (it supports protein only). Use Boltz-2, Chai-1, ESMFold2, and OpenFold 3, which support dna. Otherwise remove the dna input to run AlphaFold 2.\\n\\n\\n\",\"code\":-32603,\"message\":\"Error submitting job: Error running preflight checks: AlphaFold 2 does not support dna input (it supports protein only). Use Boltz-2, Chai-1, ESMFold2, and OpenFold 3, which support dna. Otherwise remove the dna input to run AlphaFold 2.\\n\\n\\n\"},\"id\":1}",
+    "expected": "reject",
+    "expected_error": "does not support"
+  },
+  {
+    "task_id": 23450647,
+    "label": "X01_auto_server",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "auto"
+    },
+    "output_file": "matrix_X01_auto_server_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:20",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450648,
+    "label": "X02_auto_msa_upload",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "auto",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_X02_auto_msa_upload_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:22",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450649,
+    "label": "X03_auto_dna",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "auto",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta"
+    },
+    "output_file": "matrix_X03_auto_dna_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:35",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450650,
+    "label": "X04_auto_ligand",
+    "params": {
+      "ligand": [
+        "ATP"
+      ],
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "auto",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_X04_auto_ligand_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:36",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450652,
+    "label": "P01_boltz_2samples",
+    "params": {
+      "num_samples": 2,
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P01_boltz_2samples_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:25",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450653,
+    "label": "P02_boltz_recycles",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "num_recycles": 5,
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P02_boltz_recycles_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:29",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450655,
+    "label": "P03_boltz_mmcif",
+    "params": {
+      "output_format": "mmcif",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P03_boltz_mmcif_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:24",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450656,
+    "label": "P04_boltz_debug",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "debug": true
+    },
+    "output_file": "matrix_P04_boltz_debug_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:31",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450657,
+    "label": "P05_openfold_2samples",
+    "params": {
+      "num_samples": 2,
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "openfold",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P05_openfold_2samples_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:27",
+    "host": "mango"
+  },
+  {
+    "task_id": 23450658,
+    "label": "P06_openfold_recycles",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "openfold",
+      "num_recycles": 3,
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P06_openfold_recycles_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:25",
+    "host": "mango"
+  },
+  {
+    "task_id": 23450660,
+    "label": "P07_chai_2samples",
+    "params": {
+      "num_samples": 2,
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "chai",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P07_chai_2samples_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:02:10",
+    "host": "peach"
+  },
+  {
+    "task_id": 23450661,
+    "label": "P08_chai_recycles",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "chai",
+      "num_recycles": 5,
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_P08_chai_recycles_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:33",
+    "host": "mango"
+  },
+  {
+    "task_id": 23450662,
+    "label": "P09_esmfold_debug",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "esmfold",
+      "debug": true
+    },
+    "output_file": "matrix_P09_esmfold_debug_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:00:37",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450664,
+    "label": "P10_esmfold_recycles",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "esmfold",
+      "num_recycles": 2
+    },
+    "output_file": "matrix_P10_esmfold_recycles_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:00:36",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450665,
+    "label": "P11_boltz_seed",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "seed": 42
+    },
+    "output_file": "matrix_P11_boltz_seed_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:26",
+    "host": "coconut"
+  },
+  {
+    "task_id": 23450666,
+    "label": "P12_chai_seed",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "chai",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "seed": 42
+    },
+    "output_file": "matrix_P12_chai_seed_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:02:13",
+    "host": "peach"
+  },
+  {
+    "task_id": null,
+    "label": "R01_alphafold_dna_smiles_reject",
+    "error": "HTTP 500 from https://p3.theseed.org/services/app_service: {\"id\":1,\"error\":{\"data\":\"Error submitting job: Error running preflight checks: AlphaFold 2 does not support dna and smiles input (it supports protein only). Use Boltz-2, Chai-1, ESMFold2, and OpenFold 3, which support dna and smiles. Otherwise remove the dna and smiles input to run AlphaFold 2.\\n\\n\\n\",\"code\":-32603,\"message\":\"Error submitting job: Error running preflight checks: AlphaFold 2 does not support dna and smiles input (it supports protein only). Use Boltz-2, Chai-1, ESMFold2, and OpenFold 3, which support dna and smiles. Otherwise remove the dna and smiles input to run AlphaFold 2.\\n\\n\\n\"},\"jsonrpc\":\"2.0\"}",
+    "expected": "reject",
+    "expected_error": "does not support"
+  },
+  {
+    "task_id": null,
+    "label": "R02_esmfold_dna_smiles_reject",
+    "error": "HTTP 500 from https://p3.theseed.org/services/app_service: {\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"message\":\"Error submitting job: Error running preflight checks: ESMFold does not support dna and smiles input (it supports protein only). Use Boltz-2, Chai-1, ESMFold2, and OpenFold 3, which support dna and smiles. Otherwise remove the dna and smiles input to run ESMFold.\\n\\n\\n\",\"code\":-32603,\"data\":\"Error submitting job: Error running preflight checks: ESMFold does not support dna and smiles input (it supports protein only). Use Boltz-2, Chai-1, ESMFold2, and OpenFold 3, which support dna and smiles. Otherwise remove the dna and smiles input to run ESMFold.\\n\\n\\n\"}}",
+    "expected": "reject",
+    "expected_error": "does not support"
+  },
+  {
+    "task_id": 23450667,
+    "label": "R03_auto_dna_ligand_resolves",
+    "params": {
+      "ligand": [
+        "ATP"
+      ],
+      "tool": "auto",
+      "dna_file": "/awilke@bvbrc/home/AppTests/inputs/dna.fasta"
+    },
+    "output_file": "matrix_R03_auto_dna_ligand_resolves_20260824_111704",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "completed",
+    "elapsed": "00:01:38",
+    "host": "coconut"
+  },
+  {
+    "task_id": null,
+    "label": "N01_neg_no_input",
+    "error": "HTTP 500 from https://p3.theseed.org/services/app_service: {\"jsonrpc\":\"2.0\",\"error\":{\"data\":\"Error submitting job: Error running preflight checks: No inputs supplied. Provide at least one of: input_file, dna_file, rna_file, text_input, ligand, smiles.\\n\\n\\n\",\"code\":-32603,\"message\":\"Error submitting job: Error running preflight checks: No inputs supplied. Provide at least one of: input_file, dna_file, rna_file, text_input, ligand, smiles.\\n\\n\\n\"},\"id\":1}",
+    "expected": "reject",
+    "expected_error": "No inputs supplied"
+  },
+  {
+    "task_id": null,
+    "label": "N02_neg_bad_ccd",
+    "error": "HTTP 500 from https://p3.theseed.org/services/app_service: {\"jsonrpc\":\"2.0\",\"error\":{\"message\":\"Error submitting job: Error running preflight checks: Invalid ligand CCD code 'TOOLONG'. A PDB Chemical Component Dictionary code is 1-3 or 5 alphanumeric characters (e.g. ATP, NAG, A1H1F). Supply a SMILES string for a molecule with no CCD code.\\n\\n\\n\",\"code\":-32603,\"data\":\"Error submitting job: Error running preflight checks: Invalid ligand CCD code 'TOOLONG'. A PDB Chemical Component Dictionary code is 1-3 or 5 alphanumeric characters (e.g. ATP, NAG, A1H1F). Supply a SMILES string for a molecule with no CCD code.\\n\\n\\n\"},\"id\":1}",
+    "expected": "reject",
+    "expected_error": "Invalid ligand CCD code"
+  },
+  {
+    "task_id": 23450668,
+    "label": "N03_neg_bad_format",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/not_fasta.txt",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m"
+    },
+    "output_file": "matrix_N03_neg_bad_format_20260824_111704",
+    "expected": "fail",
+    "expected_error": "expected FASTA format",
+    "status": "failed",
+    "elapsed": "00:00:07",
+    "host": "coconut"
+  },
+  {
+    "task_id": null,
+    "label": "N04_neg_esm_dna",
+    "error": "HTTP 500 from https://p3.theseed.org/services/app_service: {\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32603,\"message\":\"Error submitting job: Error running preflight checks: ESMFold does not support dna input (it supports protein only). Use Boltz-2, Chai-1, ESMFold2, and OpenFold 3, which support dna. Otherwise remove the dna input to run ESMFold.\\n\\n\\n\",\"data\":\"Error submitting job: Error running preflight checks: ESMFold does not support dna input (it supports protein only). Use Boltz-2, Chai-1, ESMFold2, and OpenFold 3, which support dna. Otherwise remove the dna input to run ESMFold.\\n\\n\\n\"},\"id\":1}",
+    "expected": "reject",
+    "expected_error": "does not support"
+  },
+  {
+    "task_id": null,
+    "label": "N05_neg_af_dna",
+    "error": "HTTP 500 from https://p3.theseed.org/services/app_service: {\"id\":1,\"error\":{\"data\":\"Error submitting job: Error running preflight checks: AlphaFold 2 does not support dna input (it supports protein only). Use Boltz-2, Chai-1, ESMFold2, and OpenFold 3, which support dna. Otherwise remove the dna input to run AlphaFold 2.\\n\\n\\n\",\"code\":-32603,\"message\":\"Error submitting job: Error running preflight checks: AlphaFold 2 does not support dna input (it supports protein only). Use Boltz-2, Chai-1, ESMFold2, and OpenFold 3, which support dna. Otherwise remove the dna input to run AlphaFold 2.\\n\\n\\n\"},\"jsonrpc\":\"2.0\"}",
+    "expected": "reject",
+    "expected_error": "does not support"
+  },
+  {
+    "task_id": null,
+    "label": "N06_neg_esm_ligand",
+    "error": "HTTP 500 from https://p3.theseed.org/services/app_service: {\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32603,\"message\":\"Error submitting job: Error running preflight checks: ESMFold does not support ligand input (it supports protein only). Use Boltz-2, ESMFold2, and OpenFold 3, which support ligand. Otherwise remove the ligand input to run ESMFold.\\n\\n\\n\",\"data\":\"Error submitting job: Error running preflight checks: ESMFold does not support ligand input (it supports protein only). Use Boltz-2, ESMFold2, and OpenFold 3, which support ligand. Otherwise remove the ligand input to run ESMFold.\\n\\n\\n\"},\"id\":1}",
+    "expected": "reject",
+    "expected_error": "does not support"
+  },
+  {
+    "task_id": 23450669,
+    "label": "N07_neg_bad_smiles",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta",
+      "tool": "boltz",
+      "msa_file": "/awilke@bvbrc/home/AppTests/inputs/crambin.a3m",
+      "smiles": [
+        "not_valid_smiles_xyz"
+      ]
+    },
+    "output_file": "matrix_N07_neg_bad_smiles_20260824_111704",
+    "expected": "fail",
+    "expected_error": "Invalid SMILES",
+    "status": "failed",
+    "elapsed": "00:00:26",
+    "host": "coconut"
+  },
+  {
+    "task_id": null,
+    "label": "N08_neg_auto_no_input",
+    "error": "HTTP 500 from https://p3.theseed.org/services/app_service: {\"error\":{\"message\":\"Error submitting job: Error running preflight checks: No inputs supplied. Provide at least one of: input_file, dna_file, rna_file, text_input, ligand, smiles.\\n\\n\\n\",\"code\":-32603,\"data\":\"Error submitting job: Error running preflight checks: No inputs supplied. Provide at least one of: input_file, dna_file, rna_file, text_input, ligand, smiles.\\n\\n\\n\"},\"id\":1,\"jsonrpc\":\"2.0\"}",
+    "expected": "reject",
+    "expected_error": "No inputs supplied"
+  },
+  {
+    "task_id": null,
+    "label": "N09_neg_glycan_chain",
+    "error": "HTTP 500 from https://p3.theseed.org/services/app_service: {\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32603,\"message\":\"Error submitting job: Error running preflight checks: Invalid ligand CCD code 'NAG(4-1 NAG(4-1 NAG))': linked glycan strings are not supported. List each monosaccharide as its own ligand code (NAG, NAG), which places them as separate unlinked residues, or supply the whole molecule as a SMILES string.\\n\\n\\n\",\"data\":\"Error submitting job: Error running preflight checks: Invalid ligand CCD code 'NAG(4-1 NAG(4-1 NAG))': linked glycan strings are not supported. List each monosaccharide as its own ligand code (NAG, NAG), which places them as separate unlinked residues, or supply the whole molecule as a SMILES string.\\n\\n\\n\"}}",
+    "expected": "reject",
+    "expected_error": "Invalid ligand CCD code"
+  },
+  {
+    "task_id": null,
+    "label": "N10_neg_4char_ccd",
+    "error": "HTTP 500 from https://p3.theseed.org/services/app_service: {\"error\":{\"data\":\"Error submitting job: Error running preflight checks: Invalid ligand CCD code 'ATPX'. A PDB Chemical Component Dictionary code is 1-3 or 5 alphanumeric characters (e.g. ATP, NAG, A1H1F). Supply a SMILES string for a molecule with no CCD code.\\n\\n\\n\",\"message\":\"Error submitting job: Error running preflight checks: Invalid ligand CCD code 'ATPX'. A PDB Chemical Component Dictionary code is 1-3 or 5 alphanumeric characters (e.g. ATP, NAG, A1H1F). Supply a SMILES string for a molecule with no CCD code.\\n\\n\\n\",\"code\":-32603},\"id\":1,\"jsonrpc\":\"2.0\"}",
+    "expected": "reject",
+    "expected_error": "Invalid ligand CCD code"
+  }
+]
