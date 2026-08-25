@@ -579,7 +579,8 @@
       "app": "StabiliNNator",
       "input_file": "1crn_small.pdb",
       "analysis_type": "both",
-      "expected": "pass"
+      "expected": "pass",
+      "expect_output": "_report.html"
     },
     {
       "id": "S02",
@@ -587,7 +588,8 @@
       "app": "StabiliNNator",
       "input_file": "1crn_small.pdb",
       "analysis_type": "proline",
-      "expected": "pass"
+      "expected": "pass",
+      "expect_output": "_report.html"
     },
     {
       "id": "S03",
@@ -595,7 +597,8 @@
       "app": "StabiliNNator",
       "input_file": "1crn_small.pdb",
       "analysis_type": "disulfide",
-      "expected": "pass"
+      "expected": "pass",
+      "expect_output": "_report.html"
     }
   ]
 }
