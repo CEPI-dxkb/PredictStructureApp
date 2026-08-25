@@ -1,0 +1,19 @@
+[
+  {
+    "task_id": 23452926,
+    "label": "S01_stabilinnator_both",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/1crn_small.pdb",
+      "analysis_type": "both",
+      "app": "StabiliNNator"
+    },
+    "output_file": "matrix_S01_stabilinnator_both_20260825_093129",
+    "expected": "pass",
+    "expected_error": null,
+    "expect_output": "_report.html",
+    "status": "completed",
+    "elapsed": "00:00:15",
+    "host": "coconut",
+    "output_files": null
+  }
+]

@@ -1,0 +1,47 @@
+[
+  {
+    "task_id": 23450798,
+    "label": "S01_stabilinnator_both",
+    "params": {
+      "app": "StabiliNNator",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/1crn_small.pdb",
+      "analysis_type": "both"
+    },
+    "output_file": "matrix_S01_stabilinnator_both_20260824_161939",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "failed",
+    "elapsed": "00:02:12",
+    "host": "--"
+  },
+  {
+    "task_id": 23450799,
+    "label": "S02_stabilinnator_proline",
+    "params": {
+      "app": "StabiliNNator",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/1crn_small.pdb",
+      "analysis_type": "proline"
+    },
+    "output_file": "matrix_S02_stabilinnator_proline_20260824_161939",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "failed",
+    "elapsed": "00:01:09",
+    "host": "--"
+  },
+  {
+    "task_id": 23450800,
+    "label": "S03_stabilinnator_disulfide",
+    "params": {
+      "app": "StabiliNNator",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/1crn_small.pdb",
+      "analysis_type": "disulfide"
+    },
+    "output_file": "matrix_S03_stabilinnator_disulfide_20260824_161939",
+    "expected": "pass",
+    "expected_error": null,
+    "status": "failed",
+    "elapsed": "00:01:05",
+    "host": "--"
+  }
+]

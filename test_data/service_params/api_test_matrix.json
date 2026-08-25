@@ -5,74 +5,600 @@
   "ws_inputs": "/awilke@bvbrc/home/AppTests/inputs",
   "ws_output": "/awilke@bvbrc/home/AppTests",
   "tests": [
-
-    {"id": "E01", "name": "esmfold", "tool": "esmfold", "input_file": "simple_protein.fasta", "expected": "pass"},
-    {"id": "E02", "name": "esmfold_dna_reject", "tool": "esmfold", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "expected": "reject", "expected_error": "does not support"},
-
-    {"id": "F01", "name": "esmfold2_protein", "tool": "esmfold2", "input_file": "simple_protein.fasta", "expected": "pass", "note": "ESMFold2 had zero matrix coverage until 2026-08-13 (#75); H200-only via torch+cu130"},
-    {"id": "F04", "name": "esmfold2_msa_upload", "tool": "esmfold2", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "expected": "pass", "note": "ESMFold2 accepts a per-chain MSA (#95); crambin.a3m query matches simple_protein.fasta"},
-    {"id": "F02", "name": "esmfold2_smiles", "tool": "esmfold2", "input_file": "simple_protein.fasta", "smiles": ["CCO"], "expected": "pass"},
-    {"id": "F03", "name": "esmfold2_dna", "tool": "esmfold2", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "expected": "pass"},
-
-    {"id": "B01", "name": "boltz_msa_upload", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "expected": "pass"},
-    {"id": "B02", "name": "boltz_msa_server", "tool": "boltz", "input_file": "simple_protein.fasta", "expected": "pass", "note": "MSA via ColabFold server"},
-    {"id": "B03", "name": "boltz_dna", "tool": "boltz", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "msa_file": "crambin.a3m", "expected": "pass"},
-    {"id": "B04", "name": "boltz_rna", "tool": "boltz", "input_file": "simple_protein.fasta", "rna_file": "rna.fasta", "msa_file": "crambin.a3m", "expected": "pass"},
-    {"id": "B05", "name": "boltz_ligand", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["ATP"], "expected": "pass"},
-    {"id": "B06", "name": "boltz_smiles", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "smiles": ["CCO"], "expected": "pass"},
-    {"id": "B07", "name": "boltz_dna_ligand", "tool": "boltz", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "msa_file": "crambin.a3m", "ligand": ["ATP"], "expected": "pass"},
-    {"id": "B08", "name": "boltz_multi_ligand", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["ATP", "NAD"], "expected": "pass"},
-    {"id": "B09", "name": "boltz_multi_smiles", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "smiles": ["CCO", "c1ccccc1"], "expected": "pass"},
-    {"id": "B10", "name": "boltz_ligand_5char", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["A1H1F"], "expected": "pass", "note": "#48 extended 5-character CCD id; present in Boltz's bundled CCD snapshot"},
-
-    {"id": "O01", "name": "openfold_msa_upload", "tool": "openfold", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "expected": "pass"},
-    {"id": "O02", "name": "openfold_msa_server", "tool": "openfold", "input_file": "simple_protein.fasta", "expected": "pass", "note": "MSA via ColabFold server"},
-    {"id": "O03", "name": "openfold_dna", "tool": "openfold", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "msa_file": "crambin.a3m", "expected": "pass"},
-    {"id": "O04", "name": "openfold_rna", "tool": "openfold", "input_file": "simple_protein.fasta", "rna_file": "rna.fasta", "msa_file": "crambin.a3m", "expected": "pass"},
-    {"id": "O05", "name": "openfold_ligand", "tool": "openfold", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["ATP"], "expected": "pass"},
-    {"id": "O06", "name": "openfold_smiles", "tool": "openfold", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "smiles": ["CCO"], "expected": "pass"},
-
-    {"id": "C01", "name": "chai_msa_upload", "tool": "chai", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "expected": "pass"},
-    {"id": "C02", "name": "chai_msa_server", "tool": "chai", "input_file": "simple_protein.fasta", "expected": "pass", "note": "MSA via ColabFold server"},
-    {"id": "C03", "name": "chai_dna", "tool": "chai", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "msa_file": "crambin.a3m", "expected": "pass"},
-    {"id": "C04", "name": "chai_rna", "tool": "chai", "input_file": "simple_protein.fasta", "rna_file": "rna.fasta", "msa_file": "crambin.a3m", "expected": "pass"},
-    {"id": "C05", "name": "chai_ccd_ligand_reject", "tool": "chai", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["ATP"], "expected": "reject", "expected_error": "CCD", "note": "Chai needs SMILES for ligands, not CCD codes (#82); chai+SMILES is covered by C06"},
-    {"id": "C06", "name": "chai_smiles", "tool": "chai", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "smiles": ["CCO"], "expected": "pass"},
-
-    {"id": "A01", "name": "alphafold", "tool": "alphafold", "input_file": "simple_protein.fasta", "expected": "pass", "slow": true, "note": "Uses local DBs; 20+ min runtime"},
-    {"id": "A02", "name": "alphafold_dna_reject", "tool": "alphafold", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "expected": "reject", "expected_error": "does not support"},
-
-    {"id": "X01", "name": "auto_server", "tool": "auto", "input_file": "simple_protein.fasta", "expected": "pass", "note": "Auto -> Boltz via ColabFold server"},
-    {"id": "X02", "name": "auto_msa_upload", "tool": "auto", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "expected": "pass", "note": "Auto -> Boltz via uploaded MSA"},
-    {"id": "X03", "name": "auto_dna", "tool": "auto", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "msa_file": "crambin.a3m", "expected": "pass", "note": "Auto -> Boltz with DNA"},
-    {"id": "X04", "name": "auto_ligand", "tool": "auto", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["ATP"], "expected": "pass", "note": "Auto -> Boltz with ligand"},
-
-    {"id": "P01", "name": "boltz_2samples", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "num_samples": 2, "expected": "pass"},
-    {"id": "P02", "name": "boltz_recycles", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "num_recycles": 5, "expected": "pass"},
-    {"id": "P03", "name": "boltz_mmcif", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "output_format": "mmcif", "expected": "pass"},
-    {"id": "P04", "name": "boltz_debug", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "debug": true, "expected": "pass"},
-    {"id": "P05", "name": "openfold_2samples", "tool": "openfold", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "num_samples": 2, "expected": "pass"},
-    {"id": "P06", "name": "openfold_recycles", "tool": "openfold", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "num_recycles": 3, "expected": "pass"},
-    {"id": "P07", "name": "chai_2samples", "tool": "chai", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "num_samples": 2, "expected": "pass"},
-    {"id": "P08", "name": "chai_recycles", "tool": "chai", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "num_recycles": 5, "expected": "pass"},
-    {"id": "P09", "name": "esmfold_debug", "tool": "esmfold", "input_file": "simple_protein.fasta", "debug": true, "expected": "pass"},
-    {"id": "P10", "name": "esmfold_recycles", "tool": "esmfold", "input_file": "simple_protein.fasta", "num_recycles": 2, "expected": "pass"},
-    {"id": "P11", "name": "boltz_seed", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "seed": 42, "expected": "pass"},
-    {"id": "P12", "name": "chai_seed", "tool": "chai", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "seed": 42, "expected": "pass"},
-
-    {"id": "R01", "name": "alphafold_dna_smiles_reject", "tool": "alphafold", "dna_file": "dna.fasta", "smiles": ["C=C"], "expected": "reject", "expected_error": "does not support", "note": "Prod job 23403506: burned an 8h GPU reservation before failing (#84)"},
-    {"id": "R02", "name": "esmfold_dna_smiles_reject", "tool": "esmfold", "dna_file": "dna.fasta", "smiles": ["C=C"], "expected": "reject", "expected_error": "does not support", "note": "Prod job 23403505: same shape, protein-only tool given DNA + SMILES (#84)"},
-    {"id": "R03", "name": "auto_dna_ligand_resolves", "tool": "auto", "dna_file": "dna.fasta", "ligand": ["ATP"], "expected": "pass", "note": "auto must resolve to a tool accepting DNA + CCD, never Chai (#82/#84)"},
-
-    {"id": "N01", "name": "neg_no_input", "tool": "boltz", "expected": "reject", "expected_error": "No inputs supplied"},
-    {"id": "N02", "name": "neg_bad_ccd", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["TOOLONG"], "expected": "reject", "expected_error": "Invalid ligand CCD code"},
-    {"id": "N03", "name": "neg_bad_format", "tool": "boltz", "input_file": "not_fasta.txt", "msa_file": "crambin.a3m", "expected": "fail", "expected_error": "expected FASTA format"},
-    {"id": "N04", "name": "neg_esm_dna", "tool": "esmfold", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "expected": "reject", "expected_error": "does not support"},
-    {"id": "N05", "name": "neg_af_dna", "tool": "alphafold", "input_file": "simple_protein.fasta", "dna_file": "dna.fasta", "expected": "reject", "expected_error": "does not support"},
-    {"id": "N06", "name": "neg_esm_ligand", "tool": "esmfold", "input_file": "simple_protein.fasta", "ligand": ["ATP"], "expected": "reject", "expected_error": "does not support"},
-    {"id": "N07", "name": "neg_bad_smiles", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "smiles": ["not_valid_smiles_xyz"], "expected": "fail", "expected_error": "Invalid SMILES"},
-    {"id": "N08", "name": "neg_auto_no_input", "tool": "auto", "expected": "reject", "expected_error": "No inputs supplied"},
-    {"id": "N09", "name": "neg_glycan_chain", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["NAG(4-1 NAG(4-1 NAG))"], "expected": "reject", "expected_error": "Invalid ligand CCD code"},
-    {"id": "N10", "name": "neg_4char_ccd", "tool": "boltz", "input_file": "simple_protein.fasta", "msa_file": "crambin.a3m", "ligand": ["ATPX"], "expected": "reject", "expected_error": "Invalid ligand CCD code", "note": "#48 wwPDB never issues 4-character CCD ids"}
+    {
+      "id": "E01",
+      "name": "esmfold",
+      "tool": "esmfold",
+      "input_file": "simple_protein.fasta",
+      "expected": "pass"
+    },
+    {
+      "id": "E02",
+      "name": "esmfold_dna_reject",
+      "tool": "esmfold",
+      "input_file": "simple_protein.fasta",
+      "dna_file": "dna.fasta",
+      "expected": "reject",
+      "expected_error": "does not support"
+    },
+    {
+      "id": "F01",
+      "name": "esmfold2_protein",
+      "tool": "esmfold2",
+      "input_file": "simple_protein.fasta",
+      "expected": "pass",
+      "note": "ESMFold2 had zero matrix coverage until 2026-08-13 (#75); H200-only via torch+cu130"
+    },
+    {
+      "id": "F04",
+      "name": "esmfold2_msa_upload",
+      "tool": "esmfold2",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "expected": "pass",
+      "note": "ESMFold2 accepts a per-chain MSA (#95); crambin.a3m query matches simple_protein.fasta"
+    },
+    {
+      "id": "F02",
+      "name": "esmfold2_smiles",
+      "tool": "esmfold2",
+      "input_file": "simple_protein.fasta",
+      "smiles": [
+        "CCO"
+      ],
+      "expected": "pass"
+    },
+    {
+      "id": "F03",
+      "name": "esmfold2_dna",
+      "tool": "esmfold2",
+      "input_file": "simple_protein.fasta",
+      "dna_file": "dna.fasta",
+      "expected": "pass"
+    },
+    {
+      "id": "B01",
+      "name": "boltz_msa_upload",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "expected": "pass"
+    },
+    {
+      "id": "B02",
+      "name": "boltz_msa_server",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "expected": "pass",
+      "note": "MSA via ColabFold server"
+    },
+    {
+      "id": "B03",
+      "name": "boltz_dna",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "dna_file": "dna.fasta",
+      "msa_file": "crambin.a3m",
+      "expected": "pass"
+    },
+    {
+      "id": "B04",
+      "name": "boltz_rna",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "rna_file": "rna.fasta",
+      "msa_file": "crambin.a3m",
+      "expected": "pass"
+    },
+    {
+      "id": "B05",
+      "name": "boltz_ligand",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "ligand": [
+        "ATP"
+      ],
+      "expected": "pass"
+    },
+    {
+      "id": "B06",
+      "name": "boltz_smiles",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "smiles": [
+        "CCO"
+      ],
+      "expected": "pass"
+    },
+    {
+      "id": "B07",
+      "name": "boltz_dna_ligand",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "dna_file": "dna.fasta",
+      "msa_file": "crambin.a3m",
+      "ligand": [
+        "ATP"
+      ],
+      "expected": "pass"
+    },
+    {
+      "id": "B08",
+      "name": "boltz_multi_ligand",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "ligand": [
+        "ATP",
+        "NAD"
+      ],
+      "expected": "pass"
+    },
+    {
+      "id": "B09",
+      "name": "boltz_multi_smiles",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "smiles": [
+        "CCO",
+        "c1ccccc1"
+      ],
+      "expected": "pass"
+    },
+    {
+      "id": "B10",
+      "name": "boltz_ligand_5char",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "ligand": [
+        "A1H1F"
+      ],
+      "expected": "pass",
+      "note": "#48 extended 5-character CCD id; present in Boltz's bundled CCD snapshot"
+    },
+    {
+      "id": "O01",
+      "name": "openfold_msa_upload",
+      "tool": "openfold",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "expected": "pass"
+    },
+    {
+      "id": "O02",
+      "name": "openfold_msa_server",
+      "tool": "openfold",
+      "input_file": "simple_protein.fasta",
+      "expected": "pass",
+      "note": "MSA via ColabFold server"
+    },
+    {
+      "id": "O03",
+      "name": "openfold_dna",
+      "tool": "openfold",
+      "input_file": "simple_protein.fasta",
+      "dna_file": "dna.fasta",
+      "msa_file": "crambin.a3m",
+      "expected": "pass"
+    },
+    {
+      "id": "O04",
+      "name": "openfold_rna",
+      "tool": "openfold",
+      "input_file": "simple_protein.fasta",
+      "rna_file": "rna.fasta",
+      "msa_file": "crambin.a3m",
+      "expected": "pass"
+    },
+    {
+      "id": "O05",
+      "name": "openfold_ligand",
+      "tool": "openfold",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "ligand": [
+        "ATP"
+      ],
+      "expected": "pass"
+    },
+    {
+      "id": "O06",
+      "name": "openfold_smiles",
+      "tool": "openfold",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "smiles": [
+        "CCO"
+      ],
+      "expected": "pass"
+    },
+    {
+      "id": "C01",
+      "name": "chai_msa_upload",
+      "tool": "chai",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "expected": "pass"
+    },
+    {
+      "id": "C02",
+      "name": "chai_msa_server",
+      "tool": "chai",
+      "input_file": "simple_protein.fasta",
+      "expected": "pass",
+      "note": "MSA via ColabFold server"
+    },
+    {
+      "id": "C03",
+      "name": "chai_dna",
+      "tool": "chai",
+      "input_file": "simple_protein.fasta",
+      "dna_file": "dna.fasta",
+      "msa_file": "crambin.a3m",
+      "expected": "pass"
+    },
+    {
+      "id": "C04",
+      "name": "chai_rna",
+      "tool": "chai",
+      "input_file": "simple_protein.fasta",
+      "rna_file": "rna.fasta",
+      "msa_file": "crambin.a3m",
+      "expected": "pass"
+    },
+    {
+      "id": "C05",
+      "name": "chai_ccd_ligand_reject",
+      "tool": "chai",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "ligand": [
+        "ATP"
+      ],
+      "expected": "reject",
+      "expected_error": "CCD",
+      "note": "Chai needs SMILES for ligands, not CCD codes (#82); chai+SMILES is covered by C06"
+    },
+    {
+      "id": "C06",
+      "name": "chai_smiles",
+      "tool": "chai",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "smiles": [
+        "CCO"
+      ],
+      "expected": "pass"
+    },
+    {
+      "id": "A01",
+      "name": "alphafold",
+      "tool": "alphafold",
+      "input_file": "simple_protein.fasta",
+      "expected": "pass",
+      "slow": true,
+      "note": "Uses local DBs; 20+ min runtime"
+    },
+    {
+      "id": "A02",
+      "name": "alphafold_dna_reject",
+      "tool": "alphafold",
+      "input_file": "simple_protein.fasta",
+      "dna_file": "dna.fasta",
+      "expected": "reject",
+      "expected_error": "does not support"
+    },
+    {
+      "id": "X01",
+      "name": "auto_server",
+      "tool": "auto",
+      "input_file": "simple_protein.fasta",
+      "expected": "pass",
+      "note": "Auto -> Boltz via ColabFold server"
+    },
+    {
+      "id": "X02",
+      "name": "auto_msa_upload",
+      "tool": "auto",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "expected": "pass",
+      "note": "Auto -> Boltz via uploaded MSA"
+    },
+    {
+      "id": "X03",
+      "name": "auto_dna",
+      "tool": "auto",
+      "input_file": "simple_protein.fasta",
+      "dna_file": "dna.fasta",
+      "msa_file": "crambin.a3m",
+      "expected": "pass",
+      "note": "Auto -> Boltz with DNA"
+    },
+    {
+      "id": "X04",
+      "name": "auto_ligand",
+      "tool": "auto",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "ligand": [
+        "ATP"
+      ],
+      "expected": "pass",
+      "note": "Auto -> Boltz with ligand"
+    },
+    {
+      "id": "P01",
+      "name": "boltz_2samples",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "num_samples": 2,
+      "expected": "pass"
+    },
+    {
+      "id": "P02",
+      "name": "boltz_recycles",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "num_recycles": 5,
+      "expected": "pass"
+    },
+    {
+      "id": "P03",
+      "name": "boltz_mmcif",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "output_format": "mmcif",
+      "expected": "pass"
+    },
+    {
+      "id": "P04",
+      "name": "boltz_debug",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "debug": true,
+      "expected": "pass"
+    },
+    {
+      "id": "P05",
+      "name": "openfold_2samples",
+      "tool": "openfold",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "num_samples": 2,
+      "expected": "pass"
+    },
+    {
+      "id": "P06",
+      "name": "openfold_recycles",
+      "tool": "openfold",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "num_recycles": 3,
+      "expected": "pass"
+    },
+    {
+      "id": "P07",
+      "name": "chai_2samples",
+      "tool": "chai",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "num_samples": 2,
+      "expected": "pass"
+    },
+    {
+      "id": "P08",
+      "name": "chai_recycles",
+      "tool": "chai",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "num_recycles": 5,
+      "expected": "pass"
+    },
+    {
+      "id": "P09",
+      "name": "esmfold_debug",
+      "tool": "esmfold",
+      "input_file": "simple_protein.fasta",
+      "debug": true,
+      "expected": "pass"
+    },
+    {
+      "id": "P10",
+      "name": "esmfold_recycles",
+      "tool": "esmfold",
+      "input_file": "simple_protein.fasta",
+      "num_recycles": 2,
+      "expected": "pass"
+    },
+    {
+      "id": "P11",
+      "name": "boltz_seed",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "seed": 42,
+      "expected": "pass"
+    },
+    {
+      "id": "P12",
+      "name": "chai_seed",
+      "tool": "chai",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "seed": 42,
+      "expected": "pass"
+    },
+    {
+      "id": "R01",
+      "name": "alphafold_dna_smiles_reject",
+      "tool": "alphafold",
+      "dna_file": "dna.fasta",
+      "smiles": [
+        "C=C"
+      ],
+      "expected": "reject",
+      "expected_error": "does not support",
+      "note": "Prod job 23403506: burned an 8h GPU reservation before failing (#84)"
+    },
+    {
+      "id": "R02",
+      "name": "esmfold_dna_smiles_reject",
+      "tool": "esmfold",
+      "dna_file": "dna.fasta",
+      "smiles": [
+        "C=C"
+      ],
+      "expected": "reject",
+      "expected_error": "does not support",
+      "note": "Prod job 23403505: same shape, protein-only tool given DNA + SMILES (#84)"
+    },
+    {
+      "id": "R03",
+      "name": "auto_dna_ligand_resolves",
+      "tool": "auto",
+      "dna_file": "dna.fasta",
+      "ligand": [
+        "ATP"
+      ],
+      "expected": "pass",
+      "note": "auto must resolve to a tool accepting DNA + CCD, never Chai (#82/#84)"
+    },
+    {
+      "id": "N01",
+      "name": "neg_no_input",
+      "tool": "boltz",
+      "expected": "reject",
+      "expected_error": "No inputs supplied"
+    },
+    {
+      "id": "N02",
+      "name": "neg_bad_ccd",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "ligand": [
+        "TOOLONG"
+      ],
+      "expected": "reject",
+      "expected_error": "Invalid ligand CCD code"
+    },
+    {
+      "id": "N03",
+      "name": "neg_bad_format",
+      "tool": "boltz",
+      "input_file": "not_fasta.txt",
+      "msa_file": "crambin.a3m",
+      "expected": "fail",
+      "expected_error": "expected FASTA format"
+    },
+    {
+      "id": "N04",
+      "name": "neg_esm_dna",
+      "tool": "esmfold",
+      "input_file": "simple_protein.fasta",
+      "dna_file": "dna.fasta",
+      "expected": "reject",
+      "expected_error": "does not support"
+    },
+    {
+      "id": "N05",
+      "name": "neg_af_dna",
+      "tool": "alphafold",
+      "input_file": "simple_protein.fasta",
+      "dna_file": "dna.fasta",
+      "expected": "reject",
+      "expected_error": "does not support"
+    },
+    {
+      "id": "N06",
+      "name": "neg_esm_ligand",
+      "tool": "esmfold",
+      "input_file": "simple_protein.fasta",
+      "ligand": [
+        "ATP"
+      ],
+      "expected": "reject",
+      "expected_error": "does not support"
+    },
+    {
+      "id": "N07",
+      "name": "neg_bad_smiles",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "smiles": [
+        "not_valid_smiles_xyz"
+      ],
+      "expected": "fail",
+      "expected_error": "Invalid SMILES"
+    },
+    {
+      "id": "N08",
+      "name": "neg_auto_no_input",
+      "tool": "auto",
+      "expected": "reject",
+      "expected_error": "No inputs supplied"
+    },
+    {
+      "id": "N09",
+      "name": "neg_glycan_chain",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "ligand": [
+        "NAG(4-1 NAG(4-1 NAG))"
+      ],
+      "expected": "reject",
+      "expected_error": "Invalid ligand CCD code"
+    },
+    {
+      "id": "N10",
+      "name": "neg_4char_ccd",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "msa_file": "crambin.a3m",
+      "ligand": [
+        "ATPX"
+      ],
+      "expected": "reject",
+      "expected_error": "Invalid ligand CCD code",
+      "note": "#48 wwPDB never issues 4-character CCD ids"
+    },
+    {
+      "id": "S01",
+      "name": "stabilinnator_both",
+      "app": "StabiliNNator",
+      "input_file": "1crn_small.pdb",
+      "analysis_type": "both",
+      "expected": "pass",
+      "expect_output": "_report.html"
+    },
+    {
+      "id": "S02",
+      "name": "stabilinnator_proline",
+      "app": "StabiliNNator",
+      "input_file": "1crn_small.pdb",
+      "analysis_type": "proline",
+      "expected": "pass",
+      "expect_output": "_report.html"
+    },
+    {
+      "id": "S03",
+      "name": "stabilinnator_disulfide",
+      "app": "StabiliNNator",
+      "input_file": "1crn_small.pdb",
+      "analysis_type": "disulfide",
+      "expected": "pass",
+      "expect_output": "_report.html"
+    }
   ]
 }

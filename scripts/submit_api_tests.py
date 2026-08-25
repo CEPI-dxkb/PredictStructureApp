@@ -23,6 +23,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -34,6 +37,8 @@ API_URL = "https://p3.theseed.org/services/app_service"
 BASE_URL = "https://alpha.bv-brc.org"
 WS_INPUTS = "/awilke@bvbrc/home/AppTests/inputs"
 WS_OUTPUT = "/awilke@bvbrc/home/AppTests"
+#: p3-cat is not on the host PATH; it ships in the folding container.
+P3_CLI_SIF = os.environ.get("P3_CLI_SIF", "/scout/containers/folding_prod.sif")
 MATRIX_PATH = Path(__file__).parent.parent / "test_data" / "service_params" / "api_test_matrix.json"
 
 # Fields from the test matrix that become app params
@@ -41,6 +46,8 @@ APP_PARAM_KEYS = {
     "tool", "input_file", "dna_file", "rna_file", "msa_file",
     "ligand", "smiles", "output_format", "debug",
     "num_samples", "num_recycles", "seed",
+    # StabiliNNator (same container, different app -- see submit_job)
+    "app", "analysis_type", "accelerator", "theme", "hidden_dim",
 }
 
 
@@ -85,9 +92,18 @@ SUBMIT_TIMEOUT = 900
 
 
 def submit_job(token: str, app_params: dict, output_file: str) -> int:
-    """Submit a single PredictStructure job. Returns task ID."""
-    params = {**app_params, "output_path": WS_OUTPUT, "output_file": output_file}
-    data = rpc(token, "start_app2", ["PredictStructure", params, {"base_url": BASE_URL}],
+    """Submit a single job. Returns task ID.
+
+    The app defaults to PredictStructure but a case may name another app via
+    an "app" key -- StabiliNNator ships in the same container and had NO
+    matrix coverage at all, so "the matrix passed" silently meant one of the
+    two apps. Its first real submission failed at dispatch (tasks 23450684,
+    23450690) long after the container was deployed and declared green.
+    """
+    params = {k: v for k, v in app_params.items() if k != "app"}
+    app = app_params.get("app", "PredictStructure")
+    params = {**params, "output_path": WS_OUTPUT, "output_file": output_file}
+    data = rpc(token, "start_app2", [app, params, {"base_url": BASE_URL}],
                timeout=SUBMIT_TIMEOUT)
     return data["result"][0]["id"]
 
@@ -151,6 +167,7 @@ def build_matrix_jobs(tests: list[dict]) -> tuple[list[tuple[str, dict]], dict[s
         expectations[label] = {
             "expected": test.get("expected", "pass"),
             "expected_error": test.get("expected_error"),
+            "expect_output": test.get("expect_output"),
         }
     return jobs, expectations
 
@@ -211,6 +228,8 @@ def run_submit(token: str, jobs: list[tuple[str, dict]], tag: str, poll: bool = 
             s["status"] = results[tid]["status"]
             s["elapsed"] = results[tid].get("elapsed_time", "--")
             s["host"] = hosts.get(tid, "--")
+            if s["status"] == "completed":
+                s["output_files"] = fetch_output_files(token, s["output_file"])
         elif tid:
             s["status"] = "unknown"
 
@@ -226,6 +245,41 @@ def save_results(submitted, results, hosts, tag, ts):
     out_path = out_dir / f"{tag}_{ts}.json"
     out_path.write_text(json.dumps(submitted, indent=2, default=str))
     print(f"\nResults saved to {out_path}")
+
+
+def fetch_output_files(token: str, output_file: str) -> list[str] | None:
+    """Return the basenames a completed job registered as its outputs.
+
+    status == "completed" is NOT sufficient evidence that a job delivered
+    anything. StabiliNNator reported success while uploading its results
+    flat into output_path instead of the job folder, leaving output_files
+    empty (tasks 23452794-23452798) -- the matrix went green on a job whose
+    own folder was empty and whose report the UI could not find.
+
+    Returns None if the object cannot be read, so an unreadable workspace is
+    not mistaken for an empty one.
+    """
+    path = f"{WS_OUTPUT}/{output_file}"
+    # p3-cat lives inside the folding container, not on the host PATH. Try the
+    # host first (in case this runs somewhere the p3 CLI is installed), then
+    # fall through to the container. Without this the helper silently returned
+    # None on every call and the assertion never actually ran.
+    attempts = [["p3-cat", path]]
+    if shutil.which("p3-cat") is None:
+        attempts = [["apptainer", "exec", P3_CLI_SIF, "p3-cat", path]]
+    for cmd in attempts:
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        except Exception:
+            continue
+        if out.returncode != 0 or not out.stdout.strip():
+            continue
+        try:
+            data = json.loads(out.stdout)
+        except ValueError:
+            continue
+        return [f[0].split("/")[-1] for f in data.get("output_files") or []]
+    return None
 
 
 def judge(s: dict) -> tuple[bool | None, str]:
@@ -257,7 +311,17 @@ def judge(s: dict) -> tuple[bool | None, str]:
         return False, "submit err"
     if expected == "fail":
         return (status == "failed"), (status or "unknown")
-    return (status == "completed"), (status or "unknown")
+    if status != "completed":
+        return False, (status or "unknown")
+
+    # A completed job must have registered outputs. None = could not check.
+    of = s.get("output_files")
+    if of is not None and len(of) == 0:
+        return False, "completed but no output_files"
+    want = s.get("expect_output")
+    if want and of is not None and not any(n.endswith(want) for n in of):
+        return False, f"no output matching *{want}"
+    return True, "completed"
 
 
 def print_report(submitted: list[dict]):
@@ -311,7 +375,8 @@ def cmd_matrix(args):
     if not args.include_negative:
         tests = [t for t in tests if t.get("expected") not in ("fail", "reject")]
     if not args.include_alphafold:
-        tests = [t for t in tests if t["tool"] != "alphafold"]
+        # .get(): non-PredictStructure cases (StabiliNNator) have no "tool"
+        tests = [t for t in tests if t.get("tool") != "alphafold"]
     jobs, expectations = build_matrix_jobs(tests)
     run_submit(token, jobs, "matrix", poll=not args.no_poll, expectations=expectations)
 
