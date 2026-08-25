@@ -4,6 +4,16 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 
 ## Next up
 
+- [ ] Deploy folding_260825.1 (building; pins stabiliNNatorApp 486e037 =
+      results upload into the job result folder). After promotion + repoint
+      of BOTH app rows: E01 probe with Container-path check, then S01-S03 —
+      they are currently red on exactly this bug and should go green
+- [ ] stabiliNNatorApp: nothing outstanding — #16 (partition), #17 (gpu2 +
+      600s runtime), #18/#19 (upload location) all merged
+- [ ] BV-BRC-Web master has NO StabiliNNator submission form (#1403 went to
+      alpha); the service is not reachable from the production UI even once
+      the container is right. Separate gap, worth its own issue
+
 - [ ] File upstream (BV-BRC infra): container-cache has no eviction and a
       failed image pull surfaces as an empty "Error submitting job" —
       both bit the 260821.1 deploy (5 failed submits, ~22 GB write ceiling
