@@ -4,6 +4,15 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 
 ## Next up
 
+- [ ] protein_structure_analysis: #79/#80 (histogram zero-bins, report TOC) are
+      in wilke's fork and in our container but NOT upstream — upstream last
+      merged the fork in July (PR #3), before those landed. Fork main is 6
+      ahead; open an upstream PR if BV-BRC should carry them
+- [ ] BV-BRC-Web#1409 (typed entity rows) awaiting upstream review. Note the
+      alpha bundle (/js/3.59.9/bundle/bundle.js) predates #1403, so neither
+      the REPORT eye icons nor this form change appear on alpha until BV-BRC
+      rebuilds and redeploys the bundle
+
 - [ ] Deploy folding_260825.1 (building; pins stabiliNNatorApp 486e037 =
       results upload into the job result folder). After promotion + repoint
       of BOTH app rows: E01 probe with Container-path check, then S01-S03 —
@@ -67,6 +76,12 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [x] /local_databases: 66 GB of duplicate weights reclaimed; canonical
       layout esmfold2/ + esmfold/
 - [x] Filed #104–#109
+- [x] 2026-08-26: matrix grew three-way (B11/O07/C07) and nucleic-acid-only
+      (B12/B13) coverage — 67 cases; all pass. Verified nucleic-acid-only is a
+      supported category (AF3 benchmarks RNA-only/DNA-only; Boltz's parser has
+      no protein requirement), not a gap in our validation
+- [x] 2026-08-26: repos synced — BV-BRC-Docs fork level with upstream,
+      protein_structure_analysis fork merged with upstream (behind 0, ahead 6)
 - [x] 2026-08-24: folding_260821.3 deployed + registered (PredictStructure and
       StabiliNNator), **59/59 matrix**; #114 confirmed fixed in production
       (O04 failing → passing, O01–O06 6/6); all five floating tool installs
