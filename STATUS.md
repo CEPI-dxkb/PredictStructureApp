@@ -2,28 +2,64 @@
 
 **Last updated:** 2026-08-21
 **Current version:** v0.17.0 (HEAD: ef0914b)
-**Production (alpha) container:** `folding_260821.3.sif` (predict_structure ef0914b) — **59/59 matrix, all tool installs pinned**
+**Production (alpha) container:** `folding_260825.2.sif` — PredictStructure + StabiliNNator, both verified
 
 ## Next action
 
-Steady state. `folding_260821.3.sif` is deployed, registered for both
-PredictStructure and StabiliNNator, and verified **59/59** (2026-08-24,
-`matrix_20260824_111704.json`).
+Steady state. `folding_260825.2.sif` is deployed and registered for both
+PredictStructure and StabiliNNator. The whole StabiliNNator chain is closed:
+dispatch, walltime, result delivery, report.
 
-Open work is all enhancement or externally blocked (see Open issues). Two
-infrastructure items worth raising with BV-BRC:
+Open items, all outside this container:
 
-1. **Which host runs preflight is still unknown.** Its container-cache had a
-   ~22 GB write ceiling and cost five failed submits on the 260821.1 deploy;
-   the user-visible error is an empty `"Error submitting job: \n"`. Nothing
-   evicts old images from these caches. Worth an upstream issue: eviction
-   policy + surface the curl failure instead of swallowing it.
-2. **openfold3's `--use-msa-server` path depends on RCSB** for template
-   chain-ID remapping and treats a fetch failure as fatal (O02 failed once
-   on 2026-08-24, passed on retry). `--no-templates` is the escape hatch if
-   RCSB has a bad day.
+1. **The alpha JS bundle predates BV-BRC-Web#1403.** `/js/3.59.9/bundle/bundle.js`
+   contains neither `ViewPredictStructureReport` nor `ViewStabiliNNatorReport`,
+   though both are in alpha's source. The REPORT eye icon is therefore inert on
+   alpha for **both** apps until BV-BRC rebuilds the bundle. It works against a
+   local p3-web instance, which serves source rather than the bundle.
+2. **BV-BRC-Web#1407** — StabiliNNator submission form (the service is
+   otherwise API-only; CEPI-dxkb/stabiliNNatorApp#20).
+3. **#116** — Jobs-page REPORT action, review 2026-08-27.
+4. The preflight host's container cache still has no eviction, and a failed
+   image pull still surfaces as an empty "Error submitting job". Worth an
+   upstream issue to BV-BRC infra.
 
 ## What's done
+
+### Session 2026-08-25: StabiliNNator end to end, on compute nodes
+
+- **`folding_260825.2.sif`** (predict_structure `ef0914b`, stabiliNNatorApp
+  `5ed9b23`) deployed and registered for both apps.
+- **StabiliNNator runs end to end for the first time.** S01-S03 pass on
+  hosts **alder** and **fir** — compute-partition nodes, never seen before
+  in this project; every prior job ran on coconut/mango/peach. 6
+  `output_files` including `stabilinnator_report.html`, delivered into the
+  job result folder.
+- **Three bugs, found only because S01-S03 exist** (added this session):
+  1. `partition => 'normal'` — not a valid partition. Jobs logged
+     "Submitted" then were silently refused: no start_time, no hostname,
+     zero-byte logs, no task_status dir (23450684, 23450690).
+  2. **Walltime, misdiagnosed by me as a staging limit.** With
+     `partition => compute` and `runtime => 120`, jobs died at ~1.1x their
+     OWN requested walltime (S01 120s->132s, S02/S03 60s->69s/65s). I
+     reported this as "compute nodes do not carry the 27 GB image" and
+     switched to gpu2. Wrong: a peer session retried compute with
+     runtime 600 and the jobs staged the image cold in ~3:12-3:24 and
+     succeeded. The nodes were always capable; they never had the time.
+     Lesson: two variables changed together (partition AND runtime), and
+     the confounded result was reported as a finding.
+  3. Results uploaded flat into `output_path`, leaving the job result
+     folder empty and `output_files: []` — so the REPORT icon had nothing
+     to find (stabiliNNatorApp#18, fixed in `486e037`).
+- **Both test suites now assert effects, not exit codes.** Acceptance
+  check 17 asserted only `rc=0` while printing the bad partition as a
+  label; it now asserts the partition value and that the app spec agrees
+  with the Perl preflight. Matrix `judge()` now fails a completed job with
+  empty `output_files` and can require an output suffix (S01-S03 require
+  `*_report.html`). Both were verified red against the broken images
+  before being trusted.
+- **#88 closed** — BV-BRC-Web#1403 merged to alpha (`b0e97e13d`), adding
+  REPORT icons for both apps, opening in a new tab.
 
 ### Session 2026-08-24: 260821.3 clean, all tool installs pinned
 
@@ -250,7 +286,11 @@ with fix; we ship a sanitizer and are unaffected).
 
 | SIF | Date | Status | Notes |
 |---|---|---|---|
-| folding_260821.3.sif | 2026-08-21 | **Production (alpha)** | 260821.2 + every tool install pinned; **59/59**; PredictStructure + StabiliNNator |
+| folding_260825.2.sif | 2026-08-25 | **Production (alpha)** | stabiliNNatorApp 5ed9b23: compute partition, 600s runtime, result-folder upload. S01-S03 pass on alder/fir |
+| folding_260825.1.sif | 2026-08-25 | Superseded | 486e037 upload fix; gpu2 |
+| folding_260824.2.sif | 2026-08-24 | Superseded | gpu2 + 600s runtime |
+| folding_260824.1.sif | 2026-08-24 | Superseded | compute + 120s — jobs killed at walltime |
+| folding_260821.3.sif | 2026-08-21 | Superseded | 260821.2 + every tool install pinned; **59/59**; PredictStructure + StabiliNNator |
 | folding_260821.2.sif | 2026-08-21 | **Broken — do not use** | +#114 fix but openfold3 0.5.0 drift: OpenFold 0/6 |
 | folding_260821.1.sif | 2026-08-21 | **Production (alpha)** | First reproducible def build; 27 G; +#104–#108, #79/#80, stabiliNNator; known O02/O04 regression (#114) |
 | folding_260815.1.sif | 2026-08-15 | Rollback standby | +#48 +#50 +#98 + PYTHONPATH sanitizer; 42d6171; B01 verified after repoint |
