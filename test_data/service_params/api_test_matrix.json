@@ -599,6 +599,50 @@
       "analysis_type": "disulfide",
       "expected": "pass",
       "expect_output": "_report.html"
+    },
+    {
+      "id": "B11",
+      "name": "boltz_protein_dna_rna",
+      "tool": "boltz",
+      "input_file": "simple_protein.fasta",
+      "dna_file": "dna.fasta",
+      "rna_file": "rna.fasta",
+      "msa_file": "crambin.a3m",
+      "expected": "pass"
+    },
+    {
+      "id": "O07",
+      "name": "openfold_protein_dna_rna",
+      "tool": "openfold",
+      "input_file": "simple_protein.fasta",
+      "dna_file": "dna.fasta",
+      "rna_file": "rna.fasta",
+      "msa_file": "crambin.a3m",
+      "expected": "pass"
+    },
+    {
+      "id": "C07",
+      "name": "chai_protein_dna_rna",
+      "tool": "chai",
+      "input_file": "simple_protein.fasta",
+      "dna_file": "dna.fasta",
+      "rna_file": "rna.fasta",
+      "msa_file": "crambin.a3m",
+      "expected": "pass"
+    },
+    {
+      "id": "B12",
+      "name": "boltz_dna_only",
+      "tool": "boltz",
+      "dna_file": "dna.fasta",
+      "expected": "pass"
+    },
+    {
+      "id": "B13",
+      "name": "boltz_rna_only",
+      "tool": "boltz",
+      "rna_file": "rna.fasta",
+      "expected": "pass"
     }
   ]
 }
