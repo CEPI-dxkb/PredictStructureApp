@@ -1,0 +1,70 @@
+[
+  {
+    "task_id": 23455669,
+    "label": "S01_stabilinnator_both",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/1crn_small.pdb",
+      "analysis_type": "both",
+      "app": "StabiliNNator"
+    },
+    "output_file": "matrix_S01_stabilinnator_both_20260825_154720",
+    "expected": "pass",
+    "expected_error": null,
+    "expect_output": "_report.html",
+    "status": "completed",
+    "elapsed": "00:00:15",
+    "host": "coconut",
+    "output_files": [
+      "1crn_small_proline.pdb",
+      "1crn_small_disulfide.pdb",
+      "1crn_small_proline_summary.tsv",
+      "1crn_small_summary.json",
+      "stabilinnator_report.html",
+      "1crn_small_disulfide_summary.tsv"
+    ]
+  },
+  {
+    "task_id": 23455671,
+    "label": "S02_stabilinnator_proline",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/1crn_small.pdb",
+      "analysis_type": "proline",
+      "app": "StabiliNNator"
+    },
+    "output_file": "matrix_S02_stabilinnator_proline_20260825_154720",
+    "expected": "pass",
+    "expected_error": null,
+    "expect_output": "_report.html",
+    "status": "completed",
+    "elapsed": "00:00:12",
+    "host": "coconut",
+    "output_files": [
+      "1crn_small_proline.pdb",
+      "1crn_small_proline_summary.tsv",
+      "1crn_small_summary.json",
+      "stabilinnator_report.html"
+    ]
+  },
+  {
+    "task_id": 23455673,
+    "label": "S03_stabilinnator_disulfide",
+    "params": {
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/1crn_small.pdb",
+      "analysis_type": "disulfide",
+      "app": "StabiliNNator"
+    },
+    "output_file": "matrix_S03_stabilinnator_disulfide_20260825_154720",
+    "expected": "pass",
+    "expected_error": null,
+    "expect_output": "_report.html",
+    "status": "completed",
+    "elapsed": "00:00:11",
+    "host": "coconut",
+    "output_files": [
+      "1crn_small_disulfide.pdb",
+      "1crn_small_summary.json",
+      "stabilinnator_report.html",
+      "1crn_small_disulfide_summary.tsv"
+    ]
+  }
+]

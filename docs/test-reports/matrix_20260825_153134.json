@@ -1,0 +1,41 @@
+[
+  {
+    "task_id": 23455503,
+    "label": "E01_esmfold",
+    "params": {
+      "tool": "esmfold",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/simple_protein.fasta"
+    },
+    "output_file": "matrix_E01_esmfold_20260825_153134",
+    "expected": "pass",
+    "expected_error": null,
+    "expect_output": null,
+    "status": "completed",
+    "elapsed": "00:04:52",
+    "host": "coconut",
+    "output_files": [
+      ".",
+      "predict_structure.log",
+      "input.fasta",
+      "model_1.pdb",
+      "model_1.cif",
+      "results.json",
+      "report.html",
+      "raw",
+      "predictions",
+      "inputs",
+      "reports",
+      "metadata",
+      "simple_protein.fasta",
+      "ro-crate-metadata.json",
+      "metadata.json",
+      "confidence.json",
+      "model_1.pdb",
+      "model_1.cif",
+      "1CRN|Crambin|46.pdb",
+      "report.json",
+      "report.pdf",
+      "report.html"
+    ]
+  }
+]

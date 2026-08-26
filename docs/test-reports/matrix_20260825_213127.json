@@ -1,0 +1,70 @@
+[
+  {
+    "task_id": 23462046,
+    "label": "S01_stabilinnator_both",
+    "params": {
+      "app": "StabiliNNator",
+      "analysis_type": "both",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/1crn_small.pdb"
+    },
+    "output_file": "matrix_S01_stabilinnator_both_20260825_213127",
+    "expected": "pass",
+    "expected_error": null,
+    "expect_output": "_report.html",
+    "status": "completed",
+    "elapsed": "00:03:12",
+    "host": "alder",
+    "output_files": [
+      "1crn_small_disulfide.pdb",
+      "stabilinnator_report.html",
+      "1crn_small_summary.json",
+      "1crn_small_proline.pdb",
+      "1crn_small_disulfide_summary.tsv",
+      "1crn_small_proline_summary.tsv"
+    ]
+  },
+  {
+    "task_id": 23462049,
+    "label": "S02_stabilinnator_proline",
+    "params": {
+      "app": "StabiliNNator",
+      "analysis_type": "proline",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/1crn_small.pdb"
+    },
+    "output_file": "matrix_S02_stabilinnator_proline_20260825_213127",
+    "expected": "pass",
+    "expected_error": null,
+    "expect_output": "_report.html",
+    "status": "completed",
+    "elapsed": "00:03:24",
+    "host": "fir",
+    "output_files": [
+      "1crn_small_proline_summary.tsv",
+      "1crn_small_proline.pdb",
+      "1crn_small_summary.json",
+      "stabilinnator_report.html"
+    ]
+  },
+  {
+    "task_id": 23462052,
+    "label": "S03_stabilinnator_disulfide",
+    "params": {
+      "app": "StabiliNNator",
+      "analysis_type": "disulfide",
+      "input_file": "/awilke@bvbrc/home/AppTests/inputs/1crn_small.pdb"
+    },
+    "output_file": "matrix_S03_stabilinnator_disulfide_20260825_213127",
+    "expected": "pass",
+    "expected_error": null,
+    "expect_output": "_report.html",
+    "status": "completed",
+    "elapsed": "00:03:24",
+    "host": "fir",
+    "output_files": [
+      "1crn_small_disulfide.pdb",
+      "1crn_small_disulfide_summary.tsv",
+      "1crn_small_summary.json",
+      "stabilinnator_report.html"
+    ]
+  }
+]

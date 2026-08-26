@@ -201,6 +201,15 @@ validation via declared kinds (abda889); #82 Chai CCD rejection; matrix
 (`tests/acceptance/` shells out to real 32 GB containers; run it
 deliberately, not in the normal loop).
 
+### API test matrix (folding_260825.2.sif, 2026-08-25)
+
+`docs/test-reports/matrix_20260825_213954.json` — **62/62 as expected** with
+`--include-alphafold --include-negative`: 47 completed, 13 refused at submit
+(no task created — the pass condition for those), 2 expected worker-side
+failures (N03 bad format, N07 bad SMILES). Hosts: coconut 29, mango 12,
+peach 5, **alder 3** — the compute-partition node, first time StabiliNNator
+has appeared in a matrix run at all.
+
 ### API test matrix (folding_260821.3.sif, 2026-08-24)
 
 `docs/test-reports/matrix_20260824_111704.json` — **59/59 as expected** with
