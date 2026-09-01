@@ -181,9 +181,29 @@ sub _peek_file_lines {
         }
         close($fh);
     } else {
-        # Assume workspace path — stream first N lines via p3-cat
-        my $cmd = "p3-cat '$source' 2>/dev/null | head -n $n_lines";
-        @lines = `$cmd`;
+        # Assume workspace path — stream first N lines via p3-cat.
+        #
+        # LIST-FORM open, never a shell string. $source is a
+        # submitter-chosen workspace path (input_file / dna_file /
+        # rna_file / msa_file), so a single quote in the object name
+        # escapes the quoting in "p3-cat '$source' | head" and the rest
+        # of the name runs as the service user:
+        #
+        #   /path/x'; touch /tmp/PWNED; echo '.fasta
+        #
+        # List form passes $source as one argv element, so there is no
+        # shell to escape from. Reading only $n_lines and closing early
+        # sends SIGPIPE to p3-cat, which is what stops the transfer
+        # rather than the `head` that used to do it.
+        if (open(my $ph, "-|", "p3-cat", $source)) {
+            while (my $line = <$ph>) {
+                push @lines, $line;
+                last if @lines >= $n_lines;
+            }
+            # Early close leaves p3-cat killed by SIGPIPE; a non-zero
+            # status here is expected and not an error.
+            close($ph);
+        }
     }
     return @lines;
 }
