@@ -47,12 +47,20 @@ Open items, all outside this container:
   (`matrix_20260903_113341`). No failures in either.
 - **TSV typing (#22) confirmed in production** — S01 and S04 result folders
   list `tsv` for both `_summary.tsv` files; they used to land `unspecified`.
-- **Residue labels (#23) confirmed** on the raw multi-chain 3ft7: 0 mislabeled,
-  0 misplaced gold cysteines, 88/88 distinct proline labels, and the
-  counterfactual "old sequence[pos-1] lookup would mislabel 86/88".
-  Note the same verifier reports `0/86` on a *cleaned* 3ft7, whose contiguous
-  renumbering makes offset-lookup and identity-lookup coincide — only the raw
-  structure exercises the regression.
+- **Residue labels (#23) confirmed — on the second attempt.** The verifier as
+  it stood (`caa7dcd`) recomputes `resLabel` from the report's embedded data
+  and never inspects what the template rendered, so it exits 0 on reports
+  generated from the *pre-fix* template. Our first "confirmed" therefore rested
+  on a check that could not fail. coconut-stabilinnator's `690ffce`
+  (stabiliNNatorApp #24, test-only, unmerged, not in this image) adds a scan of
+  the report's inline script for `DATA.input.sequence[...pos-1]`; re-running it
+  against the same S04 report gives `rendering: ok`, `discriminating input:
+  yes`, exit 0. That is the confirmation.
+- Two input properties to preserve: the `86/88` counterfactual needs the **raw**
+  `inputs/3ft7.pdb` (a cleaned, contiguously renumbered copy collapses it to
+  `0/86` and exits 3 under `--require-discriminating`), and S01-S03's crambin
+  reports `discriminating input: NO` — correctly, so the flag belongs on S04
+  only.
 - **`N03` had been passing for the wrong reason.** It pointed at
   `inputs/not_fasta.txt`, absent from the workspace, so it failed on "file is
   empty or unreadable" rather than the FASTA check it exists to test. Fixture

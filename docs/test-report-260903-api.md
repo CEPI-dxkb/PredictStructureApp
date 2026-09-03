@@ -76,7 +76,10 @@ staging on that partition is no longer a single-host result.
 
 Correct in `S01` as well. Previously these landed as `unspecified`.
 
-**Residue labels (#23)** — `node tests/verify_report_labels.js` on the S04 report:
+**Residue labels (#23)** — confirmed, but *not* by the evidence first recorded
+here. Read the whole of this section before quoting a number from it.
+
+The first run used the verifier as it stood at `caa7dcd`:
 
 ```
 report_s04.html: chains=AB rows=90
@@ -85,11 +88,42 @@ report_s04.html: chains=AB rows=90
   distinct proline labels: 88/88
 ```
 
-The counterfactual only shows up on the **raw** `inputs/3ft7.pdb`. The user's
-own 09:38 run used `3ft7_clean_0001.pdb`, whose residues are contiguously
-renumbered, so offset-lookup and identity-lookup coincide there and the same
-verifier reported `would mislabel 0/86`. Both runs are correct; only the raw
-structure exercises the regression.
+That output does not distinguish a fixed image from an unfixed one.
+coconut-stabilinnator generated reports from the **pre-fix template** and the
+same verifier exited 0 on both the raw and the cleaned structure. It reads the
+report's embedded data JSON and recomputes `resLabel` in its own code, so it
+never inspects what the template rendered — and the bug lives in the template.
+It only ever caught their original fixture because that fixture had tampered
+with the *data*.
+
+Their `690ffce` (stabiliNNatorApp #24, test-only, not merged and not in
+`folding_260901.1`) adds the check that can actually fail: scan the report's
+inline script for `DATA.input.sequence[...pos-1]`. Re-run against the same
+S04 report pulled from the workspace:
+
+```
+report_s04.html: chains=AB rows=90
+  rendering: ok - no sequence[pos-1] lookups
+  mislabeled now: 0   (old sequence[pos-1] lookup would mislabel 86/88)
+  misplaced gold cysteines: 0
+  distinct proline labels: 88/88
+  discriminating input: yes                                    exit=0
+```
+
+**That** confirms #23 in the deployed image. The conclusion recorded earlier
+was right; the evidence for it was not.
+
+Two properties of the inputs, worth keeping when this test is next touched:
+
+- The `86/88` counterfactual only appears on the **raw** `inputs/3ft7.pdb`.
+  The user's 09:38 run used `3ft7_clean_0001.pdb`, contiguously renumbered, so
+  offset-lookup and identity-lookup coincide and the counterfactual collapses
+  to `0/86`. Under `--require-discriminating` that input now exits **3**.
+- `S01`-`S03` use crambin (`rows=46`, `40/40` proline labels — 6 cysteines
+  filtered by #22, matching the peer's independent count of 40 not 46) and
+  report `discriminating input: NO`. Correct: one chain numbered from 1 cannot
+  exercise the offset bug. Do not add the flag to those cases; add it to `S04`
+  only, once #24 merges.
 
 ## Incidental finding: the 09:51 UI job failure is not the container
 
