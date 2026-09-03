@@ -20,6 +20,12 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [ ] Alpha eye-icon (#1403): verify functionally, by opening a job result.
       Grepping for ViewPredictStructureReport proves nothing — the symbol is
       absent from our own checkout too
+- [ ] After stabiliNNatorApp#24 merges (test-only, currently unmerged): add
+      `--require-discriminating` to the S04 label check (S01-S03 use crambin
+      and correctly report `discriminating input: NO`), and wire
+      `tests/verify_mmcif_rejections.sh` into the container acceptance suite.
+      Both reproduce against folding_260901.1 today; not adopted yet because
+      the matrix would then depend on an unmerged branch
 - [ ] stabiliNNatorApp: nothing outstanding — #16 (partition), #17 (gpu2 +
       600s runtime), #18/#19 (upload location) all merged
 - [ ] BV-BRC-Web master has NO StabiliNNator submission form (#1403 went to
