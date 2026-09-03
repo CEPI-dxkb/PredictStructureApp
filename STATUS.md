@@ -1,30 +1,69 @@
 # Project Status
 
-**Last updated:** 2026-08-21
-**Current version:** v0.17.0 (HEAD: ef0914b)
-**Production (alpha) container:** `folding_260825.2.sif` — PredictStructure + StabiliNNator, both verified
+**Last updated:** 2026-09-03
+**Current version:** v0.17.0 (HEAD: 0f6a241)
+**Production (alpha) container:** `folding_260901.1.sif` — PredictStructure + StabiliNNator, both verified
 
 ## Next action
 
-Steady state. `folding_260825.2.sif` is deployed and registered for both
-PredictStructure and StabiliNNator. The whole StabiliNNator chain is closed:
-dispatch, walltime, result delivery, report.
+Steady state. `folding_260901.1.sif` is deployed and registered for both app
+rows, verified **64/64** on the API matrix (2026-09-03), including all 12
+rejection cases. It carries predict_structure `a593591` (#119 shell injection)
+and stabiliNNatorApp `d0f1c89` (#22 TSV type / mmCIF / cysteine filter, #23
+residue labels). Both StabiliNNator fixes confirmed in production — see
+`docs/test-report-260903-api.md`.
 
 Open items, all outside this container:
 
-1. **The alpha JS bundle predates BV-BRC-Web#1403.** `/js/3.59.9/bundle/bundle.js`
-   contains neither `ViewPredictStructureReport` nor `ViewStabiliNNatorReport`,
-   though both are in alpha's source. The REPORT eye icon is therefore inert on
-   alpha for **both** apps until BV-BRC rebuilds the bundle. It works against a
-   local p3-web instance, which serves source rather than the bundle.
-2. **BV-BRC-Web#1407** — StabiliNNator submission form (the service is
+1. **Two UI-side defects found by a real failed submission** (task 23519232):
+   the form can submit a *directory* as `dna_file`. The workspace test inputs
+   are typed `reads`, which the DNA selector's type filter excludes, so the
+   browse dialog looks empty and `WorkspaceObjectSelector.js:845` takes the
+   folder as the selection. Fixes: retype the six `AppTests/inputs` files, and
+   reject directories in `PredictStructure.js` `getValues()`.
+2. **The alpha eye-icon question is UNVERIFIED.** The old claim ("the bundle
+   predates #1403") rested on grepping for `ViewPredictStructureReport`, a
+   symbol that appears zero times in the bundle, in alpha's `ActionBar.js`,
+   *and* in our own BV-BRC-Web checkout — so that probe proved nothing either
+   way. Needs a functional check: open an alpha job result and look for the
+   icon. What *is* settled: alpha serves the new typed-row form
+   (`/js/p3/widget/app/PredictStructure.js` is byte-identical to local).
+3. **BV-BRC-Web#1407** — StabiliNNator submission form (the service is
    otherwise API-only; CEPI-dxkb/stabiliNNatorApp#20).
-3. **#116** — Jobs-page REPORT action, review 2026-08-27.
-4. The preflight host's container cache still has no eviction, and a failed
+4. **#116** — Jobs-page REPORT action, review 2026-08-27.
+5. The preflight host's container cache still has no eviction, and a failed
    image pull still surfaces as an empty "Error submitting job". Worth an
    upstream issue to BV-BRC infra.
 
 ## What's done
+
+### Session 2026-09-03: folding_260901.1 verified in production, 64/64
+
+- **Both app rows on `folding_260901.1.sif`**, read from the user's own two
+  morning jobs (23519220 StabiliNNator, 23519232 PredictStructure) rather than
+  from probe submissions.
+- **64/64 matrix**, two runs: 52 positive cases
+  (`matrix_20260903_110826`), then the full set with `--include-negative`
+  (`matrix_20260903_113341`). No failures in either.
+- **TSV typing (#22) confirmed in production** — S01 and S04 result folders
+  list `tsv` for both `_summary.tsv` files; they used to land `unspecified`.
+- **Residue labels (#23) confirmed** on the raw multi-chain 3ft7: 0 mislabeled,
+  0 misplaced gold cysteines, 88/88 distinct proline labels, and the
+  counterfactual "old sequence[pos-1] lookup would mislabel 86/88".
+  Note the same verifier reports `0/86` on a *cleaned* 3ft7, whose contiguous
+  renumbering makes offset-lookup and identity-lookup coincide — only the raw
+  structure exercises the regression.
+- **`N03` had been passing for the wrong reason.** It pointed at
+  `inputs/not_fasta.txt`, absent from the workspace, so it failed on "file is
+  empty or unreadable" rather than the FASTA check it exists to test. Fixture
+  uploaded; N03 now quotes the fixture's first line.
+- **StabiliNNator ran on four distinct `compute` hosts** across the two passes
+  (fir, pear, bio-compute-04, alder) — that partition's image staging is no
+  longer a single-host observation.
+- `AppTests` was already free of every `matrix_*` run folder before this
+  session; a commented `p3-rm` block for the remaining hand-made runs was
+  handed to the user rather than executed.
+
 
 ### Session 2026-08-25: StabiliNNator end to end, on compute nodes
 

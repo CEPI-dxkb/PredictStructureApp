@@ -8,15 +8,18 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
       in wilke's fork and in our container but NOT upstream — upstream last
       merged the fork in July (PR #3), before those landed. Fork main is 6
       ahead; open an upstream PR if BV-BRC should carry them
-- [ ] BV-BRC-Web#1409 (typed entity rows) awaiting upstream review. Note the
-      alpha bundle (/js/3.59.9/bundle/bundle.js) predates #1403, so neither
-      the REPORT eye icons nor this form change appear on alpha until BV-BRC
-      rebuilds and redeploys the bundle
-
-- [ ] Deploy folding_260825.1 (building; pins stabiliNNatorApp 486e037 =
-      results upload into the job result folder). After promotion + repoint
-      of BOTH app rows: E01 probe with Container-path check, then S01-S03 —
-      they are currently red on exactly this bug and should go green
+- [ ] BV-BRC-Web#1409 (typed entity rows) awaiting upstream review. It IS
+      live on alpha already (/js/p3/widget/app/PredictStructure.js is
+      byte-identical to local). The old "the bundle blocks it" note was
+      wrong — see STATUS open item 2
+- [ ] BV-BRC-Web: two form defects found by task 23519232 — the DNA/RNA
+      selectors can submit a *directory* (WorkspaceObjectSelector.js:845),
+      and AppTests/inputs/*.fasta are typed `reads`, which the selectors'
+      type filter excludes. Retype the inputs; reject directories in
+      getValues()
+- [ ] Alpha eye-icon (#1403): verify functionally, by opening a job result.
+      Grepping for ViewPredictStructureReport proves nothing — the symbol is
+      absent from our own checkout too
 - [ ] stabiliNNatorApp: nothing outstanding — #16 (partition), #17 (gpu2 +
       600s runtime), #18/#19 (upload location) all merged
 - [ ] BV-BRC-Web master has NO StabiliNNator submission form (#1403 went to
@@ -40,6 +43,14 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [ ] GoWe: test predict-structure CWL tool through GPU workers
 
 ## Done (since 2026-08-13 — see STATUS.md for detail)
+
+- [x] 2026-09-03: folding_260901.1 verified in production, **64/64** matrix
+      (52 positive + all 12 rejection cases). Both app rows confirmed on the
+      new image from the user's own morning jobs. #22 TSV typing and #23
+      residue labels both confirmed live; the S04 counterfactual reads
+      "old lookup would mislabel 86/88" on raw 3ft7
+- [x] 2026-09-03: matrix case N03 had been passing for the wrong reason
+      (inputs/not_fasta.txt was missing from the workspace); fixture uploaded
 
 - [x] #106 — `prune_raw_output` drops `raw_output/` after `run_report`/finalize
       and before the upload, guarded on `raw/` being complete (PR #111)
