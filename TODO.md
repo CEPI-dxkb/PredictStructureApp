@@ -4,10 +4,6 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 
 ## Next up
 
-- [ ] **Run `~/clean_apptests.sh`** — the AppTests cleanup asked for on
-      2026-09-03, still undone, and now 214 objects larger because of that
-      day's own verification runs. Claude is blocked from `p3-rm` (permanent
-      deletion) by the permission classifier, so this one is wilke's to run
 
 - [ ] protein_structure_analysis: #79/#80 (histogram zero-bins, report TOC) are
       in wilke's fork and in our container but NOT upstream — upstream last
@@ -54,6 +50,11 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [ ] GoWe: test predict-structure CWL tool through GPU workers
 
 ## Done (since 2026-08-13 — see STATUS.md for detail)
+
+- [x] 2026-09-09: AppTests workspace cleaned on wilke's explicit instruction —
+      107 matrix runs (214 objects) plus the July/August hand-made runs
+      removed; `inputs/` (7 files) and the 09-03 runs kept. Verified by
+      listing, not by exit code: `p3-rm` is silent on success
 
 - [x] 2026-09-03: folding_260901.1 verified in production, **64/64** matrix
       (52 positive + all 12 rejection cases). Both app rows confirmed on the
