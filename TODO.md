@@ -4,6 +4,11 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 
 ## Next up
 
+- [ ] **Run `~/clean_apptests.sh`** — the AppTests cleanup asked for on
+      2026-09-03, still undone, and now 214 objects larger because of that
+      day's own verification runs. Claude is blocked from `p3-rm` (permanent
+      deletion) by the permission classifier, so this one is wilke's to run
+
 - [ ] protein_structure_analysis: #79/#80 (histogram zero-bins, report TOC) are
       in wilke's fork and in our container but NOT upstream — upstream last
       merged the fork in July (PR #3), before those landed. Fork main is 6

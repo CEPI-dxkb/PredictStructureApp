@@ -1,6 +1,6 @@
 # Project Status
 
-**Last updated:** 2026-09-03
+**Last updated:** 2026-09-09
 **Current version:** v0.17.0 (HEAD: 0f6a241)
 **Production (alpha) container:** `folding_260901.1.sif` — PredictStructure + StabiliNNator, both verified
 
@@ -14,6 +14,15 @@ residue labels). Both StabiliNNator fixes confirmed in production — see
 `docs/test-report-260903-api.md`.
 
 Open items, all outside this container:
+
+0. **The AppTests workspace cleanup was never run** — asked for on 2026-09-03
+   and still pending. It is now larger, not smaller: the two verification runs
+   that day added 107 matrix runs (214 objects, tags `_20260903_110826` and
+   `_20260903_113341`). Claude cannot do it — `p3-rm` is blocked by the
+   auto-mode permission classifier as a permanent deletion — so this needs
+   wilke. Complete script at `~/clean_apptests.sh` (NOT in the repo, but not
+   in `/tmp` either, so it survives a reboot). Every verdict it deletes is
+   already committed in `docs/test-reports/matrix_20260903_*.json`.
 
 1. **Two UI-side defects found by a real failed submission** (task 23519232):
    the form can submit a *directory* as `dna_file`. The workspace test inputs
