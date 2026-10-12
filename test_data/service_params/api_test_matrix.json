@@ -643,6 +643,15 @@
       "tool": "boltz",
       "rna_file": "rna.fasta",
       "expected": "pass"
+    },
+    {
+      "id": "S04",
+      "name": "stabilinnator_multichain",
+      "app": "StabiliNNator",
+      "input_file": "3ft7.pdb",
+      "analysis_type": "both",
+      "expect_output": "_report.html",
+      "expected": "pass"
     }
   ]
 }
