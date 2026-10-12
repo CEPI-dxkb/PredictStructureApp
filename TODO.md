@@ -40,8 +40,13 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [ ] Identify the preflight host (which machine writes the scheduler log?)
       and record it in MEMORY/STATUS — third deploy in a row where this
       unknown cost round trips
-- [ ] #96 — ESMFold2 MSA via our ColabFold server; blocked on the server
-      address; reuse `scripts/_colabfold_api_msa.py`, follow the openfold
+- [ ] #96 — ESMFold2 MSA via a ColabFold server. The old coconut server is
+      no longer running (2026-10-12); its data is still there: UniRef30 2302 +
+      envdb 202108 in /scout/data/colabfold (922 GB, envdb index possibly
+      never built), /scout/containers/mmseqs2.sif, conda env `colabfold`.
+      Blocked on deciding whether to re-stand-up a server, not on an address.
+      Client work can proceed against the public API with msa_server_url
+      overridable; reuse `scripts/_colabfold_api_msa.py`, follow the openfold
       interface pattern (do not write a new client)
 - [ ] #88 — eye-icon REPORT action; fold into the next consolidated
       BV-BRC-Web fork PR
