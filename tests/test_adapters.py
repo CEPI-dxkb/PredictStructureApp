@@ -506,7 +506,7 @@ class TestAdapterLengthLimits:
         assert adapter.display_name in msg
         assert f"{limit:,}" in msg
         assert f"{limit + 1:,}" in msg
-        assert "Use --force on the CLI to attempt anyway" in msg
+        assert "Use --force (or options.force in a job file) to attempt anyway" in msg
         assert "out-of-memory" in msg
         assert "GPU" not in msg
 
@@ -535,14 +535,36 @@ class TestAdapterLengthLimits:
         with pytest.raises(ValueError, match=r"1,501 residues"):
             ESMFoldAdapter().validate_entities(el)
 
+    def test_esmfold_cpu_skips_limit(self):
+        """The cap guards GPU memory; ESMFold on CPU uses host RAM."""
+        from predict_structure.adapters.esmfold import ESMFoldAdapter
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "A" * 1501)
+        ESMFoldAdapter().validate_entities(el, device="cpu")  # should not raise
+        with pytest.raises(ValueError, match=r"1,500"):
+            ESMFoldAdapter().validate_entities(el, device="gpu")
+
+    def test_gpu_only_tool_capped_on_cpu(self):
+        """``device="cpu"`` lifts the cap only for tools that do not need a GPU."""
+        from predict_structure.adapters.esmfold2 import ESMFold2Adapter
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "A" * 1501)
+        with pytest.raises(ValueError, match=r"1,500"):
+            ESMFold2Adapter().validate_entities(el, device="cpu")
+
     def test_chai_limit_not_bypassable(self, tmp_output):
         from predict_structure.adapters.chai import ChaiAdapter
 
         el = EntityList()
         el.add(EntityType.PROTEIN, "A" * 2049)
         adapter = ChaiAdapter()
-        with pytest.raises(ValueError, match=r"2,?048"):
+        with pytest.raises(ValueError, match=r"2,?048") as exc:
             adapter.prepare_input(el, tmp_output, force=True)
+        # ESMFold2 is capped at 1,500, below Chai's limit — never suggest it.
+        assert "ESMFold2" not in str(exc.value)
+        assert "Boltz or OpenFold" in str(exc.value)
 
 
 class TestAdapterRegistry:

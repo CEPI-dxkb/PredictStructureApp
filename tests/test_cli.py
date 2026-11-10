@@ -997,6 +997,47 @@ class TestPerToolLengthLimitsCLI:
         assert result.exit_code == 0, result.output
         assert "esm-fold-hf" in result.output
 
+    def test_esmfold_cpu_over_limit_accepted(self, tmp_path):
+        """The cap guards GPU memory; ESMFold on CPU runs in host RAM."""
+        result = CliRunner().invoke(main, [
+            "esmfold", "--protein", str(self._fasta(tmp_path, 1501)),
+            "-o", str(tmp_path / "out"), "--debug", "--device", "cpu",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "esm-fold-hf" in result.output
+
+    def test_esmfold_gpu_over_limit_rejected(self, tmp_path):
+        result = CliRunner().invoke(main, [
+            "esmfold", "--protein", str(self._fasta(tmp_path, 1501)),
+            "-o", str(tmp_path / "out"), "--debug", "--device", "gpu",
+        ])
+        assert result.exit_code == 2
+        assert "1,500" in result.output
+
+    def test_preflight_rejects_over_limit_protein_file(self, tmp_path):
+        import json as _json
+
+        result = CliRunner().invoke(main, [
+            "preflight", "--tool", "esmfold",
+            "--protein", str(self._fasta(tmp_path, 1600)),
+        ])
+        assert result.exit_code == 3, result.output
+        payload = _json.loads(result.output.strip().splitlines()[-1])
+        assert payload["error"]["code"] == "invalid_input"
+        assert payload["error"]["resolved_tool"] == "esmfold"
+        assert "1,500" in payload["error"]["message"]
+
+    def test_preflight_accepts_under_limit_protein_file(self, tmp_path):
+        import json as _json
+
+        result = CliRunner().invoke(main, [
+            "preflight", "--tool", "esmfold",
+            "--protein", str(self._fasta(tmp_path, 1400)),
+        ])
+        assert result.exit_code == 0, result.output
+        payload = _json.loads(result.output.strip().splitlines()[-1])
+        assert payload["resolved_tool"] == "esmfold"
+
     def test_chai_token_limit_not_bypassed_by_force(self, tmp_path):
         result = CliRunner().invoke(main, [
             "chai", "--protein", str(self._fasta(tmp_path, 2049)),
