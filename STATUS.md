@@ -1,6 +1,6 @@
 # Project Status
 
-**Last updated:** 2026-09-09
+**Last updated:** 2026-11-10
 **Current version:** v0.17.0 (HEAD: 0f6a241)
 **Production (alpha) container:** `folding_260901.1.sif` — PredictStructure + StabiliNNator, both verified
 
@@ -30,12 +30,45 @@ Open items, all outside this container:
    (`/js/p3/widget/app/PredictStructure.js` is byte-identical to local).
 3. **BV-BRC-Web#1407** — StabiliNNator submission form (the service is
    otherwise API-only; CEPI-dxkb/stabiliNNatorApp#20).
-4. **#116** — Jobs-page REPORT action, review 2026-08-27.
+4. **#116** — Jobs-page REPORT action: BV-BRC-Web PR #1502 is open and
+   blocked on a required upstream review; not seen in a browser yet.
 5. The preflight host's container cache still has no eviction, and a failed
    image pull still surfaces as an empty "Error submitting job". Worth an
    upstream issue to BV-BRC infra.
 
 ## What's done
+
+### Session 2026-11-10: #77, #76 merged; #116 PR open upstream
+
+Merged to main (all reviewed twice, Fable then Opus fixes):
+
+- **#77 / PR #121** — per-adapter `MAX_RESIDUES` (boltz/openfold 3000,
+  alphafold 2500, esmfold/esmfold2 1500; chai keeps its 2048 non-bypassable
+  cap) with a clear error instead of GPU OOM. `--force` (or `options.force`
+  in a job file) bypasses; CPU runs of non-GPU tools are not capped; preflight
+  applies the cap. **The limits are unmeasured** (taken from the issue).
+  BV-BRC jobs cannot pass `--force`, so there the caps are hard — decide
+  before the next container build. Issue #77 stays open: app-spec/UI side.
+- **#76 / PR #122** — `write_dssp` runs mkdssp after prediction and writes
+  `predictions/model_1.dssp` + `model_1.ss3.txt`; the Perl `run_report`
+  passes `--ss-file` and retries without it only on exit code 2.
+  mkdssp quirks found by running it: it rejects PDBs without CRYST1 and
+  drops the ATOM line after `PARENT N/A` (ESMFold), so a temp copy of
+  coordinate records plus a dummy CRYST1 is fed in.
+- **protein_structure_analysis PR #14** — `protein_compare characterize
+  --ss-file`. It must be in the container before #122's file is used (the
+  Perl retry covers older `protein_compare`); `protein_compare` is installed
+  unpinned in the SIF.
+- Full suite on combined main: 654 passed, 10 skipped.
+
+Not merged: **BV-BRC-Web PR #1502** (#116) — upstream requires a review; no
+`--admin`/`--auto` used.
+
+Known gaps: protein_compare's own DSSP wrapper still fails on predicted
+models lacking CRYST1 (falls back to its heuristic); mixed protein+NA and
+HETATM-backbone models fall back to protein_compare's SS; CWL path drops
+`--force` and has no `--ss-file`; ESMFold cap sums chains; Boltz YAML and
+ligand atoms are not counted toward the caps.
 
 ### Session 2026-09-03: folding_260901.1 verified in production, 64/64
 

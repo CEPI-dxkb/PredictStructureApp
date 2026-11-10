@@ -4,6 +4,18 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 
 ## Next up
 
+- [ ] Review the #77 caps before the next container build: measure real
+      limits per tool, and decide whether BV-BRC jobs get a `force` parameter
+      (they cannot pass `--force`, so the caps are hard there). Add the
+      app-spec/UI side, then close #77
+- [ ] Next container build: pin `protein_compare` and include
+      protein_structure_analysis PR #14 so #76's `--ss-file` takes effect
+- [ ] Decide: make protein_compare's DSSP wrapper use a CRYST1 temp copy
+      (it falls back to the Calpha heuristic on predicted models today)
+- [ ] BV-BRC-Web PR #1502 (#116) — waiting on an upstream review; check the
+      eye icon / report path in a browser. Comment/close #76 and #116 as they land
+- [ ] #18 DSSR licence vs open-source fallback; #73 needs a repro; #72 needs
+      a live check before closing
 
 - [ ] protein_structure_analysis: #79/#80 (histogram zero-bins, report TOC) are
       in wilke's fork and in our container but NOT upstream — upstream last
@@ -56,6 +68,9 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 
 ## Done (since 2026-08-13 — see STATUS.md for detail)
 
+- [x] 2026-11-10: #77 (PR #121) and #76 (PR #122) merged, plus
+      protein_structure_analysis PR #14; 654 passed on combined main. Their
+      worktrees and local branches removed
 - [x] 2026-09-09: AppTests workspace cleaned on wilke's explicit instruction —
       107 matrix runs (214 objects) plus the July/August hand-made runs
       removed; `inputs/` (7 files) and the 09-03 runs kept. Verified by
