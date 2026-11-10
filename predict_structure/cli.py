@@ -656,7 +656,8 @@ def run_prediction(
     # Surface as a plain message, not a traceback: this reaches BV-BRC users
     # in the job error stream, where a click/AppScript stack is noise (#84).
     try:
-        adapter.validate_entities(entity_list)
+        adapter.validate_entities(entity_list, force=shared.get("force", False),
+                                  device=shared.get("device"))
     except ValueError as exc:
         logger.error("Entity validation failed: %s", exc)
         click.echo(f"Error: {exc}", err=True)
@@ -982,6 +983,7 @@ def _run_job_file(job_path: Path, base_output_dir: Path | None) -> None:
             "cwl_tool": options.get("cwl_tool"),
             "debug": options.get("debug", False),
             "emit_rocrate": options.get("emit_rocrate", True),
+            "force": options.get("force", False),
         }
 
         entity_inputs = {
@@ -1365,12 +1367,18 @@ def preflight(tool, protein, msa, use_msa_server, device,
         if flag:
             declared.add(entity_type)
 
+    # A real --protein file (local runs; BV-BRC's preflight never passes one)
+    # feeds auto-selection and the per-tool length check below.
+    file_entities = None
+    if protein:
+        file_entities = _build_entity_list(
+            protein=(protein,), dna=(), rna=(), ligand=(), smiles=(),
+        )
+
     # Resolve tool
     if tool == "auto":
-        if protein:
-            entity_list = _build_entity_list(
-                protein=(protein,), dna=(), rna=(), ligand=(), smiles=(),
-            )
+        if file_entities is not None:
+            entity_list = file_entities
         else:
             # No file access here — synthesize one placeholder entity per
             # declared kind so _auto_select_tool sees the real entity mix.
@@ -1401,6 +1409,13 @@ def preflight(tool, protein, msa, use_msa_server, device,
     if declared:
         try:
             adapter.validate_entity_types(declared)
+        except ValueError as exc:
+            _preflight_reject(str(exc), resolved_tool=resolved)
+
+    # Too long for the tool (#77). Preflight has no --force, so no bypass here.
+    if file_entities is not None:
+        try:
+            adapter.validate_length(file_entities, device=device)
         except ValueError as exc:
             _preflight_reject(str(exc), resolved_tool=resolved)
 

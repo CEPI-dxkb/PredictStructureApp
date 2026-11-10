@@ -29,7 +29,7 @@
             "type": "wsfile",
             "required": 0,
             "label": "Protein FASTA",
-            "desc": "Protein sequence(s) in FASTA format (.fasta, .fa). Multi-chain complexes: include multiple sequences in one file. Maximum 26 sequences and 10,000 total residues per job. Boltz also accepts a YAML manifest for full feature support."
+            "desc": "Protein sequence(s) in FASTA format (.fasta, .fa). Multi-chain complexes: include multiple sequences in one file. Maximum 26 sequences and 10,000 total residues per job, and lower per-tool limits on total residues: Chai-1 2,048; ESMFold and ESMFold2 1,500; AlphaFold 2 2,500; Boltz and OpenFold 3,000. Boltz also accepts a YAML manifest for full feature support."
         },
         {
             "id": "dna_file",

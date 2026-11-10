@@ -144,8 +144,8 @@ class ChaiAdapter(BaseAdapter):
                 f"Chai-1 input has {total:,} total tokens, which exceeds its "
                 f"hard limit of {self.CHAI_MAX_TOKENS:,} tokens (amino acids, "
                 f"nucleotides, and small-molecule atoms combined). "
-                f"For larger inputs, use ESMFold2, Boltz, or OpenFold, which "
-                f"support longer sequences."
+                f"For larger inputs, use Boltz or OpenFold, which accept up "
+                f"to 3,000 residues."
             )
 
     def build_command(

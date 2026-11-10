@@ -87,13 +87,48 @@ class BaseAdapter(ABC):
     #: Entity types supported by this tool
     supported_entities: frozenset[EntityType] = frozenset({EntityType.PROTEIN})
 
-    def validate_entities(self, entity_list: EntityList) -> None:
-        """Check that all entity types in the list are supported by this tool.
+    #: Conservative per-tool cap on total residues, or None for no cap. Practical
+    #: limits vary by GPU; ``--force`` lifts this cap (see ``validate_length``).
+    #: Counts sequence residues only (no ligand atoms); Boltz YAML pass-through is not checked.
+    MAX_RESIDUES: int | None = None
+
+    def validate_entities(
+        self, entity_list: EntityList, *, force: bool = False, device: str | None = None,
+    ) -> None:
+        """Check entity types are supported and the input is not too long.
 
         Raises:
-            ValueError: If any entity type is not in ``supported_entities``.
+            ValueError: If any entity type is not in ``supported_entities``, or
+                the input exceeds ``MAX_RESIDUES`` and ``force`` is not set.
         """
         self.validate_entity_types(entity_list.entity_types)
+        self.validate_length(entity_list, force=force, device=device)
+
+    def validate_length(
+        self, entity_list: EntityList, *, force: bool = False, device: str | None = None,
+    ) -> None:
+        """Reject inputs above ``MAX_RESIDUES`` with a clear message, not a CUDA OOM.
+
+        The cap guards GPU memory. A tool that does not need a GPU
+        (``requires_gpu`` False, i.e. ESMFold) runs in host RAM on
+        ``device="cpu"``, so the cap does not apply there.
+
+        Raises:
+            ValueError: If ``MAX_RESIDUES`` is set, ``force`` is False, and the
+                total residue count exceeds it.
+        """
+        if self.MAX_RESIDUES is None or force:
+            return
+        if device == "cpu" and not self.requires_gpu:
+            return
+        total = entity_list.total_residues
+        if total > self.MAX_RESIDUES:
+            raise ValueError(
+                f"Input has {total:,} residues — "
+                f"{self.display_name or self.tool_name} supports up to "
+                f"{self.MAX_RESIDUES:,} residues. Use --force (or options.force in "
+                f"a job file) to attempt anyway (may fail with out-of-memory)."
+            )
 
     def validate_entity_types(self, entity_types: Iterable[EntityType]) -> None:
         """Check entity *types* alone, without needing the entities themselves.

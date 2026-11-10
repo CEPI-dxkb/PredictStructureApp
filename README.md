@@ -56,7 +56,7 @@ Input is specified via explicit entity flags instead of a positional file argume
 | `--ligand` | string | Ligand CCD code — 1-3 or 5 alphanumeric characters (e.g. `ATP`, `NAG`, `A1H1F`). Use this for single glycan residues too (`NAG`, `MAN`); linked glycan strings like `NAG(4-1 NAG)` are rejected — pass each residue separately or use `--smiles`. (repeatable) |
 | `--smiles` | string | SMILES string for arbitrary small molecules (repeatable) |
 
-A multi-sequence FASTA file passed to `--protein` is treated as a multi-chain complex (not a batch of separate predictions). The same applies to `--dna` and `--rna`: every record in any of the three becomes one chain, and all chains from all inputs are folded together as one complex. The 10,000-residue soft limit counts all chains combined; each FASTA file may contain at most 26 records (both overridable with `--force`).
+A multi-sequence FASTA file passed to `--protein` is treated as a multi-chain complex (not a batch of separate predictions). The same applies to `--dna` and `--rna`: every record in any of the three becomes one chain, and all chains from all inputs are folded together as one complex. The 10,000-residue soft limit counts all chains combined; each FASTA file may contain at most 26 records (both overridable with `--force`). Each tool also has its own residue cap, enforced with a clear error before launch (also overridable with `--force`, except Chai-1's hard 2,048-token limit): Chai-1 2,048; ESMFold and ESMFold2 1,500; AlphaFold 2 2,500; Boltz and OpenFold 3,000. ESMFold's cap guards GPU memory, so it does not apply with `--device cpu`.
 
 ### Basic examples
 
@@ -178,7 +178,7 @@ Each job entry supports:
 | `ligands` | list of strings | Ligand CCD codes, 1-3 or 5 alphanumeric (incl. single glycan residues like NAG, MAN; linked glycan strings are rejected) |
 | `smiles` | list of strings | SMILES strings |
 | `tool` | string | Tool name (optional — auto-selected if omitted) |
-| `options` | dict | Any shared or tool-specific options |
+| `options` | dict | Any shared or tool-specific options (e.g. `options: {force: true}` is the job-file equivalent of `--force`) |
 
 ### Global options
 
@@ -193,6 +193,7 @@ These options are available on all tool subcommands:
 | `--msa` | path | none | MSA file (.a3m, .sto, .pqt) |
 | `--output-format` | enum | `pdb` | `pdb` or `mmcif` |
 | `--debug` | flag | off | Print the command instead of executing |
+| `--force` | flag | off | Bypass the 10,000-residue soft limit, the 26-record cap, and the per-tool residue cap (not Chai-1 2,048) |
 
 ### Execution options
 
