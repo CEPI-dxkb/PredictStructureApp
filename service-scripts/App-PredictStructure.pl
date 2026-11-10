@@ -1097,13 +1097,22 @@ sub run_report {
     # Reuse the DSSP assignment predict-structure persisted (best-effort;
     # absent for NA-only models or when mkdssp is unavailable).
     my $ss3_file = "$output_dir/predictions/model_1.ss3.txt";
+    my @cmd_without_ss = @cmd;
+    my $passed_ss_file = 0;
     if (-f $ss3_file) {
         push @cmd, "--ss-file", $ss3_file;
+        $passed_ss_file = 1;
     }
 
     print "Generating characterization report: " . join(" ", @cmd) . "\n";
 
     my $rc = system(@cmd);
+    if ($rc != 0 && $passed_ss_file) {
+        # An older protein_compare does not know --ss-file and exits 2.
+        print STDERR "Warning: report generation failed (rc=" . ($rc >> 8)
+            . ") with --ss-file; retrying once without it\n";
+        $rc = system(@cmd_without_ss);
+    }
     if ($rc != 0) {
         print STDERR "Warning: report generation failed (rc=" . ($rc >> 8) . "), continuing with upload\n";
         return;

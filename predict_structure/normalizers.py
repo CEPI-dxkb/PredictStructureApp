@@ -232,10 +232,13 @@ _DSSP_TO_SS3 = {"H": "H", "G": "H", "I": "H", "E": "E", "B": "E"}
 
 
 def _has_protein_residues(pdb_path: Path) -> bool:
-    """True if the PDB has at least one alpha-carbon (atom name `` CA ``)."""
+    """True if the PDB has at least one protein alpha-carbon (``ATOM`` record, atom name `` CA ``).
+
+    HETATM is excluded: a ligand or ion named `` CA `` (calcium) is not protein.
+    """
     with pdb_path.open() as fh:
         for line in fh:
-            if line.startswith(("ATOM  ", "HETATM")) and line[12:16] == " CA ":
+            if line.startswith("ATOM  ") and line[12:16] == " CA ":
                 return True
     return False
 

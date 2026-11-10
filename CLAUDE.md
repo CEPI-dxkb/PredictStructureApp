@@ -256,7 +256,9 @@ output/
 ```
 - `predictions/model_1.dssp` + `model_1.ss3.txt` (per-residue H/E/C) are written
   best-effort after normalization when `mkdssp` is available and the model has
-  protein residues; absent otherwise. The report reuses `model_1.ss3.txt`.
+  protein residues; absent otherwise. For protein-only models the report reuses
+  `model_1.ss3.txt`; for mixed protein+DNA/RNA models the residue counts differ,
+  so `protein_compare` warns and runs DSSP itself.
 - `metadata/metadata.json` is the **single source of truth** for run
   trace (tool, version, command, container, backend, params, inputs[]).
 - `results.json` is a slim CWL-style outputs map for UIs/pipelines.
