@@ -30,6 +30,8 @@ class AlphaFoldAdapter(BaseAdapter):
     requires_gpu: bool = True
     min_gpu_memory_mb: int = 14000
     supported_entities: frozenset[EntityType] = frozenset({EntityType.PROTEIN})
+    #: Conservative value from issue #77; not measured here.
+    MAX_RESIDUES: int | None = 2500
 
     def __init__(self) -> None:
         self._use_precomputed_msas: bool = False

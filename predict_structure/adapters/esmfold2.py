@@ -198,6 +198,9 @@ class ESMFold2Adapter(BaseAdapter):
     #: adapter inherited BaseAdapter's 8000 MiB, so the GPU precheck would wave
     #: through a host with 8-14 GB free and the run would then OOM.
     min_gpu_memory_mb: int = 18000
+    #: Conservative value from issue #77. docs/esmfold2-benchmarks.md measured
+    #: only up to 434 residues (16.9 GB VRAM on H200), so 1500 is unverified.
+    MAX_RESIDUES: int | None = 1500
     supported_entities: frozenset[EntityType] = frozenset({
         EntityType.PROTEIN, EntityType.DNA, EntityType.RNA,
         EntityType.LIGAND, EntityType.SMILES,

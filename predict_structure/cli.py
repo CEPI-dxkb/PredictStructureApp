@@ -656,7 +656,7 @@ def run_prediction(
     # Surface as a plain message, not a traceback: this reaches BV-BRC users
     # in the job error stream, where a click/AppScript stack is noise (#84).
     try:
-        adapter.validate_entities(entity_list)
+        adapter.validate_entities(entity_list, force=shared.get("force", False))
     except ValueError as exc:
         logger.error("Entity validation failed: %s", exc)
         click.echo(f"Error: {exc}", err=True)

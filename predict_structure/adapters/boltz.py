@@ -33,6 +33,8 @@ class BoltzAdapter(BaseAdapter):
         EntityType.PROTEIN, EntityType.DNA, EntityType.RNA,
         EntityType.LIGAND, EntityType.SMILES,
     })
+    #: Conservative value from issue #77; not measured here.
+    MAX_RESIDUES: int | None = 3000
 
     def prepare_input(
         self,

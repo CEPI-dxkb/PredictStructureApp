@@ -28,6 +28,8 @@ class ESMFoldAdapter(BaseAdapter):
     requires_gpu: bool = False
     min_gpu_memory_mb: int = 4000
     supported_entities: frozenset[EntityType] = frozenset({EntityType.PROTEIN})
+    #: Conservative value from issue #77; not measured here.
+    MAX_RESIDUES: int | None = 1500
 
     def prepare_input(
         self,

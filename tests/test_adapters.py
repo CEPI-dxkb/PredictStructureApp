@@ -483,6 +483,66 @@ class TestAdapterSequenceValidation:
         assert caplog.text == ""  # no warnings for ligands
 
 
+LENGTH_LIMITS = [
+    ("boltz", 3000),
+    ("openfold", 3000),
+    ("alphafold", 2500),
+    ("esmfold", 1500),
+    ("esmfold2", 1500),
+]
+
+
+class TestAdapterLengthLimits:
+    @pytest.mark.parametrize("tool,limit", LENGTH_LIMITS)
+    def test_over_limit_names_tool_and_limit(self, tool, limit):
+        from predict_structure.adapters import get_adapter
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "A" * (limit + 1))
+        adapter = get_adapter(tool)
+        with pytest.raises(ValueError) as exc:
+            adapter.validate_entities(el)
+        msg = str(exc.value)
+        assert adapter.display_name in msg
+        assert f"{limit:,}" in msg
+        assert f"{limit + 1:,}" in msg
+        assert "--force" in msg
+
+    @pytest.mark.parametrize("tool,limit", LENGTH_LIMITS)
+    def test_at_limit_passes(self, tool, limit):
+        from predict_structure.adapters import get_adapter
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "A" * limit)
+        get_adapter(tool).validate_entities(el)  # should not raise
+
+    @pytest.mark.parametrize("tool,limit", LENGTH_LIMITS)
+    def test_force_bypasses_limit(self, tool, limit):
+        from predict_structure.adapters import get_adapter
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "A" * (limit + 1))
+        get_adapter(tool).validate_entities(el, force=True)  # should not raise
+
+    def test_limit_counts_all_chains(self):
+        from predict_structure.adapters.esmfold import ESMFoldAdapter
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "A" * 1000, name="A")
+        el.add(EntityType.PROTEIN, "A" * 501, name="B")
+        with pytest.raises(ValueError, match=r"1,501 residues"):
+            ESMFoldAdapter().validate_entities(el)
+
+    def test_chai_limit_not_bypassable(self, tmp_output):
+        from predict_structure.adapters.chai import ChaiAdapter
+
+        el = EntityList()
+        el.add(EntityType.PROTEIN, "A" * 2049)
+        adapter = ChaiAdapter()
+        with pytest.raises(ValueError, match=r"2,?048"):
+            adapter.prepare_input(el, tmp_output, force=True)
+
+
 class TestAdapterRegistry:
     def test_get_adapter_all_tools(self):
         from predict_structure.adapters import get_adapter
