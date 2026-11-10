@@ -20,6 +20,8 @@ import hashlib
 import json
 import logging
 import shutil
+import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -219,6 +221,97 @@ def promote_best_model(output_dir: Path) -> Path | None:
     if cif_src.is_file():
         shutil.copy2(str(cif_src), str(output_dir / "model_1.cif"))
     return dst
+
+
+DSSP_TIMEOUT_SECONDS = 300
+
+_DUMMY_CRYST1 = "CRYST1    1.000    1.000    1.000  90.00  90.00  90.00 P 1           1"
+
+# DSSP 8-state -> 3-state; every other code (T, S, blank, ...) is coil.
+_DSSP_TO_SS3 = {"H": "H", "G": "H", "I": "H", "E": "E", "B": "E"}
+
+
+def _has_protein_residues(pdb_path: Path) -> bool:
+    """True if the PDB has at least one alpha-carbon (atom name `` CA ``)."""
+    with pdb_path.open() as fh:
+        for line in fh:
+            if line.startswith(("ATOM  ", "HETATM")) and line[12:16] == " CA ":
+                return True
+    return False
+
+
+def _parse_dssp_ss3(dssp_path: Path) -> str:
+    """Return one H/E/C character per residue row of a classic DSSP file."""
+    ss3: list[str] = []
+    in_table = False
+    for line in dssp_path.read_text().splitlines():
+        if line.startswith("  #  RESIDUE"):
+            in_table = True
+        elif in_table and len(line) > 16 and line[13] != "!":  # "!" = chain break
+            ss3.append(_DSSP_TO_SS3.get(line[16], "C"))
+    return "".join(ss3)
+
+
+def write_dssp(output_dir: Path) -> Path | None:
+    """Run ``mkdssp`` on ``predictions/model_1.pdb`` and persist the result.
+
+    Writes ``predictions/model_1.dssp`` (raw DSSP output) and
+    ``predictions/model_1.ss3.txt`` (one H/E/C character per residue, DSSP
+    row order), which ``protein_compare characterize --ss-file`` reuses.
+
+    DSSP is supplementary: a missing binary, a mkdssp error, a timeout or an
+    unparseable result logs a warning and writes nothing — it never raises.
+    DNA/RNA-only models are skipped (DSSP is protein-only).
+
+    Returns:
+        Path to ``model_1.ss3.txt``, or None when nothing was written.
+    """
+    pdb_path = output_dir / PREDICTIONS_SUBDIR / "model_1.pdb"
+    dssp_path = pdb_path.parent / "model_1.dssp"
+    ss3_path = pdb_path.parent / "model_1.ss3.txt"
+    try:
+        if not pdb_path.is_file() or not _has_protein_residues(pdb_path):
+            logger.info("No protein residues in %s — skipping DSSP", pdb_path)
+            return None
+
+        # mkdssp CLI differs across major versions: try positional args
+        # (2.x/4.x), then -i/-o (2.x/3.x).
+        ss3 = ""
+        with tempfile.TemporaryDirectory() as tmp:
+            # mkdssp 4.x rejects a PDB without a CRYST1 record, and predicted
+            # models have none: give it a copy with a dummy one.
+            src = Path(tmp) / "model_1.pdb"
+            body = pdb_path.read_text()
+            if not any(l.startswith("CRYST1") for l in body.splitlines()):
+                body = _DUMMY_CRYST1 + "\n" + body
+            src.write_text(body)
+            for argv in (
+                ["mkdssp", str(src), str(dssp_path)],
+                ["mkdssp", "-i", str(src), "-o", str(dssp_path)],
+            ):
+                dssp_path.unlink(missing_ok=True)
+                proc = subprocess.run(
+                    argv, capture_output=True, text=True,
+                    timeout=DSSP_TIMEOUT_SECONDS, check=False,
+                )
+                if proc.returncode == 0 and dssp_path.is_file():
+                    ss3 = _parse_dssp_ss3(dssp_path)
+                    if ss3:
+                        break
+                logger.debug(
+                    "%s exited %s: %s", argv[0], proc.returncode,
+                    (proc.stderr or "").strip()[:300],
+                )
+        if not ss3:
+            raise RuntimeError("mkdssp produced no usable secondary-structure output")
+
+        ss3_path.write_text(ss3 + "\n")
+        return ss3_path
+    except Exception as exc:
+        logger.warning("DSSP step skipped: %s", exc)
+        dssp_path.unlink(missing_ok=True)
+        ss3_path.unlink(missing_ok=True)
+        return None
 
 
 def _sha256_of(path: Path, buf_size: int = 64 * 1024) -> str:

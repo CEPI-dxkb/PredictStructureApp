@@ -254,6 +254,9 @@ output/
 │                        # ro-crate-metadata.json (formal RO-Crate provenance)
 └── raw/                 # Original tool output, opaque
 ```
+- `predictions/model_1.dssp` + `model_1.ss3.txt` (per-residue H/E/C) are written
+  best-effort after normalization when `mkdssp` is available and the model has
+  protein residues; absent otherwise. The report reuses `model_1.ss3.txt`.
 - `metadata/metadata.json` is the **single source of truth** for run
   trace (tool, version, command, container, backend, params, inputs[]).
 - `results.json` is a slim CWL-style outputs map for UIs/pipelines.

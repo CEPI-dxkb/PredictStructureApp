@@ -483,6 +483,193 @@ class TestPerlReportContract:
         # both present somewhere in the sub.
         assert m.group(0).count("push @cmd") == 1
 
+    def test_passes_ss_file_only_when_present(self):
+        import re
+
+        body = self._run_report()
+        assert re.search(
+            r'if \(-f \$ss3_file\) \{\s*push \@cmd, "--ss-file", \$ss3_file;',
+            body,
+        ), "--ss-file must be pushed only inside an -f guard"
+        assert "$output_dir/predictions/model_1.ss3.txt" in body
+
+
+def _pdb_atom(serial, name, resname, chain, resnum):
+    return (
+        f"ATOM  {serial:5d} {name:4s} {resname:3s} {chain}{resnum:4d}    "
+        f"{0.0:8.3f}{0.0:8.3f}{0.0:8.3f}  1.00  0.00\n"
+    )
+
+
+def _dssp_text(rows):
+    """Minimal classic DSSP file; rows are (chain, ss) or None for a chain break."""
+    lines = ["==== Secondary structure definition by the program DSSP ====\n",
+             "  #  RESIDUE AA STRUCTURE BP1 BP2  ACC\n"]
+    for i, row in enumerate(rows, 1):
+        if row is None:
+            lines.append(f"{i:5d}" + " " * 8 + "!" + " " * 20 + "\n")
+        else:
+            chain, ss = row
+            lines.append(f"{i:5d}{i:5d} {chain} A  {ss}    0   0\n")
+    return "".join(lines)
+
+
+class TestWriteDssp:
+    def _protein_model(self, tmp_output):
+        pred = tmp_output / "predictions"
+        pred.mkdir()
+        (pred / "model_1.pdb").write_text(
+            "".join(_pdb_atom(i, " CA ", "ALA", "A", i) for i in range(1, 9))
+        )
+        return pred
+
+    @staticmethod
+    def _fake_mkdssp(rows, returncode=0):
+        import subprocess
+
+        def _run(argv, **kwargs):
+            if returncode == 0:
+                Path(argv[-1]).write_text(_dssp_text(rows))
+            return subprocess.CompletedProcess(argv, returncode, "", "boom")
+
+        return _run
+
+    def test_writes_dssp_and_three_state(self, tmp_output):
+        from unittest import mock
+
+        from predict_structure.normalizers import write_dssp
+
+        pred = self._protein_model(tmp_output)
+        rows = [("A", s) for s in "HGIE"] + [None] + [("B", s) for s in "BTS "]
+        with mock.patch(
+            "predict_structure.normalizers.subprocess.run",
+            side_effect=self._fake_mkdssp(rows),
+        ) as run:
+            path = write_dssp(tmp_output)
+
+        assert path == pred / "model_1.ss3.txt"
+        assert path.read_text().strip() == "HHHEECCC"
+        assert (pred / "model_1.dssp").is_file()
+        argv = run.call_args.args[0]
+        assert isinstance(argv, list) and argv[0] == "mkdssp"
+        assert not run.call_args.kwargs.get("shell")
+
+    def test_mkdssp_gets_a_copy_with_cryst1(self, tmp_output):
+        """mkdssp 4.x rejects a PDB without CRYST1 (verified in the SIF);
+        predicted models have none, so the step must supply a dummy record
+        and must not modify the user-facing model_1.pdb."""
+        import subprocess
+        from unittest import mock
+
+        from predict_structure.normalizers import write_dssp
+
+        pred = self._protein_model(tmp_output)
+        original = (pred / "model_1.pdb").read_text()
+        seen = {}
+
+        def _run(argv, **kwargs):
+            seen["first_line"] = Path(argv[1]).read_text().splitlines()[0]
+            seen["src"] = argv[1]
+            Path(argv[-1]).write_text(_dssp_text([("A", s) for s in "HHHHEEEE"]))
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        with mock.patch("predict_structure.normalizers.subprocess.run", side_effect=_run):
+            assert write_dssp(tmp_output) is not None
+
+        assert seen["first_line"].startswith("CRYST1")
+        assert seen["src"] != str(pred / "model_1.pdb")
+        assert (pred / "model_1.pdb").read_text() == original
+
+    def test_falls_back_to_dash_i_dash_o_cli(self, tmp_output):
+        import subprocess
+        from unittest import mock
+
+        from predict_structure.normalizers import write_dssp
+
+        self._protein_model(tmp_output)
+        calls = []
+
+        def _run(argv, **kwargs):
+            calls.append(argv)
+            if "-i" not in argv:
+                return subprocess.CompletedProcess(argv, 1, "", "usage")
+            Path(argv[argv.index("-o") + 1]).write_text(
+                _dssp_text([("A", "H")] * 8)
+            )
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        with mock.patch("predict_structure.normalizers.subprocess.run", side_effect=_run):
+            path = write_dssp(tmp_output)
+
+        assert len(calls) == 2
+        assert path.read_text().strip() == "H" * 8
+
+    def test_missing_binary_writes_nothing(self, tmp_output):
+        from unittest import mock
+
+        from predict_structure.normalizers import write_dssp
+
+        pred = self._protein_model(tmp_output)
+        with mock.patch(
+            "predict_structure.normalizers.subprocess.run",
+            side_effect=FileNotFoundError("mkdssp"),
+        ):
+            assert write_dssp(tmp_output) is None
+        assert not (pred / "model_1.dssp").exists()
+        assert not (pred / "model_1.ss3.txt").exists()
+
+    def test_mkdssp_error_writes_nothing(self, tmp_output):
+        from unittest import mock
+
+        from predict_structure.normalizers import write_dssp
+
+        pred = self._protein_model(tmp_output)
+        with mock.patch(
+            "predict_structure.normalizers.subprocess.run",
+            side_effect=self._fake_mkdssp([], returncode=1),
+        ):
+            assert write_dssp(tmp_output) is None
+        assert not (pred / "model_1.dssp").exists()
+        assert not (pred / "model_1.ss3.txt").exists()
+
+    def test_timeout_writes_nothing(self, tmp_output):
+        import subprocess
+        from unittest import mock
+
+        from predict_structure.normalizers import write_dssp
+
+        pred = self._protein_model(tmp_output)
+        with mock.patch(
+            "predict_structure.normalizers.subprocess.run",
+            side_effect=subprocess.TimeoutExpired("mkdssp", 1),
+        ):
+            assert write_dssp(tmp_output) is None
+        assert not (pred / "model_1.ss3.txt").exists()
+
+    def test_nucleic_acid_only_is_skipped(self, tmp_output):
+        from unittest import mock
+
+        from predict_structure.normalizers import write_dssp
+
+        pred = tmp_output / "predictions"
+        pred.mkdir()
+        (pred / "model_1.pdb").write_text(
+            "".join(_pdb_atom(i, " C3'", "DA", "A", i) for i in range(1, 5))
+        )
+        with mock.patch("predict_structure.normalizers.subprocess.run") as run:
+            assert write_dssp(tmp_output) is None
+        run.assert_not_called()
+        assert not (pred / "model_1.dssp").exists()
+
+    def test_no_model_is_a_noop(self, tmp_output):
+        from unittest import mock
+
+        from predict_structure.normalizers import write_dssp
+
+        with mock.patch("predict_structure.normalizers.subprocess.run") as run:
+            assert write_dssp(tmp_output) is None
+        run.assert_not_called()
+
 
 class TestNormalizeChaiOutput:
     def test_normalize(self, tmp_path, tmp_output):

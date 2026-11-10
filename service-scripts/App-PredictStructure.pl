@@ -1094,6 +1094,13 @@ sub run_report {
         push @cmd, "--metadata", $metadata_json;
     }
 
+    # Reuse the DSSP assignment predict-structure persisted (best-effort;
+    # absent for NA-only models or when mkdssp is unavailable).
+    my $ss3_file = "$output_dir/predictions/model_1.ss3.txt";
+    if (-f $ss3_file) {
+        push @cmd, "--ss-file", $ss3_file;
+    }
+
     print "Generating characterization report: " . join(" ", @cmd) . "\n";
 
     my $rc = system(@cmd);
