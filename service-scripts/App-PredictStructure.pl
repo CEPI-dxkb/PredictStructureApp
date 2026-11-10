@@ -1107,14 +1107,15 @@ sub run_report {
     print "Generating characterization report: " . join(" ", @cmd) . "\n";
 
     my $rc = system(@cmd);
-    if ($rc != 0 && $passed_ss_file) {
-        # An older protein_compare does not know --ss-file and exits 2.
+    if ($rc != 0 && $passed_ss_file && (($rc >> 8) == 2)) {
+        # An older protein_compare does not know --ss-file: click usage error, exit 2.
         print STDERR "Warning: report generation failed (rc=" . ($rc >> 8)
             . ") with --ss-file; retrying once without it\n";
         $rc = system(@cmd_without_ss);
     }
     if ($rc != 0) {
-        print STDERR "Warning: report generation failed (rc=" . ($rc >> 8) . "), continuing with upload\n";
+        my $why = $rc == -1 ? "exec failed: $!" : "rc=" . ($rc >> 8);
+        print STDERR "Warning: report generation failed ($why), continuing with upload\n";
         return;
     }
     print "Report generated successfully\n";

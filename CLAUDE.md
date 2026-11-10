@@ -256,9 +256,12 @@ output/
 ```
 - `predictions/model_1.dssp` + `model_1.ss3.txt` (per-residue H/E/C) are written
   best-effort after normalization when `mkdssp` is available and the model has
-  protein residues; absent otherwise. For protein-only models the report reuses
-  `model_1.ss3.txt`; for mixed protein+DNA/RNA models the residue counts differ,
-  so `protein_compare` warns and runs DSSP itself.
+  protein residues; absent otherwise. The report reuses `model_1.ss3.txt` only
+  when its length matches the loader's residue count. For mixed protein+DNA/RNA
+  models, models with backbone-bearing HETATM residues (covalent ligands,
+  modified residues: counted by mkdssp, not by the loader) or any other length
+  mismatch, `protein_compare` warns and assigns secondary structure itself
+  (BioPython DSSP, which may fail without CRYST1, else a Cα heuristic).
 - `metadata/metadata.json` is the **single source of truth** for run
   trace (tool, version, command, container, backend, params, inputs[]).
 - `results.json` is a slim CWL-style outputs map for UIs/pipelines.

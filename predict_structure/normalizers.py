@@ -227,6 +227,9 @@ DSSP_TIMEOUT_SECONDS = 300
 
 _DUMMY_CRYST1 = "CRYST1    1.000    1.000    1.000  90.00  90.00  90.00 P 1           1"
 
+# Records copied (in order) into mkdssp's input.
+_COORD_RECORDS = ("ATOM  ", "HETATM", "TER", "MODEL", "ENDMDL", "END")
+
 # DSSP 8-state -> 3-state; every other code (T, S, blank, ...) is coil.
 _DSSP_TO_SS3 = {"H": "H", "G": "H", "I": "H", "E": "E", "B": "E"}
 
@@ -282,12 +285,14 @@ def write_dssp(output_dir: Path) -> Path | None:
         ss3 = ""
         with tempfile.TemporaryDirectory() as tmp:
             # mkdssp 4.x rejects a PDB without a CRYST1 record, and predicted
-            # models have none: give it a copy with a dummy one.
+            # models have none: give it a copy with a dummy one. Keep only
+            # coordinate records — mkdssp 4.0.4 drops the ATOM line after
+            # ESMFold's leading "PARENT N/A" record, losing residue 1.
             src = Path(tmp) / "model_1.pdb"
-            body = pdb_path.read_text()
-            if not any(l.startswith("CRYST1") for l in body.splitlines()):
-                body = _DUMMY_CRYST1 + "\n" + body
-            src.write_text(body)
+            lines = pdb_path.read_text().splitlines()
+            cryst1 = next((l for l in lines if l.startswith("CRYST1")), _DUMMY_CRYST1)
+            coords = [l for l in lines if l.startswith(_COORD_RECORDS)]
+            src.write_text("\n".join([cryst1, *coords]) + "\n")
             for argv in (
                 ["mkdssp", str(src), str(dssp_path)],
                 ["mkdssp", "-i", str(src), "-o", str(dssp_path)],

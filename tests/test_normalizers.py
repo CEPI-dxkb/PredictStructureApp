@@ -495,7 +495,8 @@ class TestPerlReportContract:
 
     def test_retries_once_without_ss_file_on_failure(self):
         """An older protein_compare rejects --ss-file (exit 2): retry once
-        without it, in list form, only when --ss-file was actually passed."""
+        without it, in list form, only when --ss-file was actually passed and
+        only for click's usage-error exit code 2 (not any failure, nor -1)."""
         import re
 
         body = self._run_report()
@@ -504,10 +505,10 @@ class TestPerlReportContract:
             'push @cmd, "--ss-file"'
         ), "fallback command must be copied before --ss-file is added"
         m = re.search(
-            r'if \(\$rc != 0 && \$passed_ss_file\) \{(.*?)\n    \}',
+            r'if \(\$rc != 0 && \$passed_ss_file && \(\(\$rc >> 8\) == 2\)\) \{(.*?)\n    \}',
             body, re.S,
         )
-        assert m, "no retry guarded by a failed run that passed --ss-file"
+        assert m, "no retry guarded by exit code 2 of a run that passed --ss-file"
         retry = m.group(1)
         assert "retrying once without" in retry, "the retry must be logged"
         assert re.search(r'\$rc = system\(\@cmd_without_ss\);', retry), \
@@ -603,6 +604,35 @@ class TestWriteDssp:
 
         assert seen["first_line"].startswith("CRYST1")
         assert seen["src"] != str(pred / "model_1.pdb")
+        assert (pred / "model_1.pdb").read_text() == original
+
+    def test_mkdssp_copy_drops_esmfold_parent_record(self, tmp_output):
+        """ESMFold PDBs start with 'PARENT N/A'; mkdssp 4.0.4 then drops the
+        next ATOM line (residue 1). Only coordinate records may be copied."""
+        import subprocess
+        from unittest import mock
+
+        from predict_structure.normalizers import write_dssp
+
+        pred = tmp_output / "predictions"
+        pred.mkdir()
+        atoms = [_pdb_atom(i, " CA ", "ALA", "A", i) for i in range(1, 9)]
+        original = "PARENT N/A\n" + "".join(atoms) + "TER\nEND\n"
+        (pred / "model_1.pdb").write_text(original)
+        seen = {}
+
+        def _run(argv, **kwargs):
+            seen.setdefault("lines", Path(argv[1]).read_text().splitlines())
+            Path(argv[-1]).write_text(_dssp_text([("A", "H")] * 8))
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        with mock.patch("predict_structure.normalizers.subprocess.run", side_effect=_run):
+            assert write_dssp(tmp_output) is not None
+
+        lines = seen["lines"]
+        assert lines[0].startswith("CRYST1")
+        assert not any(l.startswith("PARENT") for l in lines)
+        assert [l for l in lines if l.startswith("ATOM  ")] == [a.rstrip("\n") for a in atoms]
         assert (pred / "model_1.pdb").read_text() == original
 
     def test_falls_back_to_dash_i_dash_o_cli(self, tmp_output):
