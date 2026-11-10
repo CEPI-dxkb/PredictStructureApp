@@ -43,7 +43,7 @@ from predict_structure.entities import (
 )
 from predict_structure.gpu_check import check_gpu_memory
 from predict_structure.msa_check import MsaFormatError, check_msa_input
-from predict_structure.normalizers import stage_inputs, write_metadata_json
+from predict_structure.normalizers import stage_inputs, write_dssp, write_metadata_json
 from predict_structure.results import write_results_json, write_ro_crate
 
 
@@ -497,6 +497,8 @@ def _finalize_output(
     """Post-normalization: stage inputs, write metadata.json + results.json + ro-crate.
 
     Runs in this exact order so later writers can read earlier ones:
+      0. write_dssp                  -- best-effort predictions/model_1.{dssp,ss3.txt}
+                                        (before results.json so it is listed)
       1. stage_inputs                -- copy user inputs into output_dir/inputs/
       2. write_metadata_json         -- canonical run trace (incl. inputs[])
       3. write_results_json          -- v2.0 outputs map + UI summary
@@ -509,6 +511,8 @@ def _finalize_output(
     """
     import os
     from datetime import datetime, timezone
+
+    write_dssp(output_path)
 
     msa_path = Path(shared["msa"]) if shared.get("msa") else None
     inputs_descriptors = stage_inputs(entity_list, msa_path, output_path)
