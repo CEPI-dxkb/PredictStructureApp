@@ -89,6 +89,7 @@ class BaseAdapter(ABC):
 
     #: Conservative per-tool cap on total residues, or None for no cap. Practical
     #: limits vary by GPU; ``--force`` lifts this cap (see ``validate_length``).
+    #: Counts sequence residues only (no ligand atoms); Boltz YAML pass-through is not checked.
     MAX_RESIDUES: int | None = None
 
     def validate_entities(self, entity_list: EntityList, *, force: bool = False) -> None:
@@ -115,8 +116,8 @@ class BaseAdapter(ABC):
             raise ValueError(
                 f"Input has {total:,} residues — "
                 f"{self.display_name or self.tool_name} supports up to "
-                f"{self.MAX_RESIDUES:,} residues. Use --force to attempt anyway "
-                f"(may fail with GPU out-of-memory)."
+                f"{self.MAX_RESIDUES:,} residues. Use --force on the CLI to attempt "
+                f"anyway (may fail with out-of-memory)."
             )
 
     def validate_entity_types(self, entity_types: Iterable[EntityType]) -> None:

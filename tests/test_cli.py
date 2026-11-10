@@ -969,3 +969,59 @@ class TestLigandCCDValidation:
         assert result.exit_code == 0, result.output
         payload = _json.loads(result.output.strip().splitlines()[-1])
         assert payload["resolved_tool"] == "boltz"
+
+
+class TestPerToolLengthLimitsCLI:
+    """#77 — over-limit inputs are a clean exit-2 message, not a GPU OOM."""
+
+    @staticmethod
+    def _fasta(tmp_path, residues):
+        f = tmp_path / "long.fasta"
+        f.write_text(">long\n" + "A" * residues + "\n")
+        return f
+
+    def test_esmfold_over_limit_rejected(self, tmp_path):
+        result = CliRunner().invoke(main, [
+            "esmfold", "--protein", str(self._fasta(tmp_path, 1501)),
+            "-o", str(tmp_path / "out"), "--debug",
+        ])
+        assert result.exit_code == 2
+        assert "1,500" in result.output
+        assert "Traceback" not in result.output
+
+    def test_esmfold_over_limit_force_accepted(self, tmp_path):
+        result = CliRunner().invoke(main, [
+            "esmfold", "--protein", str(self._fasta(tmp_path, 1501)),
+            "-o", str(tmp_path / "out"), "--debug", "--force",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "esm-fold-hf" in result.output
+
+    def test_chai_token_limit_not_bypassed_by_force(self, tmp_path):
+        result = CliRunner().invoke(main, [
+            "chai", "--protein", str(self._fasta(tmp_path, 2049)),
+            "-o", str(tmp_path / "out"), "--debug", "--force",
+        ])
+        assert result.exit_code == 2
+        assert "2,048" in result.output
+
+    def test_job_file_force_option_lifts_limit(self, tmp_path):
+        import yaml
+
+        def run(options):
+            job = tmp_path / "job.yaml"
+            job.write_text(yaml.dump([{
+                "tool": "esmfold",
+                "protein": [str(self._fasta(tmp_path, 1501))],
+                "options": options,
+            }]))
+            return CliRunner().invoke(
+                main, ["--job", str(job), "-o", str(tmp_path / "out")]
+            )
+
+        rejected = run({"debug": True})
+        assert rejected.exit_code == 2
+        assert "1,500" in rejected.output
+
+        accepted = run({"debug": True, "force": True})
+        assert accepted.exit_code == 0, accepted.output

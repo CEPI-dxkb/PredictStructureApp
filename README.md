@@ -56,7 +56,7 @@ Input is specified via explicit entity flags instead of a positional file argume
 | `--ligand` | string | Ligand CCD code — 1-3 or 5 alphanumeric characters (e.g. `ATP`, `NAG`, `A1H1F`). Use this for single glycan residues too (`NAG`, `MAN`); linked glycan strings like `NAG(4-1 NAG)` are rejected — pass each residue separately or use `--smiles`. (repeatable) |
 | `--smiles` | string | SMILES string for arbitrary small molecules (repeatable) |
 
-A multi-sequence FASTA file passed to `--protein` is treated as a multi-chain complex (not a batch of separate predictions). The same applies to `--dna` and `--rna`: every record in any of the three becomes one chain, and all chains from all inputs are folded together as one complex. The 10,000-residue soft limit counts all chains combined; each FASTA file may contain at most 26 records (both overridable with `--force`).
+A multi-sequence FASTA file passed to `--protein` is treated as a multi-chain complex (not a batch of separate predictions). The same applies to `--dna` and `--rna`: every record in any of the three becomes one chain, and all chains from all inputs are folded together as one complex. The 10,000-residue soft limit counts all chains combined; each FASTA file may contain at most 26 records (both overridable with `--force`). Each tool also has its own residue cap, enforced with a clear error before launch (also overridable with `--force`, except Chai-1's hard 2,048-token limit): Chai-1 2,048; ESMFold and ESMFold2 1,500; AlphaFold 2 2,500; Boltz and OpenFold 3,000.
 
 ### Basic examples
 

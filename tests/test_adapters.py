@@ -506,7 +506,9 @@ class TestAdapterLengthLimits:
         assert adapter.display_name in msg
         assert f"{limit:,}" in msg
         assert f"{limit + 1:,}" in msg
-        assert "--force" in msg
+        assert "Use --force on the CLI to attempt anyway" in msg
+        assert "out-of-memory" in msg
+        assert "GPU" not in msg
 
     @pytest.mark.parametrize("tool,limit", LENGTH_LIMITS)
     def test_at_limit_passes(self, tool, limit):

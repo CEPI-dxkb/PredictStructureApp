@@ -982,6 +982,7 @@ def _run_job_file(job_path: Path, base_output_dir: Path | None) -> None:
             "cwl_tool": options.get("cwl_tool"),
             "debug": options.get("debug", False),
             "emit_rocrate": options.get("emit_rocrate", True),
+            "force": options.get("force", False),
         }
 
         entity_inputs = {
