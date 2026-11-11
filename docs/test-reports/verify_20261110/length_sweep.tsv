@@ -1,0 +1,20 @@
+tool	len	rc	seconds	peak_mib	note
+boltz	3200	2	2	0	ERROR __main__: Entity validation failed: Input has 3,200 residues — Boltz-2 supports up to 3,000 residues. Use --forc
+esmfold	1600	2	2	0	ERROR __main__: Entity validation failed: Input has 1,600 residues — ESMFold supports up to 1,500 residues. Use --forc
+esmfold	1500	0	193	131535	
+esmfold	2000	1	37	15399	26/11/10 17:31:44 | ERROR | root | Out of memory on sequence p of length 2000. Try using --chunk-size or --cpu-only.
+esmfold	3000	1	39	15255	26/11/10 17:32:23 | ERROR | root | Out of memory on sequence p of length 3000. Try using --chunk-size or --cpu-only.
+esmfold	4000	1	40	15465	26/11/10 17:33:03 | ERROR | root | Out of memory on sequence p of length 4000. Try using --chunk-size or --cpu-only.
+esmfold2	1500	1	27	5	
+esmfold2	2000	1	26	5	
+esmfold2	2500	1	26	5	
+esmfold2	3000	1	26	5	
+boltz	2500	0	426	79229	
+boltz	3000	0	535	112095	
+boltz	3500	0	616	132759	
+boltz	4000	1	756	135153	| WARNING: ran out of memory, skipping batch
+openfold	2500	0	789	84875	
+openfold	3000	0	1015	107089	
+openfold	3500	0	1368	141949	
+openfold	4000	0	2227	138729	
+DONE
