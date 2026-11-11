@@ -1,30 +1,110 @@
 # Project Status
 
-**Last updated:** 2026-08-21
-**Current version:** v0.17.0 (HEAD: ef0914b)
-**Production (alpha) container:** `folding_260825.2.sif` — PredictStructure + StabiliNNator, both verified
+**Last updated:** 2026-11-10
+**Current version:** v0.17.0 (HEAD: 0f6a241)
+**Production (alpha) container:** `folding_260901.1.sif` — PredictStructure + StabiliNNator, both verified
 
 ## Next action
 
-Steady state. `folding_260825.2.sif` is deployed and registered for both
-PredictStructure and StabiliNNator. The whole StabiliNNator chain is closed:
-dispatch, walltime, result delivery, report.
+Steady state. `folding_260901.1.sif` is deployed and registered for both app
+rows, verified **64/64** on the API matrix (2026-09-03), including all 12
+rejection cases. It carries predict_structure `a593591` (#119 shell injection)
+and stabiliNNatorApp `d0f1c89` (#22 TSV type / mmCIF / cysteine filter, #23
+residue labels). Both StabiliNNator fixes confirmed in production — see
+`docs/test-report-260903-api.md`.
 
 Open items, all outside this container:
 
-1. **The alpha JS bundle predates BV-BRC-Web#1403.** `/js/3.59.9/bundle/bundle.js`
-   contains neither `ViewPredictStructureReport` nor `ViewStabiliNNatorReport`,
-   though both are in alpha's source. The REPORT eye icon is therefore inert on
-   alpha for **both** apps until BV-BRC rebuilds the bundle. It works against a
-   local p3-web instance, which serves source rather than the bundle.
-2. **BV-BRC-Web#1407** — StabiliNNator submission form (the service is
+1. **Two UI-side defects found by a real failed submission** (task 23519232):
+   the form can submit a *directory* as `dna_file`. The workspace test inputs
+   are typed `reads`, which the DNA selector's type filter excludes, so the
+   browse dialog looks empty and `WorkspaceObjectSelector.js:845` takes the
+   folder as the selection. Fixes: retype the six `AppTests/inputs` files, and
+   reject directories in `PredictStructure.js` `getValues()`.
+2. **The alpha eye-icon question is UNVERIFIED.** The old claim ("the bundle
+   predates #1403") rested on grepping for `ViewPredictStructureReport`, a
+   symbol that appears zero times in the bundle, in alpha's `ActionBar.js`,
+   *and* in our own BV-BRC-Web checkout — so that probe proved nothing either
+   way. Needs a functional check: open an alpha job result and look for the
+   icon. What *is* settled: alpha serves the new typed-row form
+   (`/js/p3/widget/app/PredictStructure.js` is byte-identical to local).
+3. **BV-BRC-Web#1407** — StabiliNNator submission form (the service is
    otherwise API-only; CEPI-dxkb/stabiliNNatorApp#20).
-3. **#116** — Jobs-page REPORT action, review 2026-08-27.
-4. The preflight host's container cache still has no eviction, and a failed
+4. **#116** — Jobs-page REPORT action: BV-BRC-Web PR #1502 is open and
+   blocked on a required upstream review; not seen in a browser yet.
+5. The preflight host's container cache still has no eviction, and a failed
    image pull still surfaces as an empty "Error submitting job". Worth an
    upstream issue to BV-BRC infra.
 
 ## What's done
+
+### Session 2026-11-10: #77, #76 merged; #116 PR open upstream
+
+Merged to main (all reviewed twice, Fable then Opus fixes):
+
+- **#77 / PR #121** — per-adapter `MAX_RESIDUES` (boltz/openfold 3000,
+  alphafold 2500, esmfold/esmfold2 1500; chai keeps its 2048 non-bypassable
+  cap) with a clear error instead of GPU OOM. `--force` (or `options.force`
+  in a job file) bypasses; CPU runs of non-GPU tools are not capped; preflight
+  applies the cap. **The limits are unmeasured** (taken from the issue).
+  BV-BRC jobs cannot pass `--force`, so there the caps are hard — decide
+  before the next container build. Issue #77 stays open: app-spec/UI side.
+- **#76 / PR #122** — `write_dssp` runs mkdssp after prediction and writes
+  `predictions/model_1.dssp` + `model_1.ss3.txt`; the Perl `run_report`
+  passes `--ss-file` and retries without it only on exit code 2.
+  mkdssp quirks found by running it: it rejects PDBs without CRYST1 and
+  drops the ATOM line after `PARENT N/A` (ESMFold), so a temp copy of
+  coordinate records plus a dummy CRYST1 is fed in.
+- **protein_structure_analysis PR #14** — `protein_compare characterize
+  --ss-file`. It must be in the container before #122's file is used (the
+  Perl retry covers older `protein_compare`); `protein_compare` is installed
+  unpinned in the SIF.
+- Full suite on combined main: 654 passed, 10 skipped.
+
+Not merged: **BV-BRC-Web PR #1502** (#116) — upstream requires a review; no
+`--admin`/`--auto` used.
+
+Known gaps: protein_compare's own DSSP wrapper still fails on predicted
+models lacking CRYST1 (falls back to its heuristic); mixed protein+NA and
+HETATM-backbone models fall back to protein_compare's SS; CWL path drops
+`--force` and has no `--ss-file`; ESMFold cap sums chains; Boltz YAML and
+ligand atoms are not counted toward the caps.
+
+### Session 2026-09-03: folding_260901.1 verified in production, 64/64
+
+- **Both app rows on `folding_260901.1.sif`**, read from the user's own two
+  morning jobs (23519220 StabiliNNator, 23519232 PredictStructure) rather than
+  from probe submissions.
+- **64/64 matrix**, two runs: 52 positive cases
+  (`matrix_20260903_110826`), then the full set with `--include-negative`
+  (`matrix_20260903_113341`). No failures in either.
+- **TSV typing (#22) confirmed in production** — S01 and S04 result folders
+  list `tsv` for both `_summary.tsv` files; they used to land `unspecified`.
+- **Residue labels (#23) confirmed — on the second attempt.** The verifier as
+  it stood (`caa7dcd`) recomputes `resLabel` from the report's embedded data
+  and never inspects what the template rendered, so it exits 0 on reports
+  generated from the *pre-fix* template. Our first "confirmed" therefore rested
+  on a check that could not fail. coconut-stabilinnator's `690ffce`
+  (stabiliNNatorApp #24, test-only, unmerged, not in this image) adds a scan of
+  the report's inline script for `DATA.input.sequence[...pos-1]`; re-running it
+  against the same S04 report gives `rendering: ok`, `discriminating input:
+  yes`, exit 0. That is the confirmation.
+- Two input properties to preserve: the `86/88` counterfactual needs the **raw**
+  `inputs/3ft7.pdb` (a cleaned, contiguously renumbered copy collapses it to
+  `0/86` and exits 3 under `--require-discriminating`), and S01-S03's crambin
+  reports `discriminating input: NO` — correctly, so the flag belongs on S04
+  only.
+- **`N03` had been passing for the wrong reason.** It pointed at
+  `inputs/not_fasta.txt`, absent from the workspace, so it failed on "file is
+  empty or unreadable" rather than the FASTA check it exists to test. Fixture
+  uploaded; N03 now quotes the fixture's first line.
+- **StabiliNNator ran on four distinct `compute` hosts** across the two passes
+  (fir, pear, bio-compute-04, alder) — that partition's image staging is no
+  longer a single-host observation.
+- `AppTests` was already free of every `matrix_*` run folder before this
+  session; a commented `p3-rm` block for the remaining hand-made runs was
+  handed to the user rather than executed.
+
 
 ### Session 2026-08-25: StabiliNNator end to end, on compute nodes
 

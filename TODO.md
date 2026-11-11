@@ -4,19 +4,41 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 
 ## Next up
 
+- [ ] Review the #77 caps before the next container build: measure real
+      limits per tool, and decide whether BV-BRC jobs get a `force` parameter
+      (they cannot pass `--force`, so the caps are hard there). Add the
+      app-spec/UI side, then close #77
+- [ ] Next container build: pin `protein_compare` and include
+      protein_structure_analysis PR #14 so #76's `--ss-file` takes effect
+- [ ] Decide: make protein_compare's DSSP wrapper use a CRYST1 temp copy
+      (it falls back to the Calpha heuristic on predicted models today)
+- [ ] BV-BRC-Web PR #1502 (#116) — waiting on an upstream review; check the
+      eye icon / report path in a browser. Comment/close #76 and #116 as they land
+- [ ] #18 DSSR licence vs open-source fallback; #73 needs a repro; #72 needs
+      a live check before closing
+
 - [ ] protein_structure_analysis: #79/#80 (histogram zero-bins, report TOC) are
       in wilke's fork and in our container but NOT upstream — upstream last
       merged the fork in July (PR #3), before those landed. Fork main is 6
       ahead; open an upstream PR if BV-BRC should carry them
-- [ ] BV-BRC-Web#1409 (typed entity rows) awaiting upstream review. Note the
-      alpha bundle (/js/3.59.9/bundle/bundle.js) predates #1403, so neither
-      the REPORT eye icons nor this form change appear on alpha until BV-BRC
-      rebuilds and redeploys the bundle
-
-- [ ] Deploy folding_260825.1 (building; pins stabiliNNatorApp 486e037 =
-      results upload into the job result folder). After promotion + repoint
-      of BOTH app rows: E01 probe with Container-path check, then S01-S03 —
-      they are currently red on exactly this bug and should go green
+- [ ] BV-BRC-Web#1409 (typed entity rows) awaiting upstream review. It IS
+      live on alpha already (/js/p3/widget/app/PredictStructure.js is
+      byte-identical to local). The old "the bundle blocks it" note was
+      wrong — see STATUS open item 2
+- [ ] BV-BRC-Web: two form defects found by task 23519232 — the DNA/RNA
+      selectors can submit a *directory* (WorkspaceObjectSelector.js:845),
+      and AppTests/inputs/*.fasta are typed `reads`, which the selectors'
+      type filter excludes. Retype the inputs; reject directories in
+      getValues()
+- [ ] Alpha eye-icon (#1403): verify functionally, by opening a job result.
+      Grepping for ViewPredictStructureReport proves nothing — the symbol is
+      absent from our own checkout too
+- [ ] After stabiliNNatorApp#24 merges (test-only, currently unmerged): add
+      `--require-discriminating` to the S04 label check (S01-S03 use crambin
+      and correctly report `discriminating input: NO`), and wire
+      `tests/verify_mmcif_rejections.sh` into the container acceptance suite.
+      Both reproduce against folding_260901.1 today; not adopted yet because
+      the matrix would then depend on an unmerged branch
 - [ ] stabiliNNatorApp: nothing outstanding — #16 (partition), #17 (gpu2 +
       600s runtime), #18/#19 (upload location) all merged
 - [ ] BV-BRC-Web master has NO StabiliNNator submission form (#1403 went to
@@ -30,8 +52,13 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [ ] Identify the preflight host (which machine writes the scheduler log?)
       and record it in MEMORY/STATUS — third deploy in a row where this
       unknown cost round trips
-- [ ] #96 — ESMFold2 MSA via our ColabFold server; blocked on the server
-      address; reuse `scripts/_colabfold_api_msa.py`, follow the openfold
+- [ ] #96 — ESMFold2 MSA via a ColabFold server. The old coconut server is
+      no longer running (2026-10-12); its data is still there: UniRef30 2302 +
+      envdb 202108 in /scout/data/colabfold (922 GB, envdb index possibly
+      never built), /scout/containers/mmseqs2.sif, conda env `colabfold`.
+      Blocked on deciding whether to re-stand-up a server, not on an address.
+      Client work can proceed against the public API with msa_server_url
+      overridable; reuse `scripts/_colabfold_api_msa.py`, follow the openfold
       interface pattern (do not write a new client)
 - [ ] #88 — eye-icon REPORT action; fold into the next consolidated
       BV-BRC-Web fork PR
@@ -40,6 +67,22 @@ Tactical checklist — derived from current PLAN phase. Check off as you go.
 - [ ] GoWe: test predict-structure CWL tool through GPU workers
 
 ## Done (since 2026-08-13 — see STATUS.md for detail)
+
+- [x] 2026-11-10: #77 (PR #121) and #76 (PR #122) merged, plus
+      protein_structure_analysis PR #14; 654 passed on combined main. Their
+      worktrees and local branches removed
+- [x] 2026-09-09: AppTests workspace cleaned on wilke's explicit instruction —
+      107 matrix runs (214 objects) plus the July/August hand-made runs
+      removed; `inputs/` (7 files) and the 09-03 runs kept. Verified by
+      listing, not by exit code: `p3-rm` is silent on success
+
+- [x] 2026-09-03: folding_260901.1 verified in production, **64/64** matrix
+      (52 positive + all 12 rejection cases). Both app rows confirmed on the
+      new image from the user's own morning jobs. #22 TSV typing and #23
+      residue labels both confirmed live; the S04 counterfactual reads
+      "old lookup would mislabel 86/88" on raw 3ft7
+- [x] 2026-09-03: matrix case N03 had been passing for the wrong reason
+      (inputs/not_fasta.txt was missing from the workspace); fixture uploaded
 
 - [x] #106 — `prune_raw_output` drops `raw_output/` after `run_report`/finalize
       and before the upload, guarded on `raw/` being complete (PR #111)
